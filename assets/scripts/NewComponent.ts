@@ -21,28 +21,16 @@ export class NewComponent extends Component {
         return this._playing;
     }
 
-    @property({
-        tooltip:
-            'Скорость смещения слоёв влево после старта игры (пикс/с). Чем больше — тем быстрее «едет» фон.',
-    })
+    @property
     scrollSpeed = 280;
 
-    @property({
-        tooltip:
-            'Множитель скорости для слоя города относительно неба: >1 — город двигается быстрее (эффект параллакса).',
-    })
+    @property
     townSpeedMultiplier = 1.15;
 
-    @property({
-        tooltip:
-            'Имя дочернего узла Canvas с небом — используется getChildByName (по умолчанию Sky).',
-    })
+    @property
     skyChildName = 'Sky';
 
-    @property({
-        tooltip:
-            'Имя дочернего узла Canvas с задним планом города — getChildByName (по умолчанию TownBack).',
-    })
+    @property
     townChildName = 'TownBack';
 
     onLoad() {
