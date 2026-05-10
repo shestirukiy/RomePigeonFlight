@@ -5,17 +5,75 @@ import { PlayerAnimationController } from './PlayerAnimationController';
 
 const { ccclass, property } = _decorator;
 
+const G_CLOUD = 'Obstacle · Electric cloud';
+const G_WALL = 'Obstacle · Tower wall';
+
 /**
- * High-level player state — hazard reactions, forwarded to Flight and AnimationController.
+ * Реакции на препятствия: все числа и тайминги задаются здесь (две группы в инспекторе).
+ * Скрипты на препятствиях только ловят контакт и вызывают applyElectricCloudHit / applyTowerWallHit.
  */
 @ccclass('PlayerController')
 export class PlayerController extends Component {
     @property({
-        displayName: 'Electric Lift Lock (s)',
+        group: G_CLOUD,
+        displayName: 'Lift lock (s)',
         tooltip:
-            'Блокировка подъёма от электричества (сек.). Используется, если на препятствии «Lift Lock Duration» = 0. Иначе длительность задаёт препятствие.',
+            'Блокировка подъёма (flap) после контакта с облаком.',
     })
     electricDefaultLiftLockDuration = 0.5;
+
+    @property({
+        group: G_CLOUD,
+        displayName: 'Cooldown (s)',
+        tooltip:
+            'Минимум между повторными срабатываниями одного и того же коллайдера облака.',
+    })
+    electricCloudCooldownSeconds = 0.55;
+
+    @property({
+        group: G_WALL,
+        displayName: 'Knockback duration (s)',
+        tooltip: 'Сколько секунд идёт отдача мира назад.',
+    })
+    towerWallKnockbackDurationSec = 0.55;
+
+    @property({
+        group: G_WALL,
+        displayName: 'Knockback speed (px/s)',
+        tooltip:
+            'Модуль скорости сдвига чанков при отдаче (положительное число).',
+    })
+    towerWallKnockbackHorizontalPxPerSec = 280;
+
+    @property({
+        group: G_WALL,
+        displayName: 'Downward impulse',
+        tooltip:
+            'Импульс вниз по физике при ударе; 0 — только гравитация.',
+    })
+    towerWallDownwardImpulse = 0;
+
+    @property({
+        group: G_WALL,
+        displayName: 'Wall hit clip duration (s)',
+        tooltip:
+            'Сколько секунд показывается анимация удара. Если 0 — берётся то же время, что и «Knockback duration».',
+    })
+    towerWallHitAnimationDurationSec = 0;
+
+    @property({
+        group: G_WALL,
+        displayName: 'Lift lock (s)',
+        tooltip: 'Блок подъёма после удара; 0 — без блока.',
+    })
+    towerWallDefaultLiftLockDuration = 0.45;
+
+    @property({
+        group: G_WALL,
+        displayName: 'Cooldown (s)',
+        tooltip: 'Минимум между повторными срабатываниями одной и той же стены.',
+    })
+    towerWallCooldownSeconds = 0.65;
 
     private _flight: PlayerFlight | null = null;
     private _anim: PlayerAnimationController | null = null;
@@ -31,23 +89,46 @@ export class PlayerController extends Component {
     }
 
     /**
-     * Call from obstacle scripts while game is playing.
+     * Электрооблако: блок подъёма и анимация — параметры из группы «Electric cloud».
      */
-    receiveElectricDamage(
-        liftLockDurationSec?: number,
-    ): void {
+    applyElectricCloudHit(): void {
         if (!GameManager.game?.isPlaying) {
             return;
         }
-        const t =
-            liftLockDurationSec != null && liftLockDurationSec > 0
-                ? liftLockDurationSec
-                : this.electricDefaultLiftLockDuration;
+        const t = this.electricDefaultLiftLockDuration;
         if (t <= 0) {
             return;
         }
         this._flight?.setElectricLiftBlockedFor(t);
         this._anim?.notifyElectricDamage(t);
+    }
+
+    /**
+     * Стена башни: отдача мира, импульс вниз, клип Wall Hit, блок подъёма — из группы «Tower wall».
+     */
+    applyTowerWallHit(): void {
+        if (!GameManager.game?.isPlaying) {
+            return;
+        }
+        const kd = this.towerWallKnockbackDurationSec;
+        if (kd <= 0) {
+            return;
+        }
+        this._flight?.applyTowerKnockback(
+            kd,
+            this.towerWallKnockbackHorizontalPxPerSec,
+            this.towerWallDownwardImpulse,
+        );
+        const animDur =
+            this.towerWallHitAnimationDurationSec > 0
+                ? this.towerWallHitAnimationDurationSec
+                : kd;
+        this._anim?.notifyWallHit(animDur);
+
+        const lift = this.towerWallDefaultLiftLockDuration;
+        if (lift > 0) {
+            this._flight?.setElectricLiftBlockedFor(lift);
+        }
     }
 
     /** Walk ancestors from a collider / child node until PlayerController is found. */

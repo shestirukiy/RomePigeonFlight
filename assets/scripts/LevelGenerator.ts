@@ -17,9 +17,12 @@ type ChunkStrip = {
     segments: Node[];
     /** План 1: при ресайкле сегмент пересоздаётся из очереди префабов */
     plane1RecycleSwap?: boolean;
+    /** Доля базового смещения мира (scrollSpeed×dt): дальний слой меньше 1 — классический параллакс */
+    parallaxFactor: number;
 };
 
 const G_SCROLL = { id: 'Scroll', name: 'Scrolling' };
+const G_PARALLAX = { id: 'Parallax', name: 'Parallax (слои 1–3)' };
 const G_PLANES = { id: 'Planes', name: 'Parallax planes (2–3)' };
 const G_P1 = {
     id: 'Plane1 Chunks',
@@ -29,9 +32,33 @@ const G_P1 = {
 /**
  * Плоскости 2 и 3 — один префаб на слой, классический тайлинг.
  * Плоскость 1 — одна схема: Tutorial → Mandatory → Endless (веса) → базовый Plane 1 Segment Prefab.
+ * Скролл каждого слоя умножается на свой Parallax Factor (дальше — медленнее).
  */
 @ccclass('LevelGenerator')
 export class LevelGenerator extends Component {
+    @property({
+        group: G_PARALLAX,
+        displayName: 'Plane 1 Parallax Factor',
+        tooltip:
+            'Дальний слой: доля скорости «мира» (0 — не движется, 1 — как слой препятствий). Типично 0.25–0.5.',
+    })
+    plane1ParallaxFactor = 0.4;
+
+    @property({
+        group: G_PARALLAX,
+        displayName: 'Plane 2 Parallax Factor',
+        tooltip: 'Средний слой. Обычно между планом 1 и 3.',
+    })
+    plane2ParallaxFactor = 0.72;
+
+    @property({
+        group: G_PARALLAX,
+        displayName: 'Plane 3 Parallax Factor',
+        tooltip:
+            'Ближний слой (препятствия / игрок): обычно 1 — совпадает с логикой scrollSpeed.',
+    })
+    plane3ParallaxFactor = 1;
+
     @property({
         group: G_SCROLL,
         displayName: 'Extra Segments',
@@ -162,6 +189,8 @@ export class LevelGenerator extends Component {
             const strip = this.buildUniformStrip(
                 this.plane2SegmentPrefab,
                 p2Parent,
+                false,
+                this.plane2ParallaxFactor,
             );
             if (strip) {
                 this._strips.push(strip);
@@ -175,6 +204,7 @@ export class LevelGenerator extends Component {
                 this.plane3SegmentPrefab,
                 p3Parent,
                 true,
+                this.plane3ParallaxFactor,
             );
             if (strip) {
                 this._strips.push(strip);
@@ -183,17 +213,29 @@ export class LevelGenerator extends Component {
     }
 
     update(dt: number) {
-        const dx = this.getScrollPixels(dt);
-        if (dx <= 0 || this._strips.length === 0) {
+        const game = GameManager.game;
+        if (!game?.isPlaying || this._strips.length === 0) {
+            return;
+        }
+        const forward = game.getForwardScrollDelta(dt);
+        const kick = game.getWorldKickbackDelta(dt);
+        if (forward <= 0 && kick <= 0) {
             return;
         }
 
         const leftBound = -this.getViewHalfWidth() - this.recycleMargin;
 
         for (const strip of this._strips) {
+            const f = strip.parallaxFactor;
+            const moveLeft = forward * f;
+            const moveRight = kick * f;
             for (const seg of strip.segments) {
                 const p = seg.position;
-                seg.setPosition(p.x - dx, p.y, p.z);
+                seg.setPosition(
+                    p.x - moveLeft + moveRight,
+                    p.y,
+                    p.z,
+                );
             }
             for (const seg of strip.segments) {
                 if (this.rightEdgeLocal(seg) < leftBound) {
@@ -205,14 +247,6 @@ export class LevelGenerator extends Component {
                 }
             }
         }
-    }
-
-    private getScrollPixels(dt: number): number {
-        const game = GameManager.game;
-        if (!game?.isPlaying) {
-            return 0;
-        }
-        return game.scrollSpeed * dt;
     }
 
     /** Одна цепочка — без отдельного «режима только один префаб». */
@@ -322,7 +356,11 @@ export class LevelGenerator extends Component {
         if (segments.length === 0) {
             return null;
         }
-        return { segments, plane1RecycleSwap: true };
+        return {
+            segments,
+            plane1RecycleSwap: true,
+            parallaxFactor: this.plane1ParallaxFactor,
+        };
     }
 
     private recyclePlane1Segment(strip: ChunkStrip, segment: Node) {
@@ -368,6 +406,7 @@ export class LevelGenerator extends Component {
         prefab: Prefab,
         parent: Node,
         insertAtLowSiblingIndex = false,
+        parallaxFactor = 1,
     ): ChunkStrip | null {
         const unitW = this.measurePrefabWorldWidth(prefab);
         if (unitW <= 0) {
@@ -395,7 +434,7 @@ export class LevelGenerator extends Component {
             segments.push(seg);
             cx += unitW;
         }
-        return { segments };
+        return { segments, parallaxFactor };
     }
 
     private getViewWidth(): number {

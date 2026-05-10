@@ -12,20 +12,17 @@ import { PlayerController } from './PlayerController';
 const { ccclass, property } = _decorator;
 
 /**
- * Только коллизии: тайминги и урон — в PlayerController (группа «Electric cloud»).
+ * Только коллизии: отдача, импульс, анимация — в PlayerController (группа «Tower wall»).
  */
-@ccclass('ElectricCloudHazard')
-export class ElectricCloudHazard extends Component {
+@ccclass('TowerWallHazard')
+export class TowerWallHazard extends Component {
     @property({
         displayName: 'Debug Contact Log',
-        tooltip:
-            'В консоль: BEGIN_CONTACT и поиск PlayerController.',
     })
-    debugContactLog = true;
+    debugContactLog = false;
 
     private _coolRemain = 0;
 
-    /** Заполняется в onLoad — в onDestroy не вызываем getComponentsInChildren (в редакторе узел уже частично разобран → null.length). */
     private _registeredColliders: Collider2D[] = [];
 
     update(dt: number) {
@@ -41,12 +38,6 @@ export class ElectricCloudHazard extends Component {
             colliders.push(...this.node.getComponents(Collider2D));
             colliders.push(...this.node.getComponentsInChildren(Collider2D));
         } catch {
-            if (this.debugContactLog) {
-                console.warn(
-                    '[ElectricCloudHazard] Failed to collect colliders on',
-                    this.node?.name,
-                );
-            }
             return;
         }
         const uniq = [...new Set(colliders)];
@@ -63,11 +54,6 @@ export class ElectricCloudHazard extends Component {
                 Contact2DType.BEGIN_CONTACT,
                 this._onBeginContact,
                 this,
-            );
-        }
-        if (this.debugContactLog) {
-            console.log(
-                `[ElectricCloudHazard] "${this.node.name}" registered ${this._registeredColliders.length} Collider2D`,
             );
         }
     }
@@ -90,38 +76,24 @@ export class ElectricCloudHazard extends Component {
         otherCollider: Collider2D,
         _contact: IPhysics2DContact | null,
     ) {
-        const otherName = otherCollider?.node?.name ?? '?';
-        if (this.debugContactLog) {
-            console.log(
-                `[ElectricCloudHazard] BEGIN_CONTACT self="${selfCollider?.node?.name}" other="${otherName}" playing=${GameManager.game?.isPlaying === true}`,
-            );
-        }
         if (!GameManager.game?.isPlaying) {
             return;
         }
         if (this._coolRemain > 0) {
-            if (this.debugContactLog) {
-                console.log('[ElectricCloudHazard] skipped (cooldown)');
-            }
             return;
         }
         const pc = PlayerController.findFromColliderNode(otherCollider.node);
         if (!pc) {
-            if (this.debugContactLog) {
-                console.log(
-                    '[ElectricCloudHazard] no PlayerController on other branch:',
-                    otherName,
-                );
-            }
             return;
         }
         if (this.debugContactLog) {
-            console.log('[ElectricCloudHazard] → applyElectricCloudHit');
+            console.log('[TowerWallHazard] hit', otherCollider.node?.name);
         }
-        pc.applyElectricCloudHit();
+
+        pc.applyTowerWallHit();
         this._coolRemain = Math.max(
-            pc.electricCloudCooldownSeconds,
-            pc.electricDefaultLiftLockDuration,
+            pc.towerWallCooldownSeconds,
+            pc.towerWallKnockbackDurationSec,
         );
     }
 }

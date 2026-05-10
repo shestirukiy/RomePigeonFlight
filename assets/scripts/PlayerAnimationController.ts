@@ -46,11 +46,21 @@ export class PlayerAnimationController extends Component {
     })
     electricDamageClip: AnimationClip | null = null;
 
+    @property({
+        type: AnimationClip,
+        displayName: 'Wall Hit Clip',
+        tooltip:
+            'Удар о башню / стену. Тот же клип в массиве Clips у Animation.',
+    })
+    wallHitClip: AnimationClip | null = null;
+
     private _anim: Animation | null = null;
     private _flapState: AnimationState | null = null;
     private _flight: PlayerFlight | null = null;
 
     private _electricOverlayRemain = 0;
+
+    private _wallHitOverlayRemain = 0;
 
     private _flapSpeed = 0;
 
@@ -92,6 +102,24 @@ export class PlayerAnimationController extends Component {
         }
     }
 
+    /** Препятствие «стена»: пауза хлопанья на время клипа удара. */
+    public notifyWallHit(overlayDurationSec: number): void {
+        if (overlayDurationSec <= 0) {
+            return;
+        }
+        this._wallHitOverlayRemain = Math.max(
+            this._wallHitOverlayRemain,
+            overlayDurationSec,
+        );
+        this._ensureFlapState();
+        if (this.wallHitClip && this._anim) {
+            this._anim.play(this.wallHitClip.name);
+        }
+        if (this._flapState) {
+            this._applyFlapSpeed(0);
+        }
+    }
+
     private _ensureFlapState(): void {
         if (!this.flapClip || !this._anim || this._flapState) {
             return;
@@ -101,8 +129,8 @@ export class PlayerAnimationController extends Component {
         this._flapState = this._anim.getState(name);
     }
 
-    /** После play(electricClip) активная дорожка Animation — шок; без повторного play(flap) крылья не оживают. */
-    private _resumeFlapAfterElectric(): void {
+    /** После hazard-клипа снова включаем дорожку flap. */
+    private _resumeFlapPlayback(): void {
         if (!this.flapClip || !this._anim) {
             return;
         }
@@ -120,23 +148,37 @@ export class PlayerAnimationController extends Component {
             this._tailTimeLeft = 0;
             this._wasHeld = false;
             this._electricOverlayRemain = 0;
+            this._wallHitOverlayRemain = 0;
             return;
         }
 
-        if (this._electricOverlayRemain > 0) {
-            this._electricOverlayRemain = Math.max(
-                0,
-                this._electricOverlayRemain - dt,
-            );
+        const prevWall = this._wallHitOverlayRemain;
+        const prevElec = this._electricOverlayRemain;
+        this._wallHitOverlayRemain = Math.max(0, this._wallHitOverlayRemain - dt);
+        this._electricOverlayRemain = Math.max(0, this._electricOverlayRemain - dt);
+
+        if (this._wallHitOverlayRemain > 0) {
             this._ensureFlapState();
             if (this._flapState) {
                 this._flapState.pause();
             }
-            if (this._electricOverlayRemain <= 0) {
-                this._resumeFlapAfterElectric();
-            } else {
-                return;
+            return;
+        }
+
+        if (this._electricOverlayRemain > 0) {
+            this._ensureFlapState();
+            if (this._flapState) {
+                this._flapState.pause();
             }
+            return;
+        }
+
+        if (
+            (prevWall > 0 || prevElec > 0) &&
+            this._wallHitOverlayRemain <= 0 &&
+            this._electricOverlayRemain <= 0
+        ) {
+            this._resumeFlapPlayback();
         }
 
         if (!this._flapState) {

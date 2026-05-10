@@ -110,6 +110,30 @@ export class PlayerFlight extends Component {
         return this._electricLiftBlockRemain > 0;
     }
 
+    /** Горизонтально птица по X не ездит — отдача задаётся GameManager (мир смещается вправо). */
+    public get isTowerKnockbackActive(): boolean {
+        return GameManager.game?.isWorldKickbackActive === true;
+    }
+
+    /**
+     * Удар о стену: мир «отъезжает назад» относительно птицы (чанки вправо), импульс вниз опционально.
+     */
+    public applyTowerKnockback(
+        durationSec: number,
+        horizontalPxPerSec: number,
+        downwardImpulse = 0,
+    ): void {
+        if (durationSec <= 0) {
+            return;
+        }
+        GameManager.game?.applyWorldKickback(durationSec, horizontalPxPerSec);
+
+        const body = this._body;
+        if (body && downwardImpulse !== 0) {
+            body.applyLinearImpulseToCenter(new Vec2(0, downwardImpulse), true);
+        }
+    }
+
     private _savedGravityScale = 1;
 
     onLoad() {
