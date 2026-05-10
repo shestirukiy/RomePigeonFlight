@@ -18,18 +18,21 @@ const { ccclass, property } = _decorator;
 export class PlayerAnimationController extends Component {
     @property({
         type: AnimationClip,
+        displayName: 'Flap Clip',
         tooltip:
             'Зацикленный клип хлопанья крыльями. Укажите тот же клип в массиве Clips компонента Animation.',
     })
     flapClip: AnimationClip | null = null;
 
     @property({
+        displayName: 'Flap Speed (Pressed)',
         tooltip:
             'Скорость воспроизведения клипа при удержании экрана (быстрое хлопанье).',
     })
     flapSpeedPressed = 1.35;
 
     @property({
+        displayName: 'Wing Flap Inertia Duration',
         tooltip:
             'Секунды после отпускания: скорость хлопанья линейно падает до нуля (инерция крыльев).',
     })

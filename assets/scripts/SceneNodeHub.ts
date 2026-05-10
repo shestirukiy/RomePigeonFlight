@@ -1,10 +1,9 @@
-import { _decorator, Component, Node, Prefab } from 'cc';
+import { _decorator, Component, Node } from 'cc';
 
 const { ccclass, property } = _decorator;
 
 /**
- * Ссылки на узлы и префабы для игровой логики (на Canvas).
- * Фон — только бесшовные чанки (Level Generator); цельные «большие картинки» не используются.
+ * Scene references on Canvas: UI root, player, view size root. Chunk prefabs live on LevelGenerator.
  */
 @ccclass('SceneNodeHub')
 export class SceneNodeHub extends Component {
@@ -16,6 +15,7 @@ export class SceneNodeHub extends Component {
 
     @property({
         type: Node,
+        displayName: 'Canvas Root',
         tooltip:
             'Корень UI. На Canvas можно не задавать — подставится сам Canvas (узел этого компонента).',
     })
@@ -23,40 +23,18 @@ export class SceneNodeHub extends Component {
 
     @property({
         type: Node,
+        displayName: 'Player',
         tooltip: 'Узел игрока.',
     })
     player: Node | null = null;
 
     @property({
         type: Node,
-        tooltip: 'Родитель инстансов чанков неба (Level Generator).',
-    })
-    skyChunkParent: Node | null = null;
-
-    @property({
-        type: Node,
-        tooltip: 'Родитель инстансов чанков города; может совпадать с небом.',
-    })
-    townChunkParent: Node | null = null;
-
-    @property({
-        type: Node,
+        displayName: 'View Root',
         tooltip:
-            'Ширина экрана для расчёта числа чанков (UITransform). На Canvas можно не задавать.',
+            'Ширина экрана (UITransform) для логики, которая от хаба читает размер. На Canvas можно не задавать.',
     })
     viewRoot: Node | null = null;
-
-    @property({
-        type: Prefab,
-        tooltip: 'Префаб одного сегмента неба.',
-    })
-    skySegmentPrefab: Prefab | null = null;
-
-    @property({
-        type: Prefab,
-        tooltip: 'Префаб одного сегмента города.',
-    })
-    townSegmentPrefab: Prefab | null = null;
 
     onLoad() {
         SceneNodeHub._inst = this;

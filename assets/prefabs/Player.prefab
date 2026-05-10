@@ -383,8 +383,8 @@
       "__uuid__": "33f3a7a3-47be-4bd7-8668-498e65ce6653",
       "__expectedType__": "cc.AnimationClip"
     },
-    "flapSpeedPressed": 1.35,
-    "wingFlapInertiaDuration": 3,
+    "flapSpeedPressed": 1.5,
+    "wingFlapInertiaDuration": 2,
     "_id": ""
   },
   {
@@ -537,6 +537,7 @@
       "__id__": 0
     },
     "fileId": "53h+W4e9FJ168K0mSwSAXD",
+    "instance": null,
     "targetOverrides": null
   }
 ]

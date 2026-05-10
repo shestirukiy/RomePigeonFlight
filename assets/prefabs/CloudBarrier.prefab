@@ -213,7 +213,7 @@
     "tag": 0,
     "_group": 1,
     "_density": 1,
-    "_sensor": false,
+    "_sensor": true,
     "_friction": 0.2,
     "_restitution": 0,
     "_offset": {
@@ -237,6 +237,8 @@
       "__id__": 0
     },
     "fileId": "cf1kgvLGRI3KkO+wjnP4Vu",
+    "instance": null,
+    "targetOverrides": null,
     "nestedPrefabInstanceRoots": null
   },
   {
@@ -332,7 +334,7 @@
     "tag": 0,
     "_group": 1,
     "_density": 1,
-    "_sensor": false,
+    "_sensor": true,
     "_friction": 0.2,
     "_restitution": 0,
     "_offset": {
@@ -453,7 +455,7 @@
     "tag": 0,
     "_group": 1,
     "_density": 1,
-    "_sensor": false,
+    "_sensor": true,
     "_friction": 0.2,
     "_restitution": 0,
     "_offset": {
@@ -604,6 +606,7 @@
       "__id__": 0
     },
     "fileId": "0epguvXrJG9Z6LnFxaO9DB",
-    "instance": null
+    "instance": null,
+    "targetOverrides": null
   }
 ]

@@ -11,28 +11,84 @@ import { SceneNodeHub } from './SceneNodeHub';
 
 const { ccclass, property } = _decorator;
 
-/** Один ряд бесшовных сегментов (небо или город). */
+/** One tiled strip for a single parallax plane. */
 type ChunkStrip = {
     segments: Node[];
 };
 
+const G_SCROLL = { id: 'Scroll', name: 'Scrolling' };
+const G_PLANES = { id: 'Planes', name: 'Parallax planes' };
+
 /**
- * Чанки неба/города. Префабы и родители — в Scene Node Hub.
- * Скорость и старт игры — из Game Manager (scrollSpeed).
+ * Three parallax planes + scroll. SceneNodeHub supplies viewRoot and optional plane-3 parent fallback.
  */
 @ccclass('LevelGenerator')
 export class LevelGenerator extends Component {
     @property({
+        group: G_SCROLL,
+        displayName: 'Extra Segments',
         tooltip:
             'Доп. сегменты сверх минимума по ширине экрана — запас на широких разрешениях.',
     })
     extraSegments = 1;
 
     @property({
+        group: G_SCROLL,
+        displayName: 'Recycle Margin',
         tooltip:
             'Запас за левой границей экрана (пикс): при выходе сегмента дальше — перенос вправо.',
     })
     recycleMargin = 64;
+
+    @property({
+        group: G_PLANES,
+        type: Node,
+        displayName: 'Plane 1 Parent',
+        tooltip: 'Самый дальний слой (раньше небо).',
+    })
+    plane1ChunkParent: Node | null = null;
+
+    @property({
+        group: G_PLANES,
+        type: Prefab,
+        displayName: 'Plane 1 Segment Prefab',
+        tooltip: 'Ширина UITransform корня = шаг тайлинга.',
+    })
+    plane1SegmentPrefab: Prefab | null = null;
+
+    @property({
+        group: G_PLANES,
+        type: Node,
+        displayName: 'Plane 2 Parent',
+        tooltip: 'Средний слой (раньше город).',
+    })
+    plane2ChunkParent: Node | null = null;
+
+    @property({
+        group: G_PLANES,
+        type: Prefab,
+        displayName: 'Plane 2 Segment Prefab',
+        tooltip: 'Средний слой; ширина корня префаба — шаг тайлинга.',
+    })
+    plane2SegmentPrefab: Prefab | null = null;
+
+    @property({
+        group: G_PLANES,
+        type: Node,
+        displayName: 'Plane 3 Parent',
+        tooltip:
+            'Ближний слой с игроком / препятствия. Пусто — родитель узла игрока из Scene Node Hub.',
+    })
+    plane3ChunkParent: Node | null = null;
+
+    @property({
+        group: G_PLANES,
+        type: Prefab,
+        displayName: 'Plane 3 Segment Prefab',
+        tooltip:
+            'Например Chunk_2Clouds. Чанки встают под игроком по sibling index.',
+    })
+    plane3SegmentPrefab: Prefab | null = null;
 
     private _strips: ChunkStrip[] = [];
 
@@ -44,21 +100,32 @@ export class LevelGenerator extends Component {
         this.clearStrips();
 
         const hub = SceneNodeHub.instance;
-        if (!hub) {
-            return;
-        }
 
-        const skyParent = hub.skyChunkParent ?? this.node;
-        const townParent = hub.townChunkParent ?? hub.skyChunkParent ?? this.node;
+        const p1Parent = this.plane1ChunkParent ?? this.node;
+        const p2Parent =
+            this.plane2ChunkParent ?? this.plane1ChunkParent ?? this.node;
 
-        if (hub.skySegmentPrefab) {
-            const strip = this.buildStrip(hub.skySegmentPrefab, skyParent);
+        if (this.plane1SegmentPrefab) {
+            const strip = this.buildStrip(this.plane1SegmentPrefab, p1Parent);
             if (strip) {
                 this._strips.push(strip);
             }
         }
-        if (hub.townSegmentPrefab) {
-            const strip = this.buildStrip(hub.townSegmentPrefab, townParent);
+        if (this.plane2SegmentPrefab) {
+            const strip = this.buildStrip(this.plane2SegmentPrefab, p2Parent);
+            if (strip) {
+                this._strips.push(strip);
+            }
+        }
+
+        const p3Parent =
+            this.plane3ChunkParent ?? hub?.player?.parent ?? null;
+        if (this.plane3SegmentPrefab && p3Parent) {
+            const strip = this.buildStrip(
+                this.plane3SegmentPrefab,
+                p3Parent,
+                true,
+            );
             if (strip) {
                 this._strips.push(strip);
             }
@@ -103,7 +170,15 @@ export class LevelGenerator extends Component {
         this._strips = [];
     }
 
-    private buildStrip(prefab: Prefab, parent: Node): ChunkStrip | null {
+    /**
+     * @param insertAtLowSiblingIndex — для 3-го плана: чанки ближе к началу списка детей,
+     *   чтобы рисоваться под игроком (ниже sibling index в UI обычно раньше в отрисовке).
+     */
+    private buildStrip(
+        prefab: Prefab,
+        parent: Node,
+        insertAtLowSiblingIndex = false,
+    ): ChunkStrip | null {
         const unitW = this.measurePrefabWorldWidth(prefab);
         if (unitW <= 0) {
             return null;
@@ -124,6 +199,9 @@ export class LevelGenerator extends Component {
             const seg = instantiate(prefab);
             seg.parent = parent;
             seg.setPosition(cx, baseY, baseZ);
+            if (insertAtLowSiblingIndex) {
+                seg.setSiblingIndex(i);
+            }
             segments.push(seg);
             cx += unitW;
         }
@@ -134,7 +212,7 @@ export class LevelGenerator extends Component {
         const hub = SceneNodeHub.instance;
         const root =
             hub?.viewRoot ??
-            hub?.skyChunkParent?.parent ??
+            this.plane1ChunkParent?.parent ??
             hub?.canvas ??
             this.node;
         const ui = root.getComponent(UITransform);

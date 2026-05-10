@@ -10,8 +10,7 @@ import {
 const { ccclass, property } = _decorator;
 
 /**
- * Гейм-менеджер: первый тап/клик запускает игру; скорость мира для чанков (Level Generator).
- * Управление голубем — компонент Player Flight на игроке (Rigid Body 2D + гравитация).
+ * First tap starts the run; scrollSpeed drives LevelGenerator chunk movement.
  */
 @ccclass('GameManager')
 export class GameManager extends Component {
@@ -28,6 +27,7 @@ export class GameManager extends Component {
     }
 
     @property({
+        displayName: 'Scroll Speed',
         tooltip:
             'Скорость «мира» (пикс/с): использует Level Generator для сдвига чанков после старта игры.',
     })

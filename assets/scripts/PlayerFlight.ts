@@ -18,60 +18,60 @@ import { GameManager } from './GameManager';
 const { ccclass, property } = _decorator;
 
 /**
- * Полёт: RigidBody2D + подъём силой. Крен по вертикальной скорости — см. группу «Крен» в инспекторе.
+ * Flight: RigidBody2D + lift; pitch from vertical velocity (inspector group Pitch).
  */
 @ccclass('PlayerFlight')
 export class PlayerFlight extends Component {
-    @property({ group: 'Физика полёта', tooltip: 'Сила при удержании ввода.' })
+    @property({ group: 'Flight', tooltip: 'Сила при удержании ввода.' })
     liftForce = 10000;
 
-    @property({ group: 'Физика полёта', tooltip: 'Лимит скорости вверх.' })
+    @property({ group: 'Flight', tooltip: 'Лимит скорости вверх.' })
     maxUpSpeed = 700;
 
-    @property({ group: 'Физика полёта', tooltip: 'Лимит скорости падения по модулю.' })
+    @property({ group: 'Flight', tooltip: 'Лимит скорости падения по модулю.' })
     maxDownSpeed = 2000;
 
     @property({
-        group: 'Крен',
+        group: 'Pitch',
         tooltip: 'Макс. угол носа вверх при подъёме (градусы).',
     })
     pitchMaxDegUp = 90;
 
     @property({
-        group: 'Крен',
+        group: 'Pitch',
         tooltip: 'Макс. угол носа вниз при падении (градусы).',
     })
     pitchMaxDegDown = 300;
 
     @property({
-        group: 'Крен',
+        group: 'Pitch',
         tooltip:
-            'Насколько сильно крен реагирует на скорость (подъём). Падение усиливается отдельно — «Усиление падения».',
+            'Насколько сильно крен реагирует на скорость (подъём). Падение усиливается отдельно — Pitch Fall Boost.',
     })
     pitchStrength = 0.3;
 
     @property({
-        group: 'Крен',
+        group: 'Pitch',
         tooltip:
             'Во сколько раз сильнее наклон при падении относительно подъёма (при падении |vy| обычно меньше). Типично 3–5.',
     })
     pitchFallBoost = 3.5;
 
     @property({
-        group: 'Крен',
+        group: 'Pitch',
         tooltip:
             'Плавность: 0 — резче и быстрее, 1 — мягче, меньше дрожания.',
     })
     pitchSmoothness = 0.45;
 
     @property({
-        group: 'Крен',
+        group: 'Pitch',
         tooltip: 'Инвертировать направление наклона.',
     })
     pitchInvert = false;
 
     @property({
-        group: 'Крен',
+        group: 'Pitch',
         type: Node,
         tooltip:
             'Узел, который только наклоняется (часто дочерний «Pigeon»). Пусто — ищется ребёнок с именем Pigeon, иначе крен на корне.',
