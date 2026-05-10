@@ -8,19 +8,27 @@ import {
 } from 'cc';
 import { GameManager } from './GameManager';
 import { SceneNodeHub } from './SceneNodeHub';
+import { WeightedChunk } from './WeightedChunk';
 
 const { ccclass, property } = _decorator;
 
-/** One tiled strip for a single parallax plane. */
+/** Одна полоса тайлинга для слоя параллакса */
 type ChunkStrip = {
     segments: Node[];
+    /** План 1: при ресайкле сегмент пересоздаётся из очереди префабов */
+    plane1RecycleSwap?: boolean;
 };
 
 const G_SCROLL = { id: 'Scroll', name: 'Scrolling' };
-const G_PLANES = { id: 'Planes', name: 'Parallax planes' };
+const G_PLANES = { id: 'Planes', name: 'Parallax planes (2–3)' };
+const G_P1 = {
+    id: 'Plane1 Chunks',
+    name: 'Plane 1 — дальний слой (очередь чанков)',
+};
 
 /**
- * Three parallax planes + scroll. SceneNodeHub supplies viewRoot and optional plane-3 parent fallback.
+ * Плоскости 2 и 3 — один префаб на слой, классический тайлинг.
+ * Плоскость 1 — одна схема: Tutorial → Mandatory → Endless (веса) → базовый Plane 1 Segment Prefab.
  */
 @ccclass('LevelGenerator')
 export class LevelGenerator extends Component {
@@ -47,14 +55,6 @@ export class LevelGenerator extends Component {
         tooltip: 'Самый дальний слой (раньше небо).',
     })
     plane1ChunkParent: Node | null = null;
-
-    @property({
-        group: G_PLANES,
-        type: Prefab,
-        displayName: 'Plane 1 Segment Prefab',
-        tooltip: 'Ширина UITransform корня = шаг тайлинга.',
-    })
-    plane1SegmentPrefab: Prefab | null = null;
 
     @property({
         group: G_PLANES,
@@ -86,11 +86,58 @@ export class LevelGenerator extends Component {
         type: Prefab,
         displayName: 'Plane 3 Segment Prefab',
         tooltip:
-            'Например Chunk_2Clouds. Чанки встают под игроком по sibling index.',
+            'Ближний слой; один префаб на весь тайл.',
     })
     plane3SegmentPrefab: Prefab | null = null;
 
+    @property({
+        group: G_P1,
+        type: Prefab,
+        displayName: 'Plane 1 Segment Prefab',
+        tooltip:
+            'Базовый тайл после Tutorial/Mandatory и когда Endless Weighted пуст или не выпал отдельный префаб.',
+    })
+    plane1SegmentPrefab: Prefab | null = null;
+
+    @property({
+        group: G_P1,
+        displayName: 'Has Tutorial',
+        tooltip:
+            'Если выкл., Tutorial Chunks не используются; счёт начинается с Mandatory.',
+    })
+    plane1HasTutorial = true;
+
+    @property({
+        group: G_P1,
+        type: [Prefab],
+        displayName: 'Tutorial Chunks',
+        tooltip:
+            'Фиксированный порядок в начале забега (0, 1, …). Пусто — пропуск.',
+    })
+    plane1TutorialChunks: Prefab[] = [];
+
+    @property({
+        group: G_P1,
+        type: [Prefab],
+        displayName: 'Mandatory Chunks',
+        tooltip:
+            'После туториала — по одному разу по порядку, затем бесконечная часть.',
+    })
+    plane1MandatoryChunks: Prefab[] = [];
+
+    @property({
+        group: G_P1,
+        type: [WeightedChunk],
+        displayName: 'Endless Weighted Chunks',
+        tooltip:
+            'Бесконечная часть: случайный выбор по весам. Пусто — этот шаг пропускается, берётся Plane 1 Segment Prefab.',
+    })
+    plane1EndlessChunks: WeightedChunk[] = [];
+
     private _strips: ChunkStrip[] = [];
+
+    /** Индекс следующего спавна для цепочки плана 1 (tutorial + mandatory + endless). */
+    private _plane1SpawnCounter = 0;
 
     start() {
         this.rebuildChunks();
@@ -98,6 +145,7 @@ export class LevelGenerator extends Component {
 
     rebuildChunks() {
         this.clearStrips();
+        this._plane1SpawnCounter = 0;
 
         const hub = SceneNodeHub.instance;
 
@@ -105,14 +153,16 @@ export class LevelGenerator extends Component {
         const p2Parent =
             this.plane2ChunkParent ?? this.plane1ChunkParent ?? this.node;
 
-        if (this.plane1SegmentPrefab) {
-            const strip = this.buildStrip(this.plane1SegmentPrefab, p1Parent);
-            if (strip) {
-                this._strips.push(strip);
-            }
+        const plane1Strip = this.buildPlane1Strip(p1Parent);
+        if (plane1Strip) {
+            this._strips.push(plane1Strip);
         }
+
         if (this.plane2SegmentPrefab) {
-            const strip = this.buildStrip(this.plane2SegmentPrefab, p2Parent);
+            const strip = this.buildUniformStrip(
+                this.plane2SegmentPrefab,
+                p2Parent,
+            );
             if (strip) {
                 this._strips.push(strip);
             }
@@ -120,8 +170,8 @@ export class LevelGenerator extends Component {
 
         const p3Parent =
             this.plane3ChunkParent ?? hub?.player?.parent ?? null;
-        if (this.plane3SegmentPrefab && p3Parent) {
-            const strip = this.buildStrip(
+        if (p3Parent && this.plane3SegmentPrefab) {
+            const strip = this.buildUniformStrip(
                 this.plane3SegmentPrefab,
                 p3Parent,
                 true,
@@ -147,7 +197,11 @@ export class LevelGenerator extends Component {
             }
             for (const seg of strip.segments) {
                 if (this.rightEdgeLocal(seg) < leftBound) {
-                    this.placeAfterRightmost(seg, strip.segments);
+                    if (strip.plane1RecycleSwap) {
+                        this.recyclePlane1Segment(strip, seg);
+                    } else {
+                        this.placeAfterRightmost(seg, strip.segments);
+                    }
                 }
             }
         }
@@ -161,6 +215,143 @@ export class LevelGenerator extends Component {
         return game.scrollSpeed * dt;
     }
 
+    /** Одна цепочка — без отдельного «режима только один префаб». */
+    private resolvePlane1PrefabBySpawnIndex(index: number): Prefab | null {
+        if (this.plane1HasTutorial && index < this.plane1TutorialChunks.length) {
+            return this.plane1TutorialChunks[index] ?? null;
+        }
+        const tOff = this.plane1HasTutorial ? this.plane1TutorialChunks.length : 0;
+        const mandatoryIndex = index - tOff;
+        if (
+            mandatoryIndex >= 0 &&
+            mandatoryIndex < this.plane1MandatoryChunks.length
+        ) {
+            return this.plane1MandatoryChunks[mandatoryIndex] ?? null;
+        }
+        const endless = this.pickWeightedPlane1Endless();
+        if (endless) {
+            return endless;
+        }
+        return this.plane1SegmentPrefab;
+    }
+
+    private pickWeightedPlane1Endless(): Prefab | null {
+        const valid = this.plane1EndlessChunks.filter(
+            (e) => e && e.prefab && e.weight > 0,
+        );
+        if (valid.length === 0) {
+            return null;
+        }
+        const total = valid.reduce((s, e) => s + e.weight, 0);
+        let roll = Math.random() * total;
+        for (const e of valid) {
+            roll -= e.weight;
+            if (roll <= 0) {
+                return e.prefab;
+            }
+        }
+        return valid[valid.length - 1].prefab;
+    }
+
+    private getPlane1MinChunkWidth(): number {
+        const widths: number[] = [];
+        const push = (p: Prefab | null) => {
+            if (!p) {
+                return;
+            }
+            const w = this.measurePrefabWorldWidth(p);
+            if (w > 0) {
+                widths.push(w);
+            }
+        };
+        push(this.plane1SegmentPrefab);
+        for (const p of this.plane1TutorialChunks) {
+            push(p);
+        }
+        for (const p of this.plane1MandatoryChunks) {
+            push(p);
+        }
+        for (const e of this.plane1EndlessChunks) {
+            push(e?.prefab ?? null);
+        }
+        return widths.length > 0 ? Math.min(...widths) : 1080;
+    }
+
+    private buildPlane1Strip(parent: Node): ChunkStrip | null {
+        const minW = this.getPlane1MinChunkWidth();
+        if (minW <= 0) {
+            return null;
+        }
+
+        const viewW = this.getViewWidth();
+        const count = Math.max(
+            2,
+            Math.ceil(viewW / minW) + this.extraSegments + 1,
+        );
+
+        const segments: Node[] = [];
+        let prevRight = -Infinity;
+
+        for (let i = 0; i < count; i++) {
+            const prefab = this.resolvePlane1PrefabBySpawnIndex(
+                this._plane1SpawnCounter,
+            );
+            if (!prefab) {
+                break;
+            }
+
+            const seg = instantiate(prefab);
+            seg.parent = parent;
+
+            const ui = seg.getComponent(UITransform);
+            if (!ui) {
+                seg.destroy();
+                this._plane1SpawnCounter++;
+                continue;
+            }
+            const sx = Math.abs(seg.scale.x);
+            const half = ui.width * ui.anchorX * sx;
+
+            const cx = segments.length === 0 ? 0 : prevRight + half;
+            seg.setPosition(cx, 0, 0);
+            prevRight = this.rightEdgeLocal(seg);
+            segments.push(seg);
+            this._plane1SpawnCounter++;
+        }
+
+        if (segments.length === 0) {
+            return null;
+        }
+        return { segments, plane1RecycleSwap: true };
+    }
+
+    private recyclePlane1Segment(strip: ChunkStrip, segment: Node) {
+        const segments = strip.segments;
+        const idx = segments.indexOf(segment);
+        if (idx < 0 || !segment.parent?.isValid) {
+            return;
+        }
+
+        const prefab = this.resolvePlane1PrefabBySpawnIndex(
+            this._plane1SpawnCounter,
+        );
+        if (!prefab) {
+            this.placeAfterRightmost(segment, segments);
+            return;
+        }
+        this._plane1SpawnCounter++;
+
+        const parent = segment.parent;
+        const siblingIndex = segment.getSiblingIndex();
+        segment.destroy();
+
+        const newSeg = instantiate(prefab);
+        parent!.addChild(newSeg);
+        newSeg.setSiblingIndex(siblingIndex);
+        segments[idx] = newSeg;
+        this.placeAfterRightmost(newSeg, segments);
+    }
+
     private clearStrips() {
         for (const strip of this._strips) {
             for (const n of strip.segments) {
@@ -171,10 +362,9 @@ export class LevelGenerator extends Component {
     }
 
     /**
-     * @param insertAtLowSiblingIndex — для 3-го плана: чанки ближе к началу списка детей,
-     *   чтобы рисоваться под игроком (ниже sibling index в UI обычно раньше в отрисовке).
+     * Один префаб — фиксированный шаг тайлинга (планы 2 и 3).
      */
-    private buildStrip(
+    private buildUniformStrip(
         prefab: Prefab,
         parent: Node,
         insertAtLowSiblingIndex = false,
@@ -255,7 +445,7 @@ export class LevelGenerator extends Component {
 
         let maxRight = -Infinity;
         for (const s of segments) {
-            if (s !== segment) {
+            if (s !== segment && s.isValid) {
                 maxRight = Math.max(maxRight, this.rightEdgeLocal(s));
             }
         }

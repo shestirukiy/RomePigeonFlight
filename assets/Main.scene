@@ -1819,10 +1819,6 @@
     "plane1ChunkParent": {
       "__id__": 48
     },
-    "plane1SegmentPrefab": {
-      "__uuid__": "bacfe63a-2898-4b00-ab75-be967ca44aea",
-      "__expectedType__": "cc.Prefab"
-    },
     "plane2ChunkParent": {
       "__id__": 16
     },
@@ -1837,6 +1833,15 @@
       "__uuid__": "251c574b-2fd4-4fa9-bb32-b15470bde8b6",
       "__expectedType__": "cc.Prefab"
     },
+    "plane1SegmentPrefab": {
+      "__uuid__": "bacfe63a-2898-4b00-ab75-be967ca44aea",
+      "__expectedType__": "cc.Prefab"
+    },
+    "plane1HasTutorial": true,
+    "plane1TutorialChunks": [],
+    "plane1MandatoryChunks": [],
+    "plane1EndlessChunks": [],
+    "plane1FallbackPrefab": null,
     "_id": "b3RgjWGKlD2qT3FmEn1PCf"
   },
   {
