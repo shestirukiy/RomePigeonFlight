@@ -38,9 +38,19 @@ export class PlayerAnimationController extends Component {
     })
     wingFlapInertiaDuration = 0.45;
 
+    @property({
+        type: AnimationClip,
+        displayName: 'Electric Damage Clip',
+        tooltip:
+            'Опционально (например FlashDamage). Добавь тот же клип в массив Clips компонента Animation.',
+    })
+    electricDamageClip: AnimationClip | null = null;
+
     private _anim: Animation | null = null;
     private _flapState: AnimationState | null = null;
     private _flight: PlayerFlight | null = null;
+
+    private _electricOverlayRemain = 0;
 
     private _flapSpeed = 0;
 
@@ -62,13 +72,71 @@ export class PlayerAnimationController extends Component {
             null;
     }
 
+    /**
+     * Hazard layer: hold wing-flap logic while clip / timer runs.
+     */
+    public notifyElectricDamage(overlayDurationSec: number): void {
+        if (overlayDurationSec <= 0) {
+            return;
+        }
+        this._electricOverlayRemain = Math.max(
+            this._electricOverlayRemain,
+            overlayDurationSec,
+        );
+        this._ensureFlapState();
+        if (this.electricDamageClip && this._anim) {
+            this._anim.play(this.electricDamageClip.name);
+        }
+        if (this._flapState) {
+            this._applyFlapSpeed(0);
+        }
+    }
+
+    private _ensureFlapState(): void {
+        if (!this.flapClip || !this._anim || this._flapState) {
+            return;
+        }
+        const name = this.flapClip.name;
+        this._anim.play(name);
+        this._flapState = this._anim.getState(name);
+    }
+
+    /** После play(electricClip) активная дорожка Animation — шок; без повторного play(flap) крылья не оживают. */
+    private _resumeFlapAfterElectric(): void {
+        if (!this.flapClip || !this._anim) {
+            return;
+        }
+        const name = this.flapClip.name;
+        this._anim.play(name);
+        this._flapState = this._anim.getState(name);
+        this._wasHeld = this._flight?.isInputHeld === true;
+        this._tailTimeLeft = 0;
+    }
+
     update(dt: number) {
         const playing = GameManager.game?.isPlaying === true;
         if (!playing || !this.flapClip || !this._anim) {
             this._applyFlapSpeed(0);
             this._tailTimeLeft = 0;
             this._wasHeld = false;
+            this._electricOverlayRemain = 0;
             return;
+        }
+
+        if (this._electricOverlayRemain > 0) {
+            this._electricOverlayRemain = Math.max(
+                0,
+                this._electricOverlayRemain - dt,
+            );
+            this._ensureFlapState();
+            if (this._flapState) {
+                this._flapState.pause();
+            }
+            if (this._electricOverlayRemain <= 0) {
+                this._resumeFlapAfterElectric();
+            } else {
+                return;
+            }
         }
 
         if (!this._flapState) {

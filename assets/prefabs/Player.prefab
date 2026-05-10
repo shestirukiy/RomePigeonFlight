@@ -355,12 +355,13 @@
       {
         "__uuid__": "33f3a7a3-47be-4bd7-8668-498e65ce6653",
         "__expectedType__": "cc.AnimationClip"
+      },
+      {
+        "__uuid__": "b6788b28-1f6f-4e9a-99da-22f24547804c",
+        "__expectedType__": "cc.AnimationClip"
       }
     ],
-    "_defaultClip": {
-      "__uuid__": "33f3a7a3-47be-4bd7-8668-498e65ce6653",
-      "__expectedType__": "cc.AnimationClip"
-    },
+    "_defaultClip": null,
     "_id": ""
   },
   {

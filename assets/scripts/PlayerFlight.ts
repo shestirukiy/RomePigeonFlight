@@ -81,12 +81,33 @@ export class PlayerFlight extends Component {
     private _body: RigidBody2D | null = null;
     private _held = false;
 
+    /** Seconds left: no lift force (electric stun, etc.). */
+    private _electricLiftBlockRemain = 0;
+
     /** Сглаженная vy только для расчёта крена. */
     private _pitchVyFiltered = 0;
 
     /** Для анимаций / UI: удерживается ли тап или ЛКМ. */
     public get isInputHeld(): boolean {
         return this._held;
+    }
+
+    /**
+     * Blocks lift for the given duration (renewed if already blocked by a longer remaining time).
+     * Called from PlayerController / hazards.
+     */
+    public setElectricLiftBlockedFor(seconds: number): void {
+        if (seconds <= 0) {
+            return;
+        }
+        this._electricLiftBlockRemain = Math.max(
+            this._electricLiftBlockRemain,
+            seconds,
+        );
+    }
+
+    public get isElectricLiftBlocked(): boolean {
+        return this._electricLiftBlockRemain > 0;
     }
 
     private _savedGravityScale = 1;
@@ -97,6 +118,8 @@ export class PlayerFlight extends Component {
             this._savedGravityScale = this._body.gravityScale;
             this._body.type = ERigidBody2DType.Dynamic;
             this._body.fixedRotation = true;
+            // Lets physics report contacts (obstacles can listen; some setups need listener on dynamic body too).
+            this._body.enabledContactListener = true;
         }
 
         if (!this.pitchVisual) {
@@ -125,7 +148,7 @@ export class PlayerFlight extends Component {
         input.off(Input.EventType.MOUSE_UP, this._onMouseUp, this);
     }
 
-    update(_dt: number) {
+    update(dt: number) {
         const body = this._body;
         if (!body) {
             return;
@@ -137,13 +160,22 @@ export class PlayerFlight extends Component {
             body.linearVelocity = new Vec2(0, 0);
             body.angularVelocity = 0;
             this._pitchVyFiltered = 0;
+            this._electricLiftBlockRemain = 0;
             this._resetPitchAngle();
             return;
         }
 
         body.gravityScale = this._savedGravityScale;
 
-        if (this._held) {
+        if (this._electricLiftBlockRemain > 0) {
+            this._electricLiftBlockRemain = Math.max(
+                0,
+                this._electricLiftBlockRemain - dt,
+            );
+        }
+
+        const canLift = this._electricLiftBlockRemain <= 0;
+        if (canLift && this._held) {
             body.applyForceToCenter(new Vec2(0, this.liftForce), true);
         }
 
