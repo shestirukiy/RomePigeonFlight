@@ -1,12 +1,16 @@
 import {
     _decorator,
     Component,
+    Node,
     EventMouse,
     EventTouch,
     Input,
     RigidBody2D,
     ERigidBody2DType,
     Vec2,
+    director,
+    Director,
+    game,
     input,
 } from 'cc';
 import { GameManager } from './GameManager';
@@ -14,37 +18,77 @@ import { GameManager } from './GameManager';
 const { ccclass, property } = _decorator;
 
 /**
- * Полёт голубя: гравитация через RigidBody2D, при удержании тапа/ЛКМ — подъём силой.
- * Затухание и масса настраиваются на самом Rigid Body 2D (Linear Damping и т.д.).
- * До старта игры (Game Manager) гравитация выключена, скорость обнуляется.
+ * Полёт: RigidBody2D + подъём силой. Крен по вертикальной скорости — см. группу «Крен» в инспекторе.
  */
 @ccclass('PlayerFlight')
 export class PlayerFlight extends Component {
+    @property({ group: 'Физика полёта', tooltip: 'Сила при удержании ввода.' })
+    liftForce = 10000;
+
+    @property({ group: 'Физика полёта', tooltip: 'Лимит скорости вверх.' })
+    maxUpSpeed = 700;
+
+    @property({ group: 'Физика полёта', tooltip: 'Лимит скорости падения по модулю.' })
+    maxDownSpeed = 2000;
+
     @property({
+        group: 'Крен',
+        tooltip: 'Макс. угол носа вверх при подъёме (градусы).',
+    })
+    pitchMaxDegUp = 90;
+
+    @property({
+        group: 'Крен',
+        tooltip: 'Макс. угол носа вниз при падении (градусы).',
+    })
+    pitchMaxDegDown = 300;
+
+    @property({
+        group: 'Крен',
         tooltip:
-            'Вертикальная сила при удержании ввода (подбирается под массу и гравитацию сцены).',
+            'Насколько сильно крен реагирует на скорость (подъём). Падение усиливается отдельно — «Усиление падения».',
     })
-    liftForce = 14000;
+    pitchStrength = 0.3;
 
     @property({
-        tooltip: 'Максимальная скорость вверх (ограничение по linearVelocity.y).',
+        group: 'Крен',
+        tooltip:
+            'Во сколько раз сильнее наклон при падении относительно подъёма (при падении |vy| обычно меньше). Типично 3–5.',
     })
-    maxUpSpeed = 520;
+    pitchFallBoost = 3.5;
 
     @property({
-        tooltip: 'Максимальная скорость падения по модулю.',
+        group: 'Крен',
+        tooltip:
+            'Плавность: 0 — резче и быстрее, 1 — мягче, меньше дрожания.',
     })
-    maxDownSpeed = 650;
+    pitchSmoothness = 0.45;
+
+    @property({
+        group: 'Крен',
+        tooltip: 'Инвертировать направление наклона.',
+    })
+    pitchInvert = false;
+
+    @property({
+        group: 'Крен',
+        type: Node,
+        tooltip:
+            'Узел, который только наклоняется (часто дочерний «Pigeon»). Пусто — ищется ребёнок с именем Pigeon, иначе крен на корне.',
+    })
+    pitchVisual: Node | null = null;
 
     private _body: RigidBody2D | null = null;
     private _held = false;
+
+    /** Сглаженная vy только для расчёта крена. */
+    private _pitchVyFiltered = 0;
 
     /** Для анимаций / UI: удерживается ли тап или ЛКМ. */
     public get isInputHeld(): boolean {
         return this._held;
     }
 
-    /** Gravity Scale с компонента Rigid Body 2D из инспектора (не перезаписываем каждый кадр единицей). */
     private _savedGravityScale = 1;
 
     onLoad() {
@@ -55,14 +99,25 @@ export class PlayerFlight extends Component {
             this._body.fixedRotation = true;
         }
 
+        if (!this.pitchVisual) {
+            const pigeon = this.node.getChildByName('Pigeon');
+            if (pigeon) {
+                this.pitchVisual = pigeon;
+            }
+        }
+
         input.on(Input.EventType.TOUCH_START, this._onTouchStart, this);
         input.on(Input.EventType.TOUCH_END, this._onTouchEnd, this);
         input.on(Input.EventType.TOUCH_CANCEL, this._onTouchEnd, this);
         input.on(Input.EventType.MOUSE_DOWN, this._onMouseDown, this);
         input.on(Input.EventType.MOUSE_UP, this._onMouseUp, this);
+
+        director.on(Director.EVENT_BEFORE_DRAW, this._onBeforeDrawPitch, this);
     }
 
     onDestroy() {
+        director.off(Director.EVENT_BEFORE_DRAW, this._onBeforeDrawPitch, this);
+
         input.off(Input.EventType.TOUCH_START, this._onTouchStart, this);
         input.off(Input.EventType.TOUCH_END, this._onTouchEnd, this);
         input.off(Input.EventType.TOUCH_CANCEL, this._onTouchEnd, this);
@@ -80,6 +135,9 @@ export class PlayerFlight extends Component {
         if (!playing) {
             body.gravityScale = 0;
             body.linearVelocity = new Vec2(0, 0);
+            body.angularVelocity = 0;
+            this._pitchVyFiltered = 0;
+            this._resetPitchAngle();
             return;
         }
 
@@ -96,8 +154,65 @@ export class PlayerFlight extends Component {
         } else if (vy < -this.maxDownSpeed) {
             vy = -this.maxDownSpeed;
         }
-        // без горизонтальной инерции (только вертикаль)
-        body.linearVelocity = new Vec2(0, vy);
+        const horiz = Math.abs(v.x) > 1e-4;
+        const clipped = vy !== v.y;
+        if (horiz || clipped) {
+            body.linearVelocity = new Vec2(0, vy);
+        }
+    }
+
+    /** Чем выше pitchSmoothness, тем мягче следование углу (меньше коэффициент сглаживания угла). */
+    private _angleSmoothRate(): number {
+        const s = Math.min(1, Math.max(0, this.pitchSmoothness));
+        return 18 - s * 12;
+    }
+
+    /** Чем выше pitchSmoothness, тем сильнее сглаживание vy → меньше дрожание крена. */
+    private _vySmoothRate(): number {
+        const s = Math.min(1, Math.max(0, this.pitchSmoothness));
+        return 6 + s * 12;
+    }
+
+    private _onBeforeDrawPitch() {
+        const body = this._body;
+        if (!body || GameManager.game?.isPlaying !== true) {
+            return;
+        }
+
+        body.angularVelocity = 0;
+
+        const vyRaw = body.linearVelocity.y;
+        const dt = Math.max(game.deltaTime, 1e-6);
+        const vySmooth = this._vySmoothRate();
+        const k = Math.min(1, vySmooth * dt);
+        this._pitchVyFiltered += (vyRaw - this._pitchVyFiltered) * k;
+        const vy = this._pitchVyFiltered;
+
+        const upSens = this.pitchStrength;
+        const downSens = this.pitchStrength * this.pitchFallBoost;
+        const sign = this.pitchInvert ? -1 : 1;
+
+        let targetAngle: number;
+        if (vy >= 0) {
+            targetAngle = vy * upSens * sign;
+            targetAngle = Math.min(targetAngle, this.pitchMaxDegUp);
+        } else {
+            targetAngle = vy * downSens * sign;
+            targetAngle = Math.max(targetAngle, -this.pitchMaxDegDown);
+        }
+
+        const pivot = this.pitchVisual ?? this.node;
+        const cur = pivot.angle;
+        const t = Math.min(1, this._angleSmoothRate() * dt);
+        pivot.angle = cur + (targetAngle - cur) * t;
+    }
+
+    private _resetPitchAngle() {
+        if (this.pitchVisual) {
+            this.pitchVisual.angle = 0;
+        } else {
+            this.node.angle = 0;
+        }
     }
 
     private _onTouchStart(_e: EventTouch) {

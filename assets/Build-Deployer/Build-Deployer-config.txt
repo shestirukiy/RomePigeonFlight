@@ -1,0 +1,3 @@
+# Конфигурация для Build-Deployer
+ProjectName=RomePigeonFlight
+SourceDir=build\super-html

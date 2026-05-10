@@ -26,16 +26,19 @@
       },
       {
         "__id__": 14
+      },
+      {
+        "__id__": 20
       }
     ],
     "_active": true,
     "_components": [
       {
-        "__id__": 20
+        "__id__": 26
       }
     ],
     "_prefab": {
-      "__id__": 22
+      "__id__": 28
     },
     "_lpos": {
       "__type__": "cc.Vec3",
@@ -225,8 +228,8 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 359.423,
-      "y": 745.877,
+      "x": 397.503,
+      "y": 332.934,
       "z": 0
     },
     "_lrot": {
@@ -340,7 +343,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "CloudBack-001",
+    "_name": "SkyBack",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -361,8 +364,8 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -309.183,
-      "y": -683.1990000000001,
+      "x": 0.000258591462955593,
+      "y": 787.9317152874094,
       "z": 0
     },
     "_lrot": {
@@ -402,6 +405,142 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
+      "width": 1800.0000000000002,
+      "height": 1024.391
+    },
+    "_anchorPoint": {
+      "__type__": "cc.Vec2",
+      "x": 0.5,
+      "y": 0.5
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "76j9sJ/h5CdI9hEJ+GHPEO"
+  },
+  {
+    "__type__": "cc.Sprite",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 14
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 18
+    },
+    "_customMaterial": null,
+    "_srcBlendFactor": 2,
+    "_dstBlendFactor": 4,
+    "_color": {
+      "__type__": "cc.Color",
+      "r": 255,
+      "g": 255,
+      "b": 255,
+      "a": 255
+    },
+    "_spriteFrame": {
+      "__uuid__": "54d51eff-8d69-4245-875b-1465c7407a3a@f9941",
+      "__expectedType__": "cc.SpriteFrame"
+    },
+    "_type": 0,
+    "_fillType": 0,
+    "_sizeMode": 0,
+    "_fillCenter": {
+      "__type__": "cc.Vec2",
+      "x": 0,
+      "y": 0
+    },
+    "_fillStart": 0,
+    "_fillRange": 0,
+    "_isTrimmedMode": true,
+    "_useGrayscale": false,
+    "_atlas": null,
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "f8EzsSuBlEoZzKrPMZj8cS"
+  },
+  {
+    "__type__": "cc.PrefabInfo",
+    "root": {
+      "__id__": 1
+    },
+    "asset": {
+      "__id__": 0
+    },
+    "fileId": "35Z6Bg9llLGbJuSHJ5jkN4",
+    "instance": null,
+    "targetOverrides": null,
+    "nestedPrefabInstanceRoots": null
+  },
+  {
+    "__type__": "cc.Node",
+    "_name": "CloudBack-001",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_parent": {
+      "__id__": 1
+    },
+    "_children": [],
+    "_active": true,
+    "_components": [
+      {
+        "__id__": 21
+      },
+      {
+        "__id__": 23
+      }
+    ],
+    "_prefab": {
+      "__id__": 25
+    },
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": -304.286,
+      "y": -310.813,
+      "z": 0
+    },
+    "_lrot": {
+      "__type__": "cc.Quat",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "w": 1
+    },
+    "_lscale": {
+      "__type__": "cc.Vec3",
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "_mobility": 0,
+    "_layer": 33554432,
+    "_euler": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.UITransform",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 20
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 22
+    },
+    "_contentSize": {
+      "__type__": "cc.Size",
       "width": 512,
       "height": 239
     },
@@ -422,11 +561,11 @@
     "_objFlags": 0,
     "__editorExtras__": {},
     "node": {
-      "__id__": 14
+      "__id__": 20
     },
     "_enabled": true,
     "__prefab": {
-      "__id__": 18
+      "__id__": 24
     },
     "_customMaterial": null,
     "_srcBlendFactor": 2,
@@ -484,7 +623,7 @@
     },
     "_enabled": true,
     "__prefab": {
-      "__id__": 21
+      "__id__": 27
     },
     "_contentSize": {
       "__type__": "cc.Size",
@@ -511,6 +650,7 @@
       "__id__": 0
     },
     "fileId": "16edpZegNF6KNbEQMZa9Nw",
+    "instance": null,
     "targetOverrides": null
   }
 ]

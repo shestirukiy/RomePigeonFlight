@@ -50,8 +50,13 @@ export class PlayerAnimationController extends Component {
     private _wasHeld = false;
 
     onLoad() {
-        this._anim = this.getComponent(Animation);
-        this._flight = this.getComponent(PlayerFlight);
+        this._anim =
+            this.getComponent(Animation) ??
+            this.getComponentInChildren(Animation);
+        this._flight =
+            this.getComponent(PlayerFlight) ??
+            this.node.parent?.getComponent(PlayerFlight) ??
+            null;
     }
 
     update(dt: number) {
