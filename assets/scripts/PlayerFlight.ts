@@ -15,6 +15,7 @@ const { ccclass, property } = _decorator;
 
 /**
  * Полёт голубя: гравитация через RigidBody2D, при удержании тапа/ЛКМ — подъём силой.
+ * Затухание и масса настраиваются на самом Rigid Body 2D (Linear Damping и т.д.).
  * До старта игры (Game Manager) гравитация выключена, скорость обнуляется.
  */
 @ccclass('PlayerFlight')
@@ -38,12 +39,20 @@ export class PlayerFlight extends Component {
     private _body: RigidBody2D | null = null;
     private _held = false;
 
+    /** Для анимаций / UI: удерживается ли тап или ЛКМ. */
+    public get isInputHeld(): boolean {
+        return this._held;
+    }
+
+    /** Gravity Scale с компонента Rigid Body 2D из инспектора (не перезаписываем каждый кадр единицей). */
+    private _savedGravityScale = 1;
+
     onLoad() {
         this._body = this.getComponent(RigidBody2D);
         if (this._body) {
+            this._savedGravityScale = this._body.gravityScale;
             this._body.type = ERigidBody2DType.Dynamic;
             this._body.fixedRotation = true;
-            this._body.gravityScale = 1;
         }
 
         input.on(Input.EventType.TOUCH_START, this._onTouchStart, this);
@@ -74,7 +83,7 @@ export class PlayerFlight extends Component {
             return;
         }
 
-        body.gravityScale = 1;
+        body.gravityScale = this._savedGravityScale;
 
         if (this._held) {
             body.applyForceToCenter(new Vec2(0, this.liftForce), true);
@@ -87,9 +96,8 @@ export class PlayerFlight extends Component {
         } else if (vy < -this.maxDownSpeed) {
             vy = -this.maxDownSpeed;
         }
-        if (vy !== v.y) {
-            body.linearVelocity = new Vec2(v.x, vy);
-        }
+        // без горизонтальной инерции (только вертикаль)
+        body.linearVelocity = new Vec2(0, vy);
     }
 
     private _onTouchStart(_e: EventTouch) {
