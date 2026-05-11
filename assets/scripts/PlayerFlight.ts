@@ -78,8 +78,17 @@ export class PlayerFlight extends Component {
     })
     pitchVisual: Node | null = null;
 
+    @property({
+        group: 'Flight',
+        displayName: 'Lock Horizontal X',
+        tooltip:
+            'Раннер-режим: игрок по X всегда стоит на месте, движется только мир. Убирает «уезд» игрока/камеры при ударах и вторых коллизиях.',
+    })
+    lockHorizontalX = true;
+
     private _body: RigidBody2D | null = null;
     private _held = false;
+    private _anchorLocalX = 0;
 
     /** Seconds left: no lift force (electric stun, etc.). */
     private _electricLiftBlockRemain = 0;
@@ -137,6 +146,7 @@ export class PlayerFlight extends Component {
     private _savedGravityScale = 1;
 
     onLoad() {
+        this._anchorLocalX = this.node.position.x;
         this._body = this.getComponent(RigidBody2D);
         if (this._body) {
             this._savedGravityScale = this._body.gravityScale;
@@ -191,6 +201,13 @@ export class PlayerFlight extends Component {
 
         body.gravityScale = this._savedGravityScale;
 
+        if (this.lockHorizontalX) {
+            const p = this.node.position;
+            if (p.x !== this._anchorLocalX) {
+                this.node.setPosition(this._anchorLocalX, p.y, p.z);
+            }
+        }
+
         if (this._electricLiftBlockRemain > 0) {
             this._electricLiftBlockRemain = Math.max(
                 0,
@@ -210,9 +227,10 @@ export class PlayerFlight extends Component {
         } else if (vy < -this.maxDownSpeed) {
             vy = -this.maxDownSpeed;
         }
-        const horiz = Math.abs(v.x) > 1e-4;
+        // Раннер: по X всегда 0 (мир/чанки двигаются сами).
+        // Это гарантирует, что при “отскоке” и упоре во вторую стену игрок не уедет относительно кадра.
         const clipped = vy !== v.y;
-        if (horiz || clipped) {
+        if (this.lockHorizontalX || Math.abs(v.x) > 1e-4 || clipped) {
             body.linearVelocity = new Vec2(0, vy);
         }
     }
