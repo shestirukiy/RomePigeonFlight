@@ -76,9 +76,16 @@ export class TowerWallHazard extends Component {
         otherCollider: Collider2D,
         _contact: IPhysics2DContact | null,
     ) {
-        if (!GameManager.game?.isPlaying) {
+        const gm = GameManager.game;
+        if (!gm?.isPlaying) {
             return;
         }
+
+        // Если отскок уже идёт и мы упёрлись во что-то ещё — обнуляем импульс отдачи.
+        if (gm.isWorldKickbackActive) {
+            gm.cancelWorldKickback();
+        }
+
         if (this._coolRemain > 0) {
             return;
         }

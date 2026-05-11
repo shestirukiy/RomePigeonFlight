@@ -6,6 +6,8 @@ import {
     EventMouse,
     EventTouch,
 } from 'cc';
+import { SceneNodeHub } from './SceneNodeHub';
+import { PlayerPathSensors } from './PlayerPathSensors';
 
 const { ccclass, property } = _decorator;
 
@@ -29,12 +31,20 @@ export class GameManager extends Component {
     /** Скорость сдвига чанков вправо (пикс/с), пока идёт отдача. */
     private _worldKickbackSpeed = 0;
 
+    private _pathSensors: PlayerPathSensors | null = null;
+
     public get isPlaying(): boolean {
         return this._playing;
     }
 
     public get isWorldKickbackActive(): boolean {
         return this._worldKickbackRemain > 0;
+    }
+
+    /** Принудительно остановить отдачу (если отскок упёрся в другую преграду). */
+    public cancelWorldKickback(): void {
+        this._worldKickbackRemain = 0;
+        this._worldKickbackSpeed = 0;
     }
 
     /**
@@ -56,7 +66,11 @@ export class GameManager extends Component {
 
     /** Сдвиг чанков «вперёд по забегу» (влево), без отдачи. Во время отдачи — 0. */
     public getForwardScrollDelta(dt: number): number {
-        if (!this._playing || this._worldKickbackRemain > 0) {
+        if (
+            !this._playing ||
+            this._worldKickbackRemain > 0 ||
+            this._pathSensors?.isFrontBlocked === true
+        ) {
             return 0;
         }
         return this.scrollSpeed * dt;
@@ -65,6 +79,9 @@ export class GameManager extends Component {
     /** Доп. сдвиг чанков вправо за кадр (отдача от стены). */
     public getWorldKickbackDelta(dt: number): number {
         if (!this._playing || this._worldKickbackRemain <= 0) {
+            return 0;
+        }
+        if (this._pathSensors?.isBackBlocked === true) {
             return 0;
         }
         return this._worldKickbackSpeed * dt;
@@ -95,8 +112,16 @@ export class GameManager extends Component {
         if (!this._playing) {
             this._worldKickbackRemain = 0;
             this._worldKickbackSpeed = 0;
+            this._pathSensors = null;
             return;
         }
+
+        if (!this._pathSensors) {
+            const player = SceneNodeHub.instance?.player;
+            this._pathSensors =
+                player?.getComponentInChildren(PlayerPathSensors) ?? null;
+        }
+
         if (this._worldKickbackRemain > 0) {
             this._worldKickbackRemain = Math.max(
                 0,
@@ -105,6 +130,14 @@ export class GameManager extends Component {
             if (this._worldKickbackRemain <= 0) {
                 this._worldKickbackSpeed = 0;
             }
+        }
+
+        // Если отскок идёт, но сзади упёрлись — гасим отскок.
+        if (
+            this._worldKickbackRemain > 0 &&
+            this._pathSensors?.isBackBlocked === true
+        ) {
+            this.cancelWorldKickback();
         }
     }
 

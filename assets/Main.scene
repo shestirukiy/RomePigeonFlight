@@ -624,9 +624,9 @@
     },
     "_lscale": {
       "__type__": "cc.Vec3",
-      "x": 1,
-      "y": 1,
-      "z": 1
+      "x": 3.398,
+      "y": 3.398,
+      "z": 3.398
     },
     "_mobility": 0,
     "_layer": 33554432,
@@ -1910,7 +1910,7 @@
       "__uuid__": "bacfe63a-2898-4b00-ab75-be967ca44aea",
       "__expectedType__": "cc.Prefab"
     },
-    "weight": 0
+    "weight": 1
   },
   {
     "__type__": "WeightedChunk",
@@ -1931,7 +1931,6 @@
     "_enabled": true,
     "__prefab": null,
     "scrollSpeed": 350,
-    "worldHoldEpsilonPx": 2,
     "_id": "83gqcDOZxGWbI4c4hIBCQ5"
   },
   {

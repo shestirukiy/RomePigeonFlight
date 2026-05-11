@@ -201,13 +201,6 @@ export class PlayerFlight extends Component {
 
         body.gravityScale = this._savedGravityScale;
 
-        if (this.lockHorizontalX) {
-            const p = this.node.position;
-            if (p.x !== this._anchorLocalX) {
-                this.node.setPosition(this._anchorLocalX, p.y, p.z);
-            }
-        }
-
         if (this._electricLiftBlockRemain > 0) {
             this._electricLiftBlockRemain = Math.max(
                 0,
