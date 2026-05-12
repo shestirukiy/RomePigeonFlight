@@ -18,8 +18,9 @@ const { ccclass, property, executionOrder } = _decorator;
 const PATH_SENSORS_EXEC_ORDER = -50;
 
 /**
- * Коллайдер игрока + контакты (не sensor): по центрам AABB сравниваем вертикаль и горизонталь.
- * Сверху — игнор. Снизу — только анимация «поверхность», скролл не стоп. Сбоку — вперёд/назад как раньше.
+ * Коллайдер игрока + контакты (не sensor): вертикаль (сверху / снизу / сбоку) и горизонталь для скролла.
+ * Сверху — игнор. Снизу — учёт для анимации бега; стоп мира добавляется отдельно, если контакт ещё и «вперёд/назад»
+ * (полоса «сбоку», или «снизу» и центр препятствия по X вне мёртвой зоны — см. _shouldApplyHorizontalScrollBlock).
  */
 @ccclass('PlayerPathSensors')
 @executionOrder(PATH_SENSORS_EXEC_ORDER)
@@ -35,7 +36,8 @@ export class PlayerPathSensors extends Component {
     @property({
         displayName: 'Side dead zone X (px)',
         tooltip:
-            'Центры игрока и препятствия по X: внутри ±зоны — лобовой контакт («вперёд» для скролла).',
+            'По X: внутри ±зоны — контакт считается «по центру» (лобовой для скролла). ' +
+            'Для контакта «снизу» горизонтальная остановка скролла добавляется только если центр препятствия по X выходит за эту зону — тогда одновременно возможны бег по поверхности и стоп мира.',
     })
     pathSideDeadZonePx = 24;
 
@@ -264,7 +266,7 @@ export class PlayerPathSensors extends Component {
         return 'side';
     }
 
-    /** Стена правее игрока по X → «вперёд» (скролл стоп). Только для бокового контакта. */
+    /** Стена правее игрока по X → «вперёд» (скролл стоп). */
     private _wallBlocksForward(other: Collider2D): boolean {
         const px = this.node.worldPosition.x;
         const wx = other.node.worldPosition.x;
@@ -274,6 +276,25 @@ export class PlayerPathSensors extends Component {
             return true;
         }
         return d > 0;
+    }
+
+    /**
+     * Стоп скролла (GameManager) не зависит от задержки анимации бега — счётчики front/back ведутся здесь же.
+     * «Сбоку» — всегда. «Снизу» — если одновременно есть горизонтальная «пробка» (не только платформа строго под центром).
+     */
+    private _shouldApplyHorizontalScrollBlock(
+        v: 'above' | 'below' | 'side',
+        other: Collider2D,
+    ): boolean {
+        if (v === 'above') {
+            return false;
+        }
+        if (v === 'side') {
+            return true;
+        }
+        const px = this.node.worldPosition.x;
+        const wx = other.node.worldPosition.x;
+        return Math.abs(wx - px) > this.pathSideDeadZonePx;
     }
 
     private _onBeginContact(
@@ -298,45 +319,45 @@ export class PlayerPathSensors extends Component {
             }
             return;
         }
+
         if (v === 'below') {
-            if (this._belowWalls.has(id)) {
-                return;
+            if (!this._belowWalls.has(id)) {
+                this._belowWalls.set(id, other);
+                this._belowCount++;
+                if (this.debugLog) {
+                    console.log(
+                        `[PlayerPathSensors] BEGIN BELOW (surface) other="${other?.node?.name ?? '?'}" below=${this._belowCount}`,
+                    );
+                }
             }
-            this._belowWalls.set(id, other);
-            this._belowCount++;
-            if (this.debugLog) {
-                console.log(
-                    `[PlayerPathSensors] BEGIN BELOW (surface) other="${other?.node?.name ?? '?'}" below=${this._belowCount}`,
-                );
-            }
-            return;
         }
 
-        const forward = this._wallBlocksForward(other);
-        if (forward) {
-            if (this._frontWalls.has(id)) {
-                return;
+        if (this._shouldApplyHorizontalScrollBlock(v, other)) {
+            const forward = this._wallBlocksForward(other);
+            if (forward) {
+                if (!this._frontWalls.has(id)) {
+                    this._frontWalls.set(id, other);
+                    this._frontCount++;
+                }
+            } else {
+                if (!this._backWalls.has(id)) {
+                    this._backWalls.set(id, other);
+                    this._backCount++;
+                }
             }
-            this._frontWalls.set(id, other);
-            this._frontCount++;
-        } else {
-            if (this._backWalls.has(id)) {
-                return;
+            if (this.debugLog) {
+                console.log(
+                    `[PlayerPathSensors] BEGIN ${forward ? 'FRONT' : 'BACK'} ` +
+                        `(v=${v}) other="${other?.node?.name ?? '?'}"`,
+                );
+                console.log(
+                    '[PlayerPathSensors] blocked counts',
+                    'front=',
+                    this._frontCount,
+                    'back=',
+                    this._backCount,
+                );
             }
-            this._backWalls.set(id, other);
-            this._backCount++;
-        }
-        if (this.debugLog) {
-            console.log(
-                `[PlayerPathSensors] BEGIN ${forward ? 'FRONT' : 'BACK'} other="${other?.node?.name ?? '?'}"`,
-            );
-            console.log(
-                '[PlayerPathSensors] blocked counts',
-                'front=',
-                this._frontCount,
-                'back=',
-                this._backCount,
-            );
         }
     }
 
@@ -344,15 +365,20 @@ export class PlayerPathSensors extends Component {
         const id = other?.isValid ? this._colliderId(other) : '';
         const ok = other?.isValid && this._isBlockingObstacle(other);
         let changed = false;
-        if (id && this._frontWalls.delete(id)) {
-            this._frontCount = Math.max(0, this._frontCount - 1);
-            changed = true;
-        } else if (id && this._backWalls.delete(id)) {
-            this._backCount = Math.max(0, this._backCount - 1);
-            changed = true;
-        } else if (id && this._belowWalls.delete(id)) {
-            this._belowCount = Math.max(0, this._belowCount - 1);
-            changed = true;
+        /* Один коллайдер может быть и «впереди», и «снизу» — снимаем со всех карт, не else-if. */
+        if (id) {
+            if (this._frontWalls.delete(id)) {
+                this._frontCount = Math.max(0, this._frontCount - 1);
+                changed = true;
+            }
+            if (this._backWalls.delete(id)) {
+                this._backCount = Math.max(0, this._backCount - 1);
+                changed = true;
+            }
+            if (this._belowWalls.delete(id)) {
+                this._belowCount = Math.max(0, this._belowCount - 1);
+                changed = true;
+            }
         }
         if (this.debugLog && ok && changed) {
             console.log(`[PlayerPathSensors] END other="${other?.node?.name ?? '?'}"`);
