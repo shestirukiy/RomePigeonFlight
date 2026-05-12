@@ -6,14 +6,13 @@ import {
     EventMouse,
     EventTouch,
 } from 'cc';
-import { SceneNodeHub } from './SceneNodeHub';
-import { PlayerPathSensors } from './PlayerPathSensors';
 
 const { ccclass, property } = _decorator;
 
 /**
  * First tap starts the run; scrollSpeed drives LevelGenerator chunk movement.
- * Отдача от стены: горизонтально двигается только мир (чанки вправо), узел игрока по X не трогаем.
+ * Отдача от стены: через applyWorldKickback (как TowerWallHazard) — состояние меняется в колбэке контакта.
+ * Стоп скролла вперёд: PlayerPathSensors вызывает syncPathSensorBlockCounts раз в кадр.
  */
 @ccclass('GameManager')
 export class GameManager extends Component {
@@ -31,7 +30,17 @@ export class GameManager extends Component {
     /** Скорость сдвига чанков вправо (пикс/с), пока идёт отдача. */
     private _worldKickbackSpeed = 0;
 
-    private _pathSensors: PlayerPathSensors | null = null;
+    /** Сколько активных «впереди стена» контактов сообщили сенсоры (BEGIN − END). */
+    private _forwardScrollBlockRef = 0;
+
+    /**
+     * После любого BEGIN переднего сенсора держим стоп ещё min секунд (BEGIN+END в один кадр).
+     */
+    private _forwardScrollHoldRemain = 0;
+
+    /** Для отскока: контакт заднего сенсора с твёрдой стеной. */
+    private _kickbackBackBlockRef = 0;
+    private _kickbackBackHoldRemain = 0;
 
     public get isPlaying(): boolean {
         return this._playing;
@@ -64,16 +73,91 @@ export class GameManager extends Component {
         );
     }
 
+    /**
+     * Вызывать из колбэка BEGIN_CONTACT переднего сенсора (как TowerWall дергает applyWorldKickback).
+     */
+    public addForwardScrollBlock(): void {
+        if (!this._playing) {
+            return;
+        }
+        this._forwardScrollBlockRef++;
+        this._forwardScrollHoldRemain = Math.max(
+            this._forwardScrollHoldRemain,
+            this.forwardContactMinHoldSec,
+        );
+    }
+
+    /** Вызывать из END_CONTACT переднего сенсора. */
+    public removeForwardScrollBlock(): void {
+        this._forwardScrollBlockRef = Math.max(0, this._forwardScrollBlockRef - 1);
+        // Как только все контакты сняты — сразу убираем искусственный hold, скролл возобновляется.
+        if (this._forwardScrollBlockRef <= 0) {
+            this._forwardScrollBlockRef = 0;
+            this._forwardScrollHoldRemain = 0;
+        }
+    }
+
+    /**
+     * Раз в кадр из PlayerPathSensors после prune: выставляет блокировки по фактическому числу
+     * активных препятствий. Лечит рассинхрон инкрементов BEGIN/END и ложные prune.
+     */
+    public syncPathSensorBlockCounts(
+        frontBlockingCount: number,
+        backBlockingCount: number,
+    ): void {
+        if (!this._playing) {
+            return;
+        }
+        this._forwardScrollBlockRef = Math.max(0, frontBlockingCount);
+        this._kickbackBackBlockRef = Math.max(0, backBlockingCount);
+        if (this._forwardScrollBlockRef > 0) {
+            this._forwardScrollHoldRemain = Math.max(
+                this._forwardScrollHoldRemain,
+                this.forwardContactMinHoldSec,
+            );
+        } else {
+            this._forwardScrollHoldRemain = 0;
+        }
+        if (this._kickbackBackBlockRef > 0) {
+            this._kickbackBackHoldRemain = Math.max(
+                this._kickbackBackHoldRemain,
+                this.backContactMinHoldSec,
+            );
+        } else {
+            this._kickbackBackHoldRemain = 0;
+        }
+    }
+
+    public addKickbackBackBlock(): void {
+        if (!this._playing) {
+            return;
+        }
+        this._kickbackBackBlockRef++;
+        this._kickbackBackHoldRemain = Math.max(
+            this._kickbackBackHoldRemain,
+            this.backContactMinHoldSec,
+        );
+    }
+
+    public removeKickbackBackBlock(): void {
+        this._kickbackBackBlockRef = Math.max(0, this._kickbackBackBlockRef - 1);
+        if (this._kickbackBackBlockRef <= 0) {
+            this._kickbackBackBlockRef = 0;
+            this._kickbackBackHoldRemain = 0;
+        }
+    }
+
     /** Сдвиг чанков «вперёд по забегу» (влево), без отдачи. Во время отдачи — 0. */
-    public getForwardScrollDelta(dt: number): number {
+    public getForwardScrollDelta(_dt: number): number {
         if (
             !this._playing ||
             this._worldKickbackRemain > 0 ||
-            this._pathSensors?.isFrontBlocked === true
+            this._forwardScrollBlockRef > 0 ||
+            this._forwardScrollHoldRemain > 0
         ) {
             return 0;
         }
-        return this.scrollSpeed * dt;
+        return this.scrollSpeed * _dt;
     }
 
     /** Доп. сдвиг чанков вправо за кадр (отдача от стены). */
@@ -81,7 +165,10 @@ export class GameManager extends Component {
         if (!this._playing || this._worldKickbackRemain <= 0) {
             return 0;
         }
-        if (this._pathSensors?.isBackBlocked === true) {
+        if (
+            this._kickbackBackBlockRef > 0 ||
+            this._kickbackBackHoldRemain > 0
+        ) {
             return 0;
         }
         return this._worldKickbackSpeed * dt;
@@ -93,6 +180,19 @@ export class GameManager extends Component {
             'Скорость «мира» (пикс/с): использует Level Generator для сдвига чанков после старта игры.',
     })
     scrollSpeed = 280;
+
+    @property({
+        displayName: 'Forward contact min hold (s)',
+        tooltip:
+            'Пока есть хотя бы один контакт, скролл остановлен. После последнего END hold сбрасывается сразу; это значение используется только если BEGIN был без пары END в том же кадре (редкий глитч физики).',
+    })
+    forwardContactMinHoldSec = 0.05;
+
+    @property({
+        displayName: 'Back contact min hold (s)',
+        tooltip: 'То же для заднего сенсора во время отскока.',
+    })
+    backContactMinHoldSec = 0.05;
 
     onLoad() {
         GameManager._inst = this;
@@ -112,14 +212,11 @@ export class GameManager extends Component {
         if (!this._playing) {
             this._worldKickbackRemain = 0;
             this._worldKickbackSpeed = 0;
-            this._pathSensors = null;
+            this._forwardScrollBlockRef = 0;
+            this._forwardScrollHoldRemain = 0;
+            this._kickbackBackBlockRef = 0;
+            this._kickbackBackHoldRemain = 0;
             return;
-        }
-
-        if (!this._pathSensors) {
-            const player = SceneNodeHub.instance?.player;
-            this._pathSensors =
-                player?.getComponentInChildren(PlayerPathSensors) ?? null;
         }
 
         if (this._worldKickbackRemain > 0) {
@@ -132,10 +229,23 @@ export class GameManager extends Component {
             }
         }
 
-        // Если отскок идёт, но сзади упёрлись — гасим отскок.
+        if (this._forwardScrollBlockRef <= 0 && this._forwardScrollHoldRemain > 0) {
+            this._forwardScrollHoldRemain = Math.max(
+                0,
+                this._forwardScrollHoldRemain - dt,
+            );
+        }
+
+        if (this._kickbackBackBlockRef <= 0 && this._kickbackBackHoldRemain > 0) {
+            this._kickbackBackHoldRemain = Math.max(
+                0,
+                this._kickbackBackHoldRemain - dt,
+            );
+        }
+
         if (
             this._worldKickbackRemain > 0 &&
-            this._pathSensors?.isBackBlocked === true
+            (this._kickbackBackBlockRef > 0 || this._kickbackBackHoldRemain > 0)
         ) {
             this.cancelWorldKickback();
         }

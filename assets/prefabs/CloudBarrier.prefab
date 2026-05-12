@@ -637,9 +637,7 @@
     "__prefab": {
       "__id__": 30
     },
-    "liftLockDuration": 0,
-    "cooldownSeconds": 0.55,
-    "debugContactLog": true,
+    "debugContactLog": false,
     "_id": ""
   },
   {
