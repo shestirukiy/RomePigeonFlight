@@ -2,12 +2,12 @@
   "ver": "2.0.4",
   "importer": "animation-clip",
   "imported": true,
-  "uuid": "b6788b28-1f6f-4e9a-99da-22f24547804c",
+  "uuid": "b2f1960b-b181-4904-b464-96d4f437bbf9",
   "files": [
     ".bin"
   ],
   "subMetas": {},
   "userData": {
-    "name": "FlashDamage"
+    "name": "PlayerStay"
   }
 }

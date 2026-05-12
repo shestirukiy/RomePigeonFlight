@@ -54,6 +54,15 @@ export class PlayerAnimationController extends Component {
     })
     wallHitClip: AnimationClip | null = null;
 
+    @property({
+        type: AnimationClip,
+        displayName: 'Surface Run Clip',
+        tooltip:
+            'Бег / скольжение по платформе снизу (пока игрок касается препятствия под ногами). ' +
+            'Тот же клип в массиве Clips у Animation.',
+    })
+    surfaceRunClip: AnimationClip | null = null;
+
     private _anim: Animation | null = null;
     private _flapState: AnimationState | null = null;
     private _flight: PlayerFlight | null = null;
@@ -61,6 +70,9 @@ export class PlayerAnimationController extends Component {
     private _electricOverlayRemain = 0;
 
     private _wallHitOverlayRemain = 0;
+
+    /** Игрок на поверхности снизу — без остановки скролла, отдельный клип. */
+    private _surfaceRunActive = false;
 
     private _flapSpeed = 0;
 
@@ -89,6 +101,7 @@ export class PlayerAnimationController extends Component {
         if (overlayDurationSec <= 0) {
             return;
         }
+        this._surfaceRunActive = false;
         this._electricOverlayRemain = Math.max(
             this._electricOverlayRemain,
             overlayDurationSec,
@@ -102,11 +115,42 @@ export class PlayerAnimationController extends Component {
         }
     }
 
+    /**
+     * Контакт с твёрдой поверхностью снизу (не скролл-стоп): зацикленный клип поверхности.
+     * Приоритет ниже удара облака и стены.
+     */
+    public setRunningOnSurface(active: boolean): void {
+        /* PlayerPathSensors.update идёт после физики в том же кадре — иначе бег по земле перебивает клип удара. */
+        if (
+            active &&
+            (this._wallHitOverlayRemain > 0 || this._electricOverlayRemain > 0)
+        ) {
+            return;
+        }
+        if (this._surfaceRunActive === active) {
+            return;
+        }
+        this._surfaceRunActive = active;
+        if (active && this.surfaceRunClip && this._anim) {
+            this._anim.play(this.surfaceRunClip.name);
+            return;
+        }
+        /* Контакт с поверхностью закончился — снова клип полёта (не перебиваем удар облака/стены). */
+        if (
+            !active &&
+            this._wallHitOverlayRemain <= 0 &&
+            this._electricOverlayRemain <= 0
+        ) {
+            this._resumeFlapPlayback();
+        }
+    }
+
     /** Препятствие «стена»: пауза хлопанья на время клипа удара. */
     public notifyWallHit(overlayDurationSec: number): void {
         if (overlayDurationSec <= 0) {
             return;
         }
+        this._surfaceRunActive = false;
         this._wallHitOverlayRemain = Math.max(
             this._wallHitOverlayRemain,
             overlayDurationSec,
@@ -143,12 +187,13 @@ export class PlayerAnimationController extends Component {
 
     update(dt: number) {
         const playing = GameManager.game?.isPlaying === true;
-        if (!playing || !this.flapClip || !this._anim) {
+        if (!playing || !this._anim) {
             this._applyFlapSpeed(0);
             this._tailTimeLeft = 0;
             this._wasHeld = false;
             this._electricOverlayRemain = 0;
             this._wallHitOverlayRemain = 0;
+            this._surfaceRunActive = false;
             return;
         }
 
@@ -178,7 +223,27 @@ export class PlayerAnimationController extends Component {
             this._wallHitOverlayRemain <= 0 &&
             this._electricOverlayRemain <= 0
         ) {
-            this._resumeFlapPlayback();
+            if (this._surfaceRunActive && this.surfaceRunClip) {
+                this._anim.play(this.surfaceRunClip.name);
+            } else {
+                this._resumeFlapPlayback();
+            }
+        }
+
+        if (
+            this._surfaceRunActive &&
+            this.surfaceRunClip &&
+            this._wallHitOverlayRemain <= 0 &&
+            this._electricOverlayRemain <= 0
+        ) {
+            if (this._flapState) {
+                this._flapState.pause();
+            }
+            return;
+        }
+
+        if (!this.flapClip) {
+            return;
         }
 
         if (!this._flapState) {

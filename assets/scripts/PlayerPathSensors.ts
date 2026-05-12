@@ -10,6 +10,7 @@ import {
     Vec3,
 } from 'cc';
 import { GameManager } from './GameManager';
+import { PlayerAnimationController } from './PlayerAnimationController';
 
 const { ccclass, property, executionOrder } = _decorator;
 
@@ -17,63 +18,54 @@ const { ccclass, property, executionOrder } = _decorator;
 const PATH_SENSORS_EXEC_ORDER = -50;
 
 /**
- * Либо два дочерних сенсора Front/Back, либо один коллайдер на корне (режим probe):
- * стена правее игрока по X → блок «вперёд», левее → блок «назад».
- * Карта препятствий + sync в GameManager как раньше.
+ * Коллайдер игрока + контакты (не sensor): по центрам AABB сравниваем вертикаль и горизонталь.
+ * Сверху — игнор. Снизу — только анимация «поверхность», скролл не стоп. Сбоку — вперёд/назад как раньше.
  */
 @ccclass('PlayerPathSensors')
 @executionOrder(PATH_SENSORS_EXEC_ORDER)
 export class PlayerPathSensors extends Component {
     @property({
-        displayName: 'Use Body Collider Probe',
-        tooltip:
-            'Вкл.: один коллайдер на игроке (по умолчанию BoxCollider2D на этой ноде). ' +
-            'Направление блока по world X относительно игрока; отдельные Front/Back не используются.',
-    })
-    useBodyColliderProbe = false;
-
-    @property({
         type: Collider2D,
-        displayName: 'Body Probe Collider',
+        displayName: 'Path Collider',
         tooltip:
-            'Коллайдер для контактов (обычно корневой BoxCollider2D игрока). Пусто — берём BoxCollider2D с этой ноды.',
+            'Обычно корневой BoxCollider2D игрока. Пусто — берём BoxCollider2D с этой ноды.',
     })
-    bodyProbeCollider: Collider2D | null = null;
+    pathCollider: Collider2D | null = null;
 
     @property({
-        displayName: 'Probe dead zone (px)',
+        displayName: 'Side dead zone X (px)',
         tooltip:
-            'Если центр стены по X попадает в ±зону относительно игрока — считаем «вперёд» ' +
-            '(лобовой контакт без двусмысленности сторон).',
+            'Центры игрока и препятствия по X: внутри ±зоны — лобовой контакт («вперёд» для скролла).',
     })
-    pathProbeDeadZonePx = 24;
+    pathSideDeadZonePx = 24;
 
     @property({
-        type: Collider2D,
-        displayName: 'Front Sensor',
-        tooltip: 'Сенсор спереди (по ходу движения мира влево).',
+        displayName: 'Vertical dead zone (px)',
+        tooltip:
+            'Разница центров по Y: выше зоны — препятствие «сверху» (без реакции). ' +
+            'Ниже зоны — «снизу» (бег по поверхности). Иначе — боковой контакт (стоп скролла вперёд/назад).',
     })
-    frontSensor: Collider2D | null = null;
-
-    @property({
-        type: Collider2D,
-        displayName: 'Back Sensor',
-        tooltip: 'Сенсор сзади (для отскока, когда мир едет вправо).',
-    })
-    backSensor: Collider2D | null = null;
+    pathVerticalDeadZonePx = 32;
 
     @property({
         displayName: 'Obstacle Group',
         tooltip:
-            'Группа коллайдеров, которые считаем “непроходимыми”.\n' +
-            'Если поставить -1, то будет блокировать от ЛЮБОГО твёрдого коллайдера (Sensor=false) вне игрока.',
+            'Группа коллайдеров-препятствий.\n' +
+            '-1 — любой твёрдый коллайдер (Sensor=false) вне игрока.',
     })
     obstacleGroup = -1;
 
     @property({
-        displayName: 'Debug Log',
+        displayName: 'Surface run activation delay (s)',
         tooltip:
-            'Пишет в консоль контакты сенсоров и причины фильтрации (почему блокирует/не блокирует).',
+            'Непрерывный контакт «снизу» должен длиться не меньше этого времени, чтобы включить анимацию бега. ' +
+            'Короткие касания игнорируются. 0 — без задержки.',
+    })
+    surfaceRunActivationDelaySec = 0.12;
+
+    @property({
+        displayName: 'Debug Log',
+        tooltip: 'Контакты и счётчики блокировок.',
     })
     debugLog = false;
 
@@ -81,10 +73,18 @@ export class PlayerPathSensors extends Component {
 
     private _frontCount = 0;
     private _backCount = 0;
+    private _belowCount = 0;
 
-    /** Активные «стены» по uuid коллайдера — если END не пришёл (уничтожение чанка, отрыв по Y), снимаем в prune в update. */
     private readonly _frontWalls = new Map<string, Collider2D>();
     private readonly _backWalls = new Map<string, Collider2D>();
+    private readonly _belowWalls = new Map<string, Collider2D>();
+
+    private _resolvedPathCollider: Collider2D | null = null;
+
+    private _anim: PlayerAnimationController | null = null;
+
+    /** Накопление времени при непрерывном контакте снизу (для отложенного включения бега). */
+    private _surfaceHoldAccumSec = 0;
 
     public get isFrontBlocked(): boolean {
         return this._frontCount > 0;
@@ -94,74 +94,99 @@ export class PlayerPathSensors extends Component {
         return this._backCount > 0;
     }
 
+    /** Есть контакт с поверхностью снизу (бег по земле/платформе). */
+    public get isOnSurfaceBelow(): boolean {
+        return this._belowCount > 0;
+    }
+
     onLoad() {
-        if (!this.frontSensor) {
-            const n = this.node.getChildByName('FrontSensor');
-            this.frontSensor = n?.getComponent(Collider2D) ?? null;
-        }
-        if (!this.backSensor) {
-            const n = this.node.getChildByName('BackSensor');
-            this.backSensor = n?.getComponent(Collider2D) ?? null;
-        }
+        const probe =
+            this.pathCollider ??
+            this.node.getComponent(BoxCollider2D) ??
+            this.node.getComponent(Collider2D);
+        this._resolvedPathCollider = probe;
+
+        this._anim =
+            this.getComponent(PlayerAnimationController) ??
+            this.getComponentInChildren(PlayerAnimationController);
 
         this._frontCount = 0;
         this._backCount = 0;
+        this._belowCount = 0;
         this._frontWalls.clear();
         this._backWalls.clear();
+        this._belowWalls.clear();
 
         if (this.debugLog) {
             console.log(
                 '[PlayerPathSensors] onLoad',
                 'node=',
                 this.node?.name,
-                'front=',
-                this.frontSensor?.node?.name ?? 'null',
-                'back=',
-                this.backSensor?.node?.name ?? 'null',
+                'pathCollider=',
+                probe?.node?.name ?? 'null',
                 'obstacleGroup=',
                 this.obstacleGroup,
             );
         }
 
-        if (this.useBodyColliderProbe) {
-            const probe =
-                this.bodyProbeCollider ??
-                this.node.getComponent(BoxCollider2D) ??
-                this.node.getComponent(Collider2D);
-            this._bindProbe(probe);
-        } else {
-            this._bind(this.frontSensor, true);
-            this._bind(this.backSensor, false);
-        }
+        this._bindPathCollider(probe);
     }
 
     update(_dt: number) {
         const gm = GameManager.game;
         if (!gm?.isPlaying) {
+            if (
+                this._frontCount > 0 ||
+                this._backCount > 0 ||
+                this._belowCount > 0 ||
+                this._surfaceHoldAccumSec > 0
+            ) {
+                this._frontCount = 0;
+                this._backCount = 0;
+                this._belowCount = 0;
+                this._surfaceHoldAccumSec = 0;
+                this._frontWalls.clear();
+                this._backWalls.clear();
+                this._belowWalls.clear();
+                this._anim?.setRunningOnSurface(false);
+            }
             return;
         }
         this._pruneStaleWalls(true);
         this._pruneStaleWalls(false);
+        this._pruneStaleBelow();
         gm.syncPathSensorBlockCounts(this._frontCount, this._backCount);
+
+        this._updateSurfaceRunAnimation(_dt);
     }
 
-    onDestroy() {
-        if (this.useBodyColliderProbe) {
-            this._unbind(this.bodyResolvedProbe);
-        } else {
-            this._unbind(this.frontSensor);
-            this._unbind(this.backSensor);
+    /** Бег по поверхности только после непрерывного контакта снизу (исключаем короткие касания). */
+    private _updateSurfaceRunAnimation(dt: number): void {
+        const hasBelow = this._belowCount > 0;
+        if (!hasBelow) {
+            this._surfaceHoldAccumSec = 0;
+            this._anim?.setRunningOnSurface(false);
+            return;
+        }
+        const minSec = this.surfaceRunActivationDelaySec;
+        if (minSec <= 0) {
+            this._anim?.setRunningOnSurface(true);
+            return;
+        }
+        this._surfaceHoldAccumSec += dt;
+        if (this._surfaceHoldAccumSec >= minSec) {
+            this._anim?.setRunningOnSurface(true);
         }
     }
 
-    /** Фактически привязанный коллайдер в режиме probe — для off в onDestroy. */
-    private bodyResolvedProbe: Collider2D | null = null;
+    onDestroy() {
+        this._unbind(this._resolvedPathCollider);
+    }
 
-    private _bindProbe(probe: Collider2D | null): void {
-        this.bodyResolvedProbe = probe;
+    private _bindPathCollider(probe: Collider2D | null): void {
         if (!probe?.isValid) {
             if (this.debugLog) {
-                console.warn('[PlayerPathSensors] body probe mode: нет коллайдера на игроке');
+                console.warn('[PlayerPathSensors] нет path-коллайдера на игроке');
             }
             return;
         }
@@ -176,34 +201,74 @@ export class PlayerPathSensors extends Component {
 
         if (this.debugLog) {
             console.log(
-                '[PlayerPathSensors] bind BODY PROBE',
+                '[PlayerPathSensors] bind path',
                 probe.node?.name,
                 'deadZone=',
-                this.pathProbeDeadZonePx,
+                this.pathSideDeadZonePx,
             );
         }
 
         probe.on(
             Contact2DType.BEGIN_CONTACT,
             (self: Collider2D, other: Collider2D, c: IPhysics2DContact | null) =>
-                this._onProbeBegin(self, other, c),
+                this._onBeginContact(self, other, c),
             this,
         );
         probe.on(
             Contact2DType.END_CONTACT,
             (self: Collider2D, other: Collider2D, c: IPhysics2DContact | null) =>
-                this._onProbeEnd(self, other, c),
+                this._onEndContact(self, other, c),
             this,
         );
     }
 
-    /**
-     * Центр препятствия по X для сравнения с игроком (узел коллайдера стены).
-     */
-    private _wallSideIsFront(other: Collider2D): boolean {
+    private _unbind(collider: Collider2D | null): void {
+        if (!collider?.isValid) {
+            return;
+        }
+        collider.off(Contact2DType.BEGIN_CONTACT);
+        collider.off(Contact2DType.END_CONTACT);
+    }
+
+    /** Центр AABB коллайдера в мире (для BoxCollider2D). */
+    private _worldCenter2D(col: Collider2D): { x: number; y: number } | null {
+        const a = this._boxWorldAabb(col);
+        if (!a) {
+            return null;
+        }
+        return {
+            x: (a.xMin + a.xMax) * 0.5,
+            y: (a.yMin + a.yMax) * 0.5,
+        };
+    }
+
+    /** Вертикальное положение препятствия относительно игрока. */
+    private _verticalBand(other: Collider2D): 'above' | 'below' | 'side' {
+        const selfCol =
+            this._resolvedPathCollider ??
+            this.pathCollider ??
+            this.node.getComponent(BoxCollider2D);
+        const pc = selfCol ? this._worldCenter2D(selfCol) : null;
+        const wc = this._worldCenter2D(other);
+        if (!pc || !wc) {
+            return 'side';
+        }
+        const dy = wc.y - pc.y;
+        const dz = this.pathVerticalDeadZonePx;
+        if (dy > dz) {
+            return 'above';
+        }
+        if (dy < -dz) {
+            return 'below';
+        }
+        return 'side';
+    }
+
+    /** Стена правее игрока по X → «вперёд» (скролл стоп). Только для бокового контакта. */
+    private _wallBlocksForward(other: Collider2D): boolean {
         const px = this.node.worldPosition.x;
         const wx = other.node.worldPosition.x;
-        const dz = this.pathProbeDeadZonePx;
+        const dz = this.pathSideDeadZonePx;
         const d = wx - px;
         if (Math.abs(d) <= dz) {
             return true;
@@ -211,21 +276,44 @@ export class PlayerPathSensors extends Component {
         return d > 0;
     }
 
-    private _onProbeBegin(
+    private _onBeginContact(
         _self: Collider2D,
         other: Collider2D,
         _contact: IPhysics2DContact | null,
     ) {
-        const ok = this._isBlockingObstacle(other);
-        if (!ok) {
+        if (!this._isBlockingObstacle(other)) {
             return;
         }
         const id = this._colliderId(other);
         if (!id) {
             return;
         }
-        const isFront = this._wallSideIsFront(other);
-        if (isFront) {
+
+        const v = this._verticalBand(other);
+        if (v === 'above') {
+            if (this.debugLog) {
+                console.log(
+                    `[PlayerPathSensors] BEGIN TOP (ignored) other="${other?.node?.name ?? '?'}"`,
+                );
+            }
+            return;
+        }
+        if (v === 'below') {
+            if (this._belowWalls.has(id)) {
+                return;
+            }
+            this._belowWalls.set(id, other);
+            this._belowCount++;
+            if (this.debugLog) {
+                console.log(
+                    `[PlayerPathSensors] BEGIN BELOW (surface) other="${other?.node?.name ?? '?'}" below=${this._belowCount}`,
+                );
+            }
+            return;
+        }
+
+        const forward = this._wallBlocksForward(other);
+        if (forward) {
             if (this._frontWalls.has(id)) {
                 return;
             }
@@ -240,7 +328,7 @@ export class PlayerPathSensors extends Component {
         }
         if (this.debugLog) {
             console.log(
-                `[PlayerPathSensors] PROBE BEGIN ${isFront ? 'FRONT' : 'BACK'} other="${other?.node?.name ?? '?'}"`,
+                `[PlayerPathSensors] BEGIN ${forward ? 'FRONT' : 'BACK'} other="${other?.node?.name ?? '?'}"`,
             );
             console.log(
                 '[PlayerPathSensors] blocked counts',
@@ -252,7 +340,7 @@ export class PlayerPathSensors extends Component {
         }
     }
 
-    private _onProbeEnd(_self: Collider2D, other: Collider2D, _c: IPhysics2DContact | null) {
+    private _onEndContact(_self: Collider2D, other: Collider2D, _c: IPhysics2DContact | null) {
         const id = other?.isValid ? this._colliderId(other) : '';
         const ok = other?.isValid && this._isBlockingObstacle(other);
         let changed = false;
@@ -262,87 +350,28 @@ export class PlayerPathSensors extends Component {
         } else if (id && this._backWalls.delete(id)) {
             this._backCount = Math.max(0, this._backCount - 1);
             changed = true;
+        } else if (id && this._belowWalls.delete(id)) {
+            this._belowCount = Math.max(0, this._belowCount - 1);
+            changed = true;
         }
         if (this.debugLog && ok && changed) {
-            console.log(
-                `[PlayerPathSensors] PROBE END other="${other?.node?.name ?? '?'}"`,
-            );
+            console.log(`[PlayerPathSensors] END other="${other?.node?.name ?? '?'}"`);
             console.log(
                 '[PlayerPathSensors] blocked counts',
                 'front=',
                 this._frontCount,
                 'back=',
                 this._backCount,
+                'below=',
+                this._belowCount,
             );
         }
-    }
-
-    private _bind(sensor: Collider2D | null, isFront: boolean): void {
-        if (!sensor?.isValid) {
-            if (this.debugLog) {
-                console.log(
-                    '[PlayerPathSensors] bind skipped (missing sensor)',
-                    isFront ? 'FRONT' : 'BACK',
-                );
-            }
-            return;
-        }
-
-        let rb = sensor.getComponent(RigidBody2D);
-        if (!rb) {
-            rb = sensor.node.addComponent(RigidBody2D);
-            rb.type = ERigidBody2DType.Kinematic;
-            rb.fixedRotation = true;
-        }
-        rb.enabledContactListener = true;
-        // Относительно статичных стен мир «несёт» голубя быстро влево/вправо — без CCD тонкий
-        // передний бокс может проскочить за один шаг; тогда стоп срабатывает только от корпуса.
-        rb.bullet = true;
-        rb.fixedRotation = true;
-
-        if (this.debugLog) {
-            console.log(
-                '[PlayerPathSensors] bind',
-                isFront ? 'FRONT' : 'BACK',
-                'sensorNode=',
-                sensor.node?.name,
-                'sensorFlag=',
-                (sensor as any).sensor ?? (sensor as any)._sensor,
-                'rbType=',
-                (rb as any).type,
-            );
-        }
-        sensor.on(
-            Contact2DType.BEGIN_CONTACT,
-            (self: Collider2D, other: Collider2D, c: IPhysics2DContact | null) =>
-                this._onBegin(isFront, self, other, c),
-            this,
-        );
-        sensor.on(
-            Contact2DType.END_CONTACT,
-            (self: Collider2D, other: Collider2D, c: IPhysics2DContact | null) =>
-                this._onEnd(isFront, self, other, c),
-            this,
-        );
-    }
-
-    private _unbind(sensor: Collider2D | null): void {
-        if (!sensor?.isValid) {
-            return;
-        }
-        sensor.off(Contact2DType.BEGIN_CONTACT);
-        sensor.off(Contact2DType.END_CONTACT);
     }
 
     private _colliderId(other: Collider2D): string {
         return (other as any).uuid ?? other.node?.uuid ?? '';
     }
 
-    /**
-     * Мировой AABB бокса: углы в локали → worldMatrix.
-     * Важно для стен с поворотом (башня): старый вариант без rotation давал ложное «нет пересечения»
-     * и prune снимал стоп, хотя физика и визуально сенсор ещё в контакте.
-     */
     private _boxWorldAabb(col: Collider2D): {
         xMin: number;
         xMax: number;
@@ -393,18 +422,15 @@ export class PlayerPathSensors extends Component {
     }
 
     private _pruneStaleWalls(isFront: boolean): void {
-        const sensor = this.useBodyColliderProbe
-            ? this.bodyResolvedProbe ??
-              this.bodyProbeCollider ??
-              this.node.getComponent(BoxCollider2D)
-            : isFront
-              ? this.frontSensor
-              : this.backSensor;
+        const probe =
+            this._resolvedPathCollider ??
+            this.pathCollider ??
+            this.node.getComponent(BoxCollider2D);
         const map = isFront ? this._frontWalls : this._backWalls;
-        if (!sensor?.isValid || map.size === 0) {
+        if (!probe?.isValid || map.size === 0) {
             return;
         }
-        const saRaw = this._boxWorldAabb(sensor);
+        const saRaw = this._boxWorldAabb(probe);
         if (!saRaw) {
             return;
         }
@@ -423,7 +449,6 @@ export class PlayerPathSensors extends Component {
             }
             const wa = this._boxWorldAabb(wall);
             if (!wa) {
-                // Не BoxCollider2D — не гадаем по AABB, ждём только END_CONTACT.
                 continue;
             }
             if (!this._aabbOverlap(sa, wa)) {
@@ -458,6 +483,56 @@ export class PlayerPathSensors extends Component {
         }
     }
 
+    private _pruneStaleBelow(): void {
+        const probe =
+            this._resolvedPathCollider ??
+            this.pathCollider ??
+            this.node.getComponent(BoxCollider2D);
+        const map = this._belowWalls;
+        if (!probe?.isValid || map.size === 0) {
+            return;
+        }
+        const saRaw = this._boxWorldAabb(probe);
+        if (!saRaw) {
+            return;
+        }
+        const eps = PlayerPathSensors._PRUNE_AABB_EPS;
+        const sa = {
+            xMin: saRaw.xMin - eps,
+            xMax: saRaw.xMax + eps,
+            yMin: saRaw.yMin - eps,
+            yMax: saRaw.yMax + eps,
+        };
+        const toRemove: string[] = [];
+        for (const [id, wall] of map) {
+            if (!wall?.isValid || !wall.node?.isValid) {
+                toRemove.push(id);
+                continue;
+            }
+            const wa = this._boxWorldAabb(wall);
+            if (!wa) {
+                continue;
+            }
+            if (!this._aabbOverlap(sa, wa)) {
+                toRemove.push(id);
+            }
+        }
+        for (const id of toRemove) {
+            if (!map.delete(id)) {
+                continue;
+            }
+            this._belowCount = Math.max(0, this._belowCount - 1);
+            if (this.debugLog) {
+                console.log(
+                    '[PlayerPathSensors] prune BELOW stale id=',
+                    id,
+                    'belowCount=',
+                    this._belowCount,
+                );
+            }
+        }
+    }
+
     private _isBlockingObstacle(other: Collider2D): boolean {
         if (!other?.isValid) {
             return false;
@@ -476,87 +551,5 @@ export class PlayerPathSensors extends Component {
         }
         const g = (other as any).group ?? (other as any)._group;
         return g === this.obstacleGroup;
-    }
-
-    private _onBegin(
-        isFront: boolean,
-        _self: Collider2D,
-        other: Collider2D,
-        _contact: IPhysics2DContact | null,
-    ) {
-        const ok = this._isBlockingObstacle(other);
-        if (!ok) {
-            return;
-        }
-        const id = this._colliderId(other);
-        if (!id) {
-            return;
-        }
-        if (isFront) {
-            if (this._frontWalls.has(id)) {
-                return;
-            }
-            this._frontWalls.set(id, other);
-            this._frontCount++;
-        } else {
-            if (this._backWalls.has(id)) {
-                return;
-            }
-            this._backWalls.set(id, other);
-            this._backCount++;
-        }
-        if (this.debugLog) {
-            const g = (other as any).group ?? (other as any)._group;
-            console.log(
-                `[PlayerPathSensors] BEGIN ${isFront ? 'FRONT' : 'BACK'} other="${other?.node?.name ?? '?'}" group=${g}`,
-            );
-            console.log(
-                '[PlayerPathSensors] blocked counts',
-                'front=',
-                this._frontCount,
-                'back=',
-                this._backCount,
-            );
-        }
-    }
-
-    private _onEnd(
-        isFront: boolean,
-        _self: Collider2D,
-        other: Collider2D,
-        _contact: IPhysics2DContact | null,
-    ) {
-        const id = other?.isValid ? this._colliderId(other) : '';
-        const ok =
-            other?.isValid && this._isBlockingObstacle(other);
-        let changed = false;
-        if (isFront) {
-            if (id && this._frontWalls.delete(id)) {
-                this._frontCount = Math.max(0, this._frontCount - 1);
-                changed = true;
-            } else if (!other?.isValid && this._frontCount > 0) {
-                // Деградация: коллайдер уже уничтожен — prune подчистит по карте.
-            }
-        } else {
-            if (id && this._backWalls.delete(id)) {
-                this._backCount = Math.max(0, this._backCount - 1);
-                changed = true;
-            }
-        }
-        if (this.debugLog && ok && changed) {
-            const g = other?.isValid
-                ? (other as any).group ?? (other as any)._group
-                : -1;
-            console.log(
-                `[PlayerPathSensors] END ${isFront ? 'FRONT' : 'BACK'} other="${other?.node?.name ?? '?'}" group=${g}`,
-            );
-            console.log(
-                '[PlayerPathSensors] blocked counts',
-                'front=',
-                this._frontCount,
-                'back=',
-                this._backCount,
-            );
-        }
     }
 }
