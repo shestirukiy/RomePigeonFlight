@@ -168,10 +168,10 @@
             "_value": true
           },
           "marionette": {
-            "_value": false
+            "_value": true
           },
           "procedural-animation": {
-            "_value": false
+            "_value": true
           },
           "custom-pipeline-post-process": {
             "_value": false
@@ -190,6 +190,9 @@
             "_value": false
           }
         },
+        "flags": {
+          "LOAD_SPINE_MANUALLY": false
+        },
         "includeModules": [
           "2d",
           "affine-transform",
@@ -202,9 +205,11 @@
           "gfx-webgl2",
           "graphics",
           "intersection-2d",
+          "marionette",
           "mask",
           "particle-2d",
           "physics-2d-box2d",
+          "procedural-animation",
           "profiler",
           "rich-text",
           "spine-3.8",
@@ -217,8 +222,7 @@
         "noDeprecatedFeatures": {
           "value": false,
           "version": ""
-        },
-        "flags": {}
+        }
       }
     },
     "globalConfigKey": "defaultConfig"

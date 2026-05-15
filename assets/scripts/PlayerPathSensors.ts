@@ -66,6 +66,14 @@ export class PlayerPathSensors extends Component {
     surfaceRunActivationDelaySec = 0.12;
 
     @property({
+        displayName: 'Below — floor overlap min',
+        tooltip:
+            'Только для контакта «снизу»: доля ширины коллайдера игрока (по X), перекрытая платформой. ' +
+            'Если больше порога — считаем длинную опору под ногами и не даём ложный стоп скролла «вперёд» из‑за смещённого центра платформы. 0 — отключить проверку.',
+    })
+    belowFloorSupportOverlapMin = 0.38;
+
+    @property({
         displayName: 'Debug Log',
         tooltip: 'Контакты и счётчики блокировок.',
     })
@@ -279,8 +287,30 @@ export class PlayerPathSensors extends Component {
     }
 
     /**
+     * Доля ширины игрока по X, перекрытая другим боксом (мировые AABB).
+     * −1 если посчитать нельзя (не BoxCollider2D и т.п.).
+     */
+    private _playerOverlapFractionX(other: Collider2D): number {
+        const probe =
+            this._resolvedPathCollider ??
+            this.pathCollider ??
+            this.node.getComponent(BoxCollider2D);
+        const pa = probe ? this._boxWorldAabb(probe) : null;
+        const oa = this._boxWorldAabb(other);
+        if (!pa || !oa) {
+            return -1;
+        }
+        const overlap = Math.min(pa.xMax, oa.xMax) - Math.max(pa.xMin, oa.xMin);
+        const pw = pa.xMax - pa.xMin;
+        if (pw <= 1e-6) {
+            return -1;
+        }
+        return Math.max(0, overlap) / pw;
+    }
+
+    /**
      * Стоп скролла (GameManager) не зависит от задержки анимации бега — счётчики front/back ведутся здесь же.
-     * «Сбоку» — всегда. «Снизу» — если одновременно есть горизонтальная «пробка» (не только платформа строго под центром).
+     * «Сбоку» — всегда. «Снизу» — узкая опора / торец; длинная платформа под ногами не режет скролл из‑за центра справа.
      */
     private _shouldApplyHorizontalScrollBlock(
         v: 'above' | 'below' | 'side',
@@ -291,6 +321,13 @@ export class PlayerPathSensors extends Component {
         }
         if (v === 'side') {
             return true;
+        }
+        const minOv = this.belowFloorSupportOverlapMin;
+        if (minOv > 0) {
+            const frac = this._playerOverlapFractionX(other);
+            if (frac >= minOv) {
+                return false;
+            }
         }
         const px = this.node.worldPosition.x;
         const wx = other.node.worldPosition.x;

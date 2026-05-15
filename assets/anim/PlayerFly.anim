@@ -18,16 +18,16 @@
         "__id__": 1
       },
       {
+        "__id__": 7
+      },
+      {
         "__id__": 13
       },
       {
         "__id__": 19
       },
       {
-        "__id__": 25
-      },
-      {
-        "__id__": 36
+        "__id__": 30
       },
       {
         "__id__": 42
@@ -45,7 +45,7 @@
     "_auxiliaryCurveEntries": []
   },
   {
-    "__type__": "cc.animation.ColorTrack",
+    "__type__": "cc.animation.ObjectTrack",
     "_binding": {
       "__type__": "cc.animation.TrackBinding",
       "path": {
@@ -53,20 +53,9 @@
       },
       "proxy": null
     },
-    "_channels": [
-      {
-        "__id__": 5
-      },
-      {
-        "__id__": 7
-      },
-      {
-        "__id__": 9
-      },
-      {
-        "__id__": 11
-      }
-    ]
+    "_channel": {
+      "__id__": 5
+    }
   },
   {
     "__type__": "cc.animation.TrackPath",
@@ -77,12 +66,12 @@
       {
         "__id__": 4
       },
-      "color"
+      "spriteFrame"
     ]
   },
   {
     "__type__": "cc.animation.HierarchyPath",
-    "path": "PigeonFlyWing"
+    "path": "PigeonBody"
   },
   {
     "__type__": "cc.animation.ComponentPath",
@@ -95,37 +84,49 @@
     }
   },
   {
-    "__type__": "cc.RealCurve",
-    "_times": [],
-    "_values": [],
-    "preExtrapolation": 1,
-    "postExtrapolation": 1
+    "__type__": "cc.ObjectCurve",
+    "_times": [
+      0
+    ],
+    "_values": [
+      {
+        "__uuid__": "0dfe354a-1a54-4d71-bd07-a642bdd44034@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      }
+    ]
   },
   {
-    "__type__": "cc.animation.Channel",
-    "_curve": {
-      "__id__": 8
+    "__type__": "cc.animation.ObjectTrack",
+    "_binding": {
+      "__type__": "cc.animation.TrackBinding",
+      "path": {
+        "__id__": 8
+      },
+      "proxy": null
+    },
+    "_channel": {
+      "__id__": 11
     }
   },
   {
-    "__type__": "cc.RealCurve",
-    "_times": [],
-    "_values": [],
-    "preExtrapolation": 1,
-    "postExtrapolation": 1
+    "__type__": "cc.animation.TrackPath",
+    "_paths": [
+      {
+        "__id__": 9
+      },
+      {
+        "__id__": 10
+      },
+      "spriteFrame"
+    ]
   },
   {
-    "__type__": "cc.animation.Channel",
-    "_curve": {
-      "__id__": 10
-    }
+    "__type__": "cc.animation.HierarchyPath",
+    "path": "FootA"
   },
   {
-    "__type__": "cc.RealCurve",
-    "_times": [],
-    "_values": [],
-    "preExtrapolation": 1,
-    "postExtrapolation": 1
+    "__type__": "cc.animation.ComponentPath",
+    "component": "cc.Sprite"
   },
   {
     "__type__": "cc.animation.Channel",
@@ -134,133 +135,16 @@
     }
   },
   {
-    "__type__": "cc.RealCurve",
+    "__type__": "cc.ObjectCurve",
     "_times": [
-      0,
-      0.10000000149011612,
-      0.11666666716337204,
-      0.21666666865348816,
-      0.23333333432674408,
-      0.3333333432674408,
-      0.3499999940395355,
-      0.44999998807907104
+      0
     ],
     "_values": [
       {
-        "__type__": "cc.RealKeyframeValue",
-        "interpolationMode": 0,
-        "tangentWeightMode": 0,
-        "value": 255,
-        "rightTangent": 0,
-        "rightTangentWeight": 1,
-        "leftTangent": 0,
-        "leftTangentWeight": 1,
-        "easingMethod": 0,
-        "__editorExtras__": {
-          "broken": null
-        }
-      },
-      {
-        "__type__": "cc.RealKeyframeValue",
-        "interpolationMode": 0,
-        "tangentWeightMode": 0,
-        "value": 255,
-        "rightTangent": 0,
-        "rightTangentWeight": 1,
-        "leftTangent": 0,
-        "leftTangentWeight": 1,
-        "easingMethod": 0,
-        "__editorExtras__": {
-          "broken": null
-        }
-      },
-      {
-        "__type__": "cc.RealKeyframeValue",
-        "interpolationMode": 0,
-        "tangentWeightMode": 0,
-        "value": 0,
-        "rightTangent": 0,
-        "rightTangentWeight": 1,
-        "leftTangent": 0,
-        "leftTangentWeight": 1,
-        "easingMethod": 0,
-        "__editorExtras__": {
-          "broken": null
-        }
-      },
-      {
-        "__type__": "cc.RealKeyframeValue",
-        "interpolationMode": 0,
-        "tangentWeightMode": 0,
-        "value": 0,
-        "rightTangent": 0,
-        "rightTangentWeight": 1,
-        "leftTangent": 0,
-        "leftTangentWeight": 1,
-        "easingMethod": 0,
-        "__editorExtras__": {
-          "broken": null
-        }
-      },
-      {
-        "__type__": "cc.RealKeyframeValue",
-        "interpolationMode": 0,
-        "tangentWeightMode": 0,
-        "value": 255,
-        "rightTangent": 0,
-        "rightTangentWeight": 1,
-        "leftTangent": 0,
-        "leftTangentWeight": 1,
-        "easingMethod": 0,
-        "__editorExtras__": {
-          "broken": null
-        }
-      },
-      {
-        "__type__": "cc.RealKeyframeValue",
-        "interpolationMode": 0,
-        "tangentWeightMode": 0,
-        "value": 255,
-        "rightTangent": 0,
-        "rightTangentWeight": 1,
-        "leftTangent": 0,
-        "leftTangentWeight": 1,
-        "easingMethod": 0,
-        "__editorExtras__": {
-          "broken": null
-        }
-      },
-      {
-        "__type__": "cc.RealKeyframeValue",
-        "interpolationMode": 0,
-        "tangentWeightMode": 0,
-        "value": 0,
-        "rightTangent": 0,
-        "rightTangentWeight": 1,
-        "leftTangent": 0,
-        "leftTangentWeight": 1,
-        "easingMethod": 0,
-        "__editorExtras__": {
-          "broken": null
-        }
-      },
-      {
-        "__type__": "cc.RealKeyframeValue",
-        "interpolationMode": 0,
-        "tangentWeightMode": 0,
-        "value": 0,
-        "rightTangent": 0,
-        "rightTangentWeight": 1,
-        "leftTangent": 0,
-        "leftTangentWeight": 1,
-        "easingMethod": 0,
-        "__editorExtras__": {
-          "broken": null
-        }
+        "__uuid__": "4bf94ec0-36c2-4db1-9199-d900a11e3079@f9941",
+        "__expectedType__": "cc.SpriteFrame"
       }
-    ],
-    "preExtrapolation": 1,
-    "postExtrapolation": 1
+    ]
   },
   {
     "__type__": "cc.animation.ObjectTrack",
@@ -289,7 +173,7 @@
   },
   {
     "__type__": "cc.animation.HierarchyPath",
-    "path": "PigeonBody"
+    "path": "FootB"
   },
   {
     "__type__": "cc.animation.ComponentPath",
@@ -308,58 +192,7 @@
     ],
     "_values": [
       {
-        "__uuid__": "0dfe354a-1a54-4d71-bd07-a642bdd44034@f9941",
-        "__expectedType__": "cc.SpriteFrame"
-      }
-    ]
-  },
-  {
-    "__type__": "cc.animation.ObjectTrack",
-    "_binding": {
-      "__type__": "cc.animation.TrackBinding",
-      "path": {
-        "__id__": 20
-      },
-      "proxy": null
-    },
-    "_channel": {
-      "__id__": 23
-    }
-  },
-  {
-    "__type__": "cc.animation.TrackPath",
-    "_paths": [
-      {
-        "__id__": 21
-      },
-      {
-        "__id__": 22
-      },
-      "spriteFrame"
-    ]
-  },
-  {
-    "__type__": "cc.animation.HierarchyPath",
-    "path": "PigeonFlyWing"
-  },
-  {
-    "__type__": "cc.animation.ComponentPath",
-    "component": "cc.Sprite"
-  },
-  {
-    "__type__": "cc.animation.Channel",
-    "_curve": {
-      "__id__": 24
-    }
-  },
-  {
-    "__type__": "cc.ObjectCurve",
-    "_times": [
-      0
-    ],
-    "_values": [
-      {
-        "__uuid__": "ae90168a-d016-4a50-ba1b-3365747af0c4@f9941",
+        "__uuid__": "4bf94ec0-36c2-4db1-9199-d900a11e3079@f9941",
         "__expectedType__": "cc.SpriteFrame"
       }
     ]
@@ -369,22 +202,22 @@
     "_binding": {
       "__type__": "cc.animation.TrackBinding",
       "path": {
-        "__id__": 26
+        "__id__": 20
       },
       "proxy": null
     },
     "_channels": [
       {
+        "__id__": 22
+      },
+      {
+        "__id__": 24
+      },
+      {
+        "__id__": 26
+      },
+      {
         "__id__": 28
-      },
-      {
-        "__id__": 30
-      },
-      {
-        "__id__": 32
-      },
-      {
-        "__id__": 34
       }
     ],
     "_nComponents": 3
@@ -393,79 +226,19 @@
     "__type__": "cc.animation.TrackPath",
     "_paths": [
       {
-        "__id__": 27
+        "__id__": 21
       },
       "position"
     ]
   },
   {
     "__type__": "cc.animation.HierarchyPath",
-    "path": "PigeonFlyWing"
+    "path": "PigeonBody"
   },
   {
     "__type__": "cc.animation.Channel",
     "_curve": {
-      "__id__": 29
-    }
-  },
-  {
-    "__type__": "cc.RealCurve",
-    "_times": [
-      0
-    ],
-    "_values": [
-      {
-        "__type__": "cc.RealKeyframeValue",
-        "interpolationMode": 0,
-        "tangentWeightMode": 0,
-        "value": 10.366000175476074,
-        "rightTangent": 0,
-        "rightTangentWeight": 1,
-        "leftTangent": 0,
-        "leftTangentWeight": 1,
-        "easingMethod": 0,
-        "__editorExtras__": {
-          "broken": null
-        }
-      }
-    ],
-    "preExtrapolation": 1,
-    "postExtrapolation": 1
-  },
-  {
-    "__type__": "cc.animation.Channel",
-    "_curve": {
-      "__id__": 31
-    }
-  },
-  {
-    "__type__": "cc.RealCurve",
-    "_times": [
-      0
-    ],
-    "_values": [
-      {
-        "__type__": "cc.RealKeyframeValue",
-        "interpolationMode": 0,
-        "tangentWeightMode": 0,
-        "value": 30.097000122070312,
-        "rightTangent": 0,
-        "rightTangentWeight": 1,
-        "leftTangent": 0,
-        "leftTangentWeight": 1,
-        "easingMethod": 0,
-        "__editorExtras__": {
-          "broken": null
-        }
-      }
-    ],
-    "preExtrapolation": 1,
-    "postExtrapolation": 1
-  },
-  {
-    "__type__": "cc.animation.Channel",
-    "_curve": {
-      "__id__": 33
+      "__id__": 23
     }
   },
   {
@@ -484,13 +257,124 @@
         "leftTangent": 0,
         "leftTangentWeight": 1,
         "easingMethod": 0,
-        "__editorExtras__": {
-          "broken": null
-        }
+        "__editorExtras__": null
       }
     ],
     "preExtrapolation": 1,
     "postExtrapolation": 1
+  },
+  {
+    "__type__": "cc.animation.Channel",
+    "_curve": {
+      "__id__": 25
+    }
+  },
+  {
+    "__type__": "cc.RealCurve",
+    "_times": [
+      0
+    ],
+    "_values": [
+      {
+        "__type__": "cc.RealKeyframeValue",
+        "interpolationMode": 0,
+        "tangentWeightMode": 0,
+        "value": 0,
+        "rightTangent": 0,
+        "rightTangentWeight": 1,
+        "leftTangent": 0,
+        "leftTangentWeight": 1,
+        "easingMethod": 0,
+        "__editorExtras__": null
+      }
+    ],
+    "preExtrapolation": 1,
+    "postExtrapolation": 1
+  },
+  {
+    "__type__": "cc.animation.Channel",
+    "_curve": {
+      "__id__": 27
+    }
+  },
+  {
+    "__type__": "cc.RealCurve",
+    "_times": [
+      0
+    ],
+    "_values": [
+      {
+        "__type__": "cc.RealKeyframeValue",
+        "interpolationMode": 0,
+        "tangentWeightMode": 0,
+        "value": 0,
+        "rightTangent": 0,
+        "rightTangentWeight": 1,
+        "leftTangent": 0,
+        "leftTangentWeight": 1,
+        "easingMethod": 0,
+        "__editorExtras__": null
+      }
+    ],
+    "preExtrapolation": 1,
+    "postExtrapolation": 1
+  },
+  {
+    "__type__": "cc.animation.Channel",
+    "_curve": {
+      "__id__": 29
+    }
+  },
+  {
+    "__type__": "cc.RealCurve",
+    "_times": [],
+    "_values": [],
+    "preExtrapolation": 1,
+    "postExtrapolation": 1
+  },
+  {
+    "__type__": "cc.animation.ColorTrack",
+    "_binding": {
+      "__type__": "cc.animation.TrackBinding",
+      "path": {
+        "__id__": 31
+      },
+      "proxy": null
+    },
+    "_channels": [
+      {
+        "__id__": 34
+      },
+      {
+        "__id__": 36
+      },
+      {
+        "__id__": 38
+      },
+      {
+        "__id__": 40
+      }
+    ]
+  },
+  {
+    "__type__": "cc.animation.TrackPath",
+    "_paths": [
+      {
+        "__id__": 32
+      },
+      {
+        "__id__": 33
+      },
+      "color"
+    ]
+  },
+  {
+    "__type__": "cc.animation.HierarchyPath",
+    "path": "PigeonBody/PigeonFlyWing"
+  },
+  {
+    "__type__": "cc.animation.ComponentPath",
+    "component": "cc.Sprite"
   },
   {
     "__type__": "cc.animation.Channel",
@@ -506,37 +390,30 @@
     "postExtrapolation": 1
   },
   {
-    "__type__": "cc.animation.ObjectTrack",
-    "_binding": {
-      "__type__": "cc.animation.TrackBinding",
-      "path": {
-        "__id__": 37
-      },
-      "proxy": null
-    },
-    "_channel": {
-      "__id__": 40
+    "__type__": "cc.animation.Channel",
+    "_curve": {
+      "__id__": 37
     }
   },
   {
-    "__type__": "cc.animation.TrackPath",
-    "_paths": [
-      {
-        "__id__": 38
-      },
-      {
-        "__id__": 39
-      },
-      "spriteFrame"
-    ]
+    "__type__": "cc.RealCurve",
+    "_times": [],
+    "_values": [],
+    "preExtrapolation": 1,
+    "postExtrapolation": 1
   },
   {
-    "__type__": "cc.animation.HierarchyPath",
-    "path": "FootA"
+    "__type__": "cc.animation.Channel",
+    "_curve": {
+      "__id__": 39
+    }
   },
   {
-    "__type__": "cc.animation.ComponentPath",
-    "component": "cc.Sprite"
+    "__type__": "cc.RealCurve",
+    "_times": [],
+    "_values": [],
+    "preExtrapolation": 1,
+    "postExtrapolation": 1
   },
   {
     "__type__": "cc.animation.Channel",
@@ -545,16 +422,133 @@
     }
   },
   {
-    "__type__": "cc.ObjectCurve",
+    "__type__": "cc.RealCurve",
     "_times": [
-      0
+      0,
+      0.10000000149011612,
+      0.11666666716337204,
+      0.21666666865348816,
+      0.23333333432674408,
+      0.3333333432674408,
+      0.3499999940395355,
+      0.44999998807907104
     ],
     "_values": [
       {
-        "__uuid__": "4bf94ec0-36c2-4db1-9199-d900a11e3079@f9941",
-        "__expectedType__": "cc.SpriteFrame"
+        "__type__": "cc.RealKeyframeValue",
+        "interpolationMode": 0,
+        "tangentWeightMode": 0,
+        "value": 255,
+        "rightTangent": 0,
+        "rightTangentWeight": 1,
+        "leftTangent": 0,
+        "leftTangentWeight": 1,
+        "easingMethod": 0,
+        "__editorExtras__": {
+          "tangentMode": 0
+        }
+      },
+      {
+        "__type__": "cc.RealKeyframeValue",
+        "interpolationMode": 0,
+        "tangentWeightMode": 0,
+        "value": 255,
+        "rightTangent": 0,
+        "rightTangentWeight": 1,
+        "leftTangent": 0,
+        "leftTangentWeight": 1,
+        "easingMethod": 0,
+        "__editorExtras__": {
+          "tangentMode": 0
+        }
+      },
+      {
+        "__type__": "cc.RealKeyframeValue",
+        "interpolationMode": 0,
+        "tangentWeightMode": 0,
+        "value": 0,
+        "rightTangent": 0,
+        "rightTangentWeight": 1,
+        "leftTangent": 0,
+        "leftTangentWeight": 1,
+        "easingMethod": 0,
+        "__editorExtras__": {
+          "tangentMode": 0
+        }
+      },
+      {
+        "__type__": "cc.RealKeyframeValue",
+        "interpolationMode": 0,
+        "tangentWeightMode": 0,
+        "value": 0,
+        "rightTangent": 0,
+        "rightTangentWeight": 1,
+        "leftTangent": 0,
+        "leftTangentWeight": 1,
+        "easingMethod": 0,
+        "__editorExtras__": {
+          "tangentMode": 0
+        }
+      },
+      {
+        "__type__": "cc.RealKeyframeValue",
+        "interpolationMode": 0,
+        "tangentWeightMode": 0,
+        "value": 255,
+        "rightTangent": 0,
+        "rightTangentWeight": 1,
+        "leftTangent": 0,
+        "leftTangentWeight": 1,
+        "easingMethod": 0,
+        "__editorExtras__": {
+          "tangentMode": 0
+        }
+      },
+      {
+        "__type__": "cc.RealKeyframeValue",
+        "interpolationMode": 0,
+        "tangentWeightMode": 0,
+        "value": 255,
+        "rightTangent": 0,
+        "rightTangentWeight": 1,
+        "leftTangent": 0,
+        "leftTangentWeight": 1,
+        "easingMethod": 0,
+        "__editorExtras__": {
+          "tangentMode": 0
+        }
+      },
+      {
+        "__type__": "cc.RealKeyframeValue",
+        "interpolationMode": 0,
+        "tangentWeightMode": 0,
+        "value": 0,
+        "rightTangent": 0,
+        "rightTangentWeight": 1,
+        "leftTangent": 0,
+        "leftTangentWeight": 1,
+        "easingMethod": 0,
+        "__editorExtras__": {
+          "tangentMode": 0
+        }
+      },
+      {
+        "__type__": "cc.RealKeyframeValue",
+        "interpolationMode": 0,
+        "tangentWeightMode": 0,
+        "value": 0,
+        "rightTangent": 0,
+        "rightTangentWeight": 1,
+        "leftTangent": 0,
+        "leftTangentWeight": 1,
+        "easingMethod": 0,
+        "__editorExtras__": {
+          "tangentMode": 0
+        }
       }
-    ]
+    ],
+    "preExtrapolation": 1,
+    "postExtrapolation": 1
   },
   {
     "__type__": "cc.animation.ObjectTrack",
@@ -583,7 +577,7 @@
   },
   {
     "__type__": "cc.animation.HierarchyPath",
-    "path": "FootB"
+    "path": "PigeonBody/PigeonFlyWing"
   },
   {
     "__type__": "cc.animation.ComponentPath",
@@ -602,7 +596,7 @@
     ],
     "_values": [
       {
-        "__uuid__": "4bf94ec0-36c2-4db1-9199-d900a11e3079@f9941",
+        "__uuid__": "ae90168a-d016-4a50-ba1b-3365747af0c4@f9941",
         "__expectedType__": "cc.SpriteFrame"
       }
     ]
@@ -643,7 +637,7 @@
   },
   {
     "__type__": "cc.animation.HierarchyPath",
-    "path": "PigeonBody"
+    "path": "PigeonBody/PigeonFlyWing"
   },
   {
     "__type__": "cc.animation.Channel",
@@ -661,7 +655,7 @@
         "__type__": "cc.RealKeyframeValue",
         "interpolationMode": 0,
         "tangentWeightMode": 0,
-        "value": 0,
+        "value": 10.366000175476074,
         "rightTangent": 0,
         "rightTangentWeight": 1,
         "leftTangent": 0,
@@ -691,7 +685,7 @@
         "__type__": "cc.RealKeyframeValue",
         "interpolationMode": 0,
         "tangentWeightMode": 0,
-        "value": 0,
+        "value": 30.097000122070312,
         "rightTangent": 0,
         "rightTangentWeight": 1,
         "leftTangent": 0,
@@ -713,25 +707,8 @@
   },
   {
     "__type__": "cc.RealCurve",
-    "_times": [
-      0
-    ],
-    "_values": [
-      {
-        "__type__": "cc.RealKeyframeValue",
-        "interpolationMode": 0,
-        "tangentWeightMode": 0,
-        "value": 0,
-        "rightTangent": 0,
-        "rightTangentWeight": 1,
-        "leftTangent": 0,
-        "leftTangentWeight": 1,
-        "easingMethod": 0,
-        "__editorExtras__": {
-          "tangentMode": 0
-        }
-      }
-    ],
+    "_times": [],
+    "_values": [],
     "preExtrapolation": 1,
     "postExtrapolation": 1
   },
