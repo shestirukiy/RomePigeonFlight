@@ -4,10 +4,12 @@ import {
     Collider2D,
     Contact2DType,
     IPhysics2DContact,
+    Node,
     RigidBody2D,
 } from 'cc';
 import { GameManager } from './GameManager';
 import { PlayerController } from './PlayerController';
+import { PlayerPathSensors } from './PlayerPathSensors';
 
 const { ccclass, property } = _decorator;
 
@@ -21,7 +23,7 @@ export class ElectricCloudHazard extends Component {
         tooltip:
             'В консоль: BEGIN_CONTACT и поиск PlayerController.',
     })
-    debugContactLog = true;
+    debugContactLog = false;
 
     private _coolRemain = 0;
 
@@ -35,7 +37,36 @@ export class ElectricCloudHazard extends Component {
     }
 
     onLoad() {
-        this._registeredColliders = [];
+        if (!this._isUnderCloudBarrier()) {
+            this.enabled = false;
+            return;
+        }
+        this._bindColliders();
+    }
+
+    start() {
+        if (!this.enabled) {
+            return;
+        }
+        if (this._registeredColliders.length === 0) {
+            this._bindColliders();
+        }
+    }
+
+    /** Не вешать на SkyGround / SkySensor — только префаб CloudBarrier. */
+    private _isUnderCloudBarrier(): boolean {
+        let n: Node | null = this.node;
+        while (n) {
+            if (n.name === 'CloudBarrier') {
+                return true;
+            }
+            n = n.parent;
+        }
+        return false;
+    }
+
+    private _bindColliders(): void {
+        this._unbindColliders();
         const colliders: Collider2D[] = [];
         try {
             colliders.push(...this.node.getComponents(Collider2D));
@@ -72,7 +103,7 @@ export class ElectricCloudHazard extends Component {
         }
     }
 
-    onDestroy() {
+    private _unbindColliders(): void {
         for (const col of this._registeredColliders) {
             if (col?.isValid) {
                 col.off(
@@ -85,11 +116,18 @@ export class ElectricCloudHazard extends Component {
         this._registeredColliders.length = 0;
     }
 
+    onDestroy() {
+        this._unbindColliders();
+    }
+
     private _onBeginContact(
         selfCollider: Collider2D,
         otherCollider: Collider2D,
         _contact: IPhysics2DContact | null,
     ) {
+        if (PlayerPathSensors.hazardsViaPlayerContact) {
+            return;
+        }
         const otherName = otherCollider?.node?.name ?? '?';
         if (this.debugContactLog) {
             console.log(

@@ -9,6 +9,8 @@ import {
 import { GameManager } from './GameManager';
 import { SceneNodeHub } from './SceneNodeHub';
 import { WeightedChunk } from './WeightedChunk';
+import { TowerWallHazard } from './TowerWallHazard';
+import { ElectricCloudHazard } from './ElectricCloudHazard';
 
 const { ccclass, property } = _decorator;
 
@@ -335,6 +337,7 @@ export class LevelGenerator extends Component {
             }
 
             const seg = instantiate(prefab);
+            LevelGenerator._ensureObstacleHazardsOnSubtree(seg);
             seg.parent = parent;
 
             const ui = seg.getComponent(UITransform);
@@ -384,6 +387,7 @@ export class LevelGenerator extends Component {
         segment.destroy();
 
         const newSeg = instantiate(prefab);
+        LevelGenerator._ensureObstacleHazardsOnSubtree(newSeg);
         parent!.addChild(newSeg);
         newSeg.setSiblingIndex(siblingIndex);
         segments[idx] = newSeg;
@@ -426,6 +430,7 @@ export class LevelGenerator extends Component {
 
         for (let i = 0; i < count; i++) {
             const seg = instantiate(prefab);
+            LevelGenerator._ensureObstacleHazardsOnSubtree(seg);
             seg.parent = parent;
             seg.setPosition(cx, baseY, baseZ);
             if (insertAtLowSiblingIndex) {
@@ -493,5 +498,31 @@ export class LevelGenerator extends Component {
         const half = ui.width * ui.anchorX * sx;
         const nx = maxRight + half;
         segment.setPosition(nx, segment.position.y, segment.position.z);
+    }
+
+    /** В билде на чанках часто нет hazard-скриптов (они только в Main.scene). */
+    private static _ensureObstacleHazardsOnSubtree(root: Node): void {
+        if (!root?.isValid) {
+            return;
+        }
+        const visit = (n: Node) => {
+            const name = n.name;
+            if (name === 'TowerBarrier' || name.startsWith('TowerWall')) {
+                if (!n.getComponent(TowerWallHazard)) {
+                    n.addComponent(TowerWallHazard);
+                }
+            }
+            if (name === 'CloudBarrier') {
+                const colliders = n.getChildByName('Colliders');
+                const host = colliders ?? n;
+                if (!host.getComponent(ElectricCloudHazard)) {
+                    host.addComponent(ElectricCloudHazard);
+                }
+            }
+            for (const ch of n.children) {
+                visit(ch);
+            }
+        };
+        visit(root);
     }
 }

@@ -8,6 +8,7 @@ import {
 } from 'cc';
 import { GameManager } from './GameManager';
 import { PlayerController } from './PlayerController';
+import { PlayerPathSensors } from './PlayerPathSensors';
 
 const { ccclass, property } = _decorator;
 
@@ -32,7 +33,17 @@ export class TowerWallHazard extends Component {
     }
 
     onLoad() {
-        this._registeredColliders = [];
+        this._bindColliders();
+    }
+
+    start() {
+        if (this._registeredColliders.length === 0) {
+            this._bindColliders();
+        }
+    }
+
+    private _bindColliders(): void {
+        this._unbindColliders();
         const colliders: Collider2D[] = [];
         try {
             colliders.push(...this.node.getComponents(Collider2D));
@@ -58,7 +69,7 @@ export class TowerWallHazard extends Component {
         }
     }
 
-    onDestroy() {
+    private _unbindColliders(): void {
         for (const col of this._registeredColliders) {
             if (col?.isValid) {
                 col.off(
@@ -71,11 +82,18 @@ export class TowerWallHazard extends Component {
         this._registeredColliders.length = 0;
     }
 
+    onDestroy() {
+        this._unbindColliders();
+    }
+
     private _onBeginContact(
         selfCollider: Collider2D,
         otherCollider: Collider2D,
         _contact: IPhysics2DContact | null,
     ) {
+        if (PlayerPathSensors.hazardsViaPlayerContact) {
+            return;
+        }
         const gm = GameManager.game;
         if (!gm?.isPlaying) {
             return;

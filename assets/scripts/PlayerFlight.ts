@@ -14,6 +14,7 @@ import {
     input,
 } from 'cc';
 import { GameManager } from './GameManager';
+import { PlayerController } from './PlayerController';
 
 const { ccclass, property } = _decorator;
 
@@ -147,6 +148,9 @@ export class PlayerFlight extends Component {
 
     onLoad() {
         this._anchorLocalX = this.node.position.x;
+        if (!this.getComponent(PlayerController)) {
+            this.addComponent(PlayerController);
+        }
         this._body = this.getComponent(RigidBody2D);
         if (this._body) {
             this._savedGravityScale = this._body.gravityScale;

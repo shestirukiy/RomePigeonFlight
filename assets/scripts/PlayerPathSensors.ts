@@ -1,6 +1,7 @@
 import {
     _decorator,
     Component,
+    Node,
     Collider2D,
     BoxCollider2D,
     Contact2DType,
@@ -11,6 +12,7 @@ import {
 } from 'cc';
 import { GameManager } from './GameManager';
 import { PlayerAnimationController } from './PlayerAnimationController';
+import { PlayerController } from './PlayerController';
 
 const { ccclass, property, executionOrder } = _decorator;
 
@@ -25,6 +27,12 @@ const PATH_SENSORS_EXEC_ORDER = -50;
 @ccclass('PlayerPathSensors')
 @executionOrder(PATH_SENSORS_EXEC_ORDER)
 export class PlayerPathSensors extends Component {
+    /**
+     * В билде колбэки на коллайдерах препятствий часто не приходят; удары обрабатываем здесь
+     * (коллайдер игрока). Скрипты на облаке/стене тогда не дублируют логику.
+     */
+    static hazardsViaPlayerContact = true;
+
     @property({
         type: Collider2D,
         displayName: 'Path Collider',
@@ -93,6 +101,11 @@ export class PlayerPathSensors extends Component {
 
     private _anim: PlayerAnimationController | null = null;
 
+    private _playerCtrl: PlayerController | null = null;
+
+    private readonly _electricHazardCoolById = new Map<string, number>();
+    private readonly _wallHazardCoolById = new Map<string, number>();
+
     /** Накопление времени при непрерывном контакте снизу (для отложенного включения бега). */
     private _surfaceHoldAccumSec = 0;
 
@@ -119,6 +132,13 @@ export class PlayerPathSensors extends Component {
         this._anim =
             this.getComponent(PlayerAnimationController) ??
             this.getComponentInChildren(PlayerAnimationController);
+
+        if (!this.getComponent(PlayerController)) {
+            this.addComponent(PlayerController);
+        }
+        this._playerCtrl =
+            this.getComponent(PlayerController) ??
+            this.getComponentInChildren(PlayerController);
 
         this._frontCount = 0;
         this._backCount = 0;
@@ -167,7 +187,24 @@ export class PlayerPathSensors extends Component {
         this._pruneStaleBelow();
         gm.syncPathSensorBlockCounts(this._frontCount, this._backCount);
 
+        this._tickHazardCooldowns(_dt);
         this._updateSurfaceRunAnimation(_dt);
+    }
+
+    private _tickHazardCooldowns(dt: number): void {
+        PlayerPathSensors._tickCooldownMap(this._electricHazardCoolById, dt);
+        PlayerPathSensors._tickCooldownMap(this._wallHazardCoolById, dt);
+    }
+
+    private static _tickCooldownMap(map: Map<string, number>, dt: number): void {
+        for (const [id, remain] of map) {
+            const next = remain - dt;
+            if (next <= 0) {
+                map.delete(id);
+            } else {
+                map.set(id, next);
+            }
+        }
     }
 
     /** Бег по поверхности только после непрерывного контакта снизу (исключаем короткие касания). */
@@ -339,6 +376,17 @@ export class PlayerPathSensors extends Component {
         other: Collider2D,
         _contact: IPhysics2DContact | null,
     ) {
+        const gm = GameManager.game;
+        if (!gm?.isPlaying || !other?.isValid) {
+            return;
+        }
+
+        const hazard = this._hazardKind(other);
+        if (hazard === 'cloud') {
+            this._tryElectricCloudHit(other);
+            return;
+        }
+
         if (!this._isBlockingObstacle(other)) {
             return;
         }
@@ -348,6 +396,13 @@ export class PlayerPathSensors extends Component {
         }
 
         const v = this._verticalBand(other);
+
+        if (
+            hazard === 'wall' &&
+            (v === 'side' || this._shouldApplyHorizontalScrollBlock(v, other))
+        ) {
+            this._tryTowerWallHit(other);
+        }
         if (v === 'above') {
             if (this.debugLog) {
                 console.log(
@@ -594,6 +649,71 @@ export class PlayerPathSensors extends Component {
                 );
             }
         }
+    }
+
+    private _hazardKind(other: Collider2D): 'cloud' | 'wall' | null {
+        let n: Node | null = other.node;
+        while (n) {
+            if (n === this.node) {
+                return null;
+            }
+            if (n.name === 'CloudBarrier') {
+                return 'cloud';
+            }
+            if (n.name === 'TowerBarrier' || n.name.startsWith('TowerWall')) {
+                return 'wall';
+            }
+            n = n.parent;
+        }
+        return null;
+    }
+
+    private _tryElectricCloudHit(other: Collider2D): void {
+        const pc = this._playerCtrl;
+        const id = this._colliderId(other);
+        if (!pc || !id) {
+            return;
+        }
+        if ((this._electricHazardCoolById.get(id) ?? 0) > 0) {
+            return;
+        }
+        if (this.debugLog) {
+            console.log(
+                `[PlayerPathSensors] electric hit other="${other.node?.name ?? '?'}"`,
+            );
+        }
+        pc.applyElectricCloudHit();
+        const cd = Math.max(
+            pc.electricCloudCooldownSeconds,
+            pc.electricDefaultLiftLockDuration,
+        );
+        this._electricHazardCoolById.set(id, cd);
+    }
+
+    private _tryTowerWallHit(other: Collider2D): void {
+        const gm = GameManager.game;
+        if (gm?.isWorldKickbackActive) {
+            gm.cancelWorldKickback();
+        }
+        const pc = this._playerCtrl;
+        const id = this._colliderId(other);
+        if (!pc || !id) {
+            return;
+        }
+        if ((this._wallHazardCoolById.get(id) ?? 0) > 0) {
+            return;
+        }
+        if (this.debugLog) {
+            console.log(
+                `[PlayerPathSensors] wall hit other="${other.node?.name ?? '?'}"`,
+            );
+        }
+        pc.applyTowerWallHit();
+        const cd = Math.max(
+            pc.towerWallCooldownSeconds,
+            pc.towerWallKnockbackDurationSec,
+        );
+        this._wallHazardCoolById.set(id, cd);
     }
 
     private _isBlockingObstacle(other: Collider2D): boolean {
