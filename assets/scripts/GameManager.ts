@@ -5,7 +5,15 @@ import {
     Input,
     EventMouse,
     EventTouch,
+    Label,
+    Node,
+    UITransform,
+    instantiate,
 } from 'cc';
+import { LevelGenerator } from './LevelGenerator';
+import { PlayerFlight } from './PlayerFlight';
+import { PlayerPathSensors } from './PlayerPathSensors';
+import { SceneNodeHub } from './SceneNodeHub';
 
 const { ccclass, property } = _decorator;
 
@@ -42,8 +50,37 @@ export class GameManager extends Component {
     private _kickbackBackBlockRef = 0;
     private _kickbackBackHoldRemain = 0;
 
+    private _score = 0;
+    private _currentHp = 0;
+    private _gameOver = false;
+    private _damageInvincibleRemain = 0;
+
+    /** Слева направо: [якорное сердечко, клоны справа]. */
+    private readonly _heartNodes: Node[] = [];
+    private readonly _spawnedHearts: Node[] = [];
+
+    public get score(): number {
+        return this._score;
+    }
+
+    public get currentHp(): number {
+        return this._currentHp;
+    }
+
+    public get maxHp(): number {
+        return this.maxHpCount;
+    }
+
+    public get isGameOver(): boolean {
+        return this._gameOver;
+    }
+
+    public get isDamageInvincible(): boolean {
+        return this._damageInvincibleRemain > 0;
+    }
+
     public get isPlaying(): boolean {
-        return this._playing;
+        return this._playing && !this._gameOver;
     }
 
     public get isWorldKickbackActive(): boolean {
@@ -194,8 +231,55 @@ export class GameManager extends Component {
     })
     backContactMinHoldSec = 0.05;
 
+    @property({
+        type: Label,
+        displayName: 'Score Label',
+        tooltip: 'Label на Canvas, куда выводится счёт очков.',
+    })
+    scoreLabel: Label | null = null;
+
+    @property({
+        type: Node,
+        displayName: 'HP Heart (anchor)',
+        tooltip:
+            'Первое сердечко в ряду HP (слева). Остальные клонируются вправо при старте.',
+    })
+    hpHeartAnchor: Node | null = null;
+
+    @property({
+        displayName: 'Max HP',
+        tooltip: 'Сколько сердечек в ряду, включая якорное.',
+    })
+    maxHpCount = 3;
+
+    @property({
+        displayName: 'Heart spacing X',
+        tooltip:
+            'Доп. отступ между сердечками по X. Шаг = ширина UITransform якоря + это значение.',
+    })
+    heartSpacingX = 4;
+
+    @property({
+        type: Node,
+        displayName: 'Game Over Panel',
+        tooltip: 'Панель поражения; включается в gameOver().',
+    })
+    gameOverPanel: Node | null = null;
+
+    @property({
+        displayName: 'Damage invincibility (s)',
+        tooltip:
+            'После потери HP игрок не получает урон повторно, пока не истечёт таймер (одно препятствие / несколько контактов).',
+    })
+    damageInvincibilitySec = 0.85;
+
     onLoad() {
         GameManager._inst = this;
+        this._refreshScoreLabel();
+        this.resetHp();
+        if (this.gameOverPanel) {
+            this.gameOverPanel.active = false;
+        }
         input.on(Input.EventType.TOUCH_START, this._onTouchStart, this);
         input.on(Input.EventType.MOUSE_DOWN, this._onMouseDown, this);
     }
@@ -216,7 +300,15 @@ export class GameManager extends Component {
             this._forwardScrollHoldRemain = 0;
             this._kickbackBackBlockRef = 0;
             this._kickbackBackHoldRemain = 0;
+            this._damageInvincibleRemain = 0;
             return;
+        }
+
+        if (this._damageInvincibleRemain > 0) {
+            this._damageInvincibleRemain = Math.max(
+                0,
+                this._damageInvincibleRemain - dt,
+            );
         }
 
         if (this._worldKickbackRemain > 0) {
@@ -255,7 +347,171 @@ export class GameManager extends Component {
         if (this._playing) {
             return;
         }
+        this._gameOver = false;
+        if (this.gameOverPanel) {
+            this.gameOverPanel.active = false;
+        }
+        this._resetRunState();
         this._playing = true;
+        this.resetScore();
+        this.resetHp();
+    }
+
+    private _resetScrollAndKickback(): void {
+        this._worldKickbackRemain = 0;
+        this._worldKickbackSpeed = 0;
+        this._forwardScrollBlockRef = 0;
+        this._forwardScrollHoldRemain = 0;
+        this._kickbackBackBlockRef = 0;
+        this._kickbackBackHoldRemain = 0;
+        this._damageInvincibleRemain = 0;
+    }
+
+    /** Позиция игрока, чанки, контакты — как в начале сцены. */
+    private _resetRunState(): void {
+        this._resetScrollAndKickback();
+
+        this.getComponent(LevelGenerator)?.rebuildChunks();
+
+        const player = SceneNodeHub.instance?.player;
+        if (player) {
+            player.getComponent(PlayerFlight)?.resetToSpawn();
+            player.getComponent(PlayerPathSensors)?.resetForNewRun();
+        }
+    }
+
+    public resetScore(): void {
+        this._score = 0;
+        this._refreshScoreLabel();
+    }
+
+    public addScore(delta = 1): void {
+        if (delta <= 0 || !this.isPlaying) {
+            return;
+        }
+        this._score += delta;
+        this._refreshScoreLabel();
+    }
+
+    /** Восстанавливает ряд сердечек (якорь + клоны справа). */
+    public resetHp(): void {
+        this._clearSpawnedHearts();
+        this._heartNodes.length = 0;
+        this._currentHp = 0;
+
+        const anchor = this.hpHeartAnchor;
+        if (!anchor?.isValid || this.maxHpCount <= 0) {
+            return;
+        }
+
+        const parent = anchor.parent;
+        if (!parent) {
+            return;
+        }
+
+        const base = anchor.position.clone();
+        const step = this._heartStepX();
+        anchor.active = true;
+        this._heartNodes.push(anchor);
+
+        for (let i = 1; i < this.maxHpCount; i++) {
+            const heart = instantiate(anchor);
+            heart.parent = parent;
+            heart.setPosition(base.x + step * i, base.y, base.z);
+            heart.active = true;
+            this._spawnedHearts.push(heart);
+            this._heartNodes.push(heart);
+        }
+
+        this._currentHp = this.maxHpCount;
+        this._damageInvincibleRemain = 0;
+    }
+
+    /**
+     * Урон: пропадает самое правое сердечко (включая клоны, затем якорь).
+     * При 0 HP — {@link gameOver}.
+     */
+    public takeDamage(amount = 1): void {
+        if (!this.isPlaying || amount <= 0) {
+            return;
+        }
+        if (this._damageInvincibleRemain > 0) {
+            return;
+        }
+
+        let lost = 0;
+        for (let i = 0; i < amount; i++) {
+            if (this._currentHp <= 0) {
+                break;
+            }
+            const idx = this._currentHp - 1;
+            const heart = this._heartNodes[idx];
+            if (heart?.isValid) {
+                heart.active = false;
+            }
+            this._currentHp--;
+            lost++;
+        }
+
+        if (lost > 0 && this.damageInvincibilitySec > 0) {
+            this._damageInvincibleRemain = this.damageInvincibilitySec;
+        }
+
+        if (this._currentHp <= 0) {
+            this.gameOver();
+        }
+    }
+
+    /**
+     * Смертельное препятствие (нода Ground): сразу 0 HP и game over.
+     * Игнорирует неуязвимость после обычного урона.
+     */
+    public instantKill(): void {
+        if (!this.isPlaying || this._gameOver) {
+            return;
+        }
+        for (const heart of this._heartNodes) {
+            if (heart?.isValid) {
+                heart.active = false;
+            }
+        }
+        this._currentHp = 0;
+        this._damageInvincibleRemain = 0;
+        this.gameOver();
+    }
+
+    /** Конец забега — наполните позже (UI, рестарт и т.д.). */
+    public gameOver(): void {
+        if (this._gameOver) {
+            return;
+        }
+        this._gameOver = true;
+        this._playing = false;
+        if (this.gameOverPanel) {
+            this.gameOverPanel.active = true;
+        }
+    }
+
+    private _clearSpawnedHearts(): void {
+        for (const n of this._spawnedHearts) {
+            if (n?.isValid) {
+                n.destroy();
+            }
+        }
+        this._spawnedHearts.length = 0;
+    }
+
+    private _heartStepX(): number {
+        const ui = this.hpHeartAnchor?.getComponent(UITransform);
+        const w = ui?.contentSize.width ?? 64;
+        return w + this.heartSpacingX;
+    }
+
+    private _refreshScoreLabel(): void {
+        if (!this.scoreLabel) {
+            return;
+        }
+        this.scoreLabel.string = `${this._score}`;
     }
 
     private _onTouchStart(_e: EventTouch) {

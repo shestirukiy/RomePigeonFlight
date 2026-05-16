@@ -8,6 +8,7 @@ import {
     RigidBody2D,
     ERigidBody2DType,
     Vec2,
+    Vec3,
     director,
     Director,
     game,
@@ -90,6 +91,7 @@ export class PlayerFlight extends Component {
     private _body: RigidBody2D | null = null;
     private _held = false;
     private _anchorLocalX = 0;
+    private readonly _spawnLocalPos = new Vec3();
 
     /** Seconds left: no lift force (electric stun, etc.). */
     private _electricLiftBlockRemain = 0;
@@ -147,7 +149,8 @@ export class PlayerFlight extends Component {
     private _savedGravityScale = 1;
 
     onLoad() {
-        this._anchorLocalX = this.node.position.x;
+        this._spawnLocalPos.set(this.node.position);
+        this._anchorLocalX = this._spawnLocalPos.x;
         if (!this.getComponent(PlayerController)) {
             this.addComponent(PlayerController);
         }
@@ -283,6 +286,20 @@ export class PlayerFlight extends Component {
             this.pitchVisual.angle = 0;
         } else {
             this.node.angle = 0;
+        }
+    }
+
+    /** Старт / рестарт забега: позиция и физика как в сцене при onLoad. */
+    public resetToSpawn(): void {
+        this._held = false;
+        this._electricLiftBlockRemain = 0;
+        this._pitchVyFiltered = 0;
+        this.node.setPosition(this._spawnLocalPos);
+        this._resetPitchAngle();
+        const body = this._body;
+        if (body) {
+            body.linearVelocity = new Vec2(0, 0);
+            body.angularVelocity = 0;
         }
     }
 

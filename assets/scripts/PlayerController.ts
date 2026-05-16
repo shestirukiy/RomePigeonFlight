@@ -92,9 +92,11 @@ export class PlayerController extends Component {
      * Электрооблако: блок подъёма и анимация — параметры из группы «Electric cloud».
      */
     applyElectricCloudHit(): void {
-        if (!GameManager.game?.isPlaying) {
+        const gm = GameManager.game;
+        if (!gm?.isPlaying) {
             return;
         }
+        gm.takeDamage(1);
         const t = this.electricDefaultLiftLockDuration;
         if (t <= 0) {
             return;
@@ -107,9 +109,11 @@ export class PlayerController extends Component {
      * Стена башни: отдача мира, импульс вниз, клип Wall Hit, блок подъёма — из группы «Tower wall».
      */
     applyTowerWallHit(): void {
-        if (!GameManager.game?.isPlaying) {
+        const gm = GameManager.game;
+        if (!gm?.isPlaying) {
             return;
         }
+        gm.takeDamage(1);
         const kd = this.towerWallKnockbackDurationSec;
         if (kd <= 0) {
             return;

@@ -11,6 +11,7 @@ import { SceneNodeHub } from './SceneNodeHub';
 import { WeightedChunk } from './WeightedChunk';
 import { TowerWallHazard } from './TowerWallHazard';
 import { ElectricCloudHazard } from './ElectricCloudHazard';
+import { SeedPickup } from './SeedPickup';
 
 const { ccclass, property } = _decorator;
 
@@ -518,6 +519,9 @@ export class LevelGenerator extends Component {
                 if (!host.getComponent(ElectricCloudHazard)) {
                     host.addComponent(ElectricCloudHazard);
                 }
+            }
+            if (name === 'seed' && !n.getComponent(SeedPickup)) {
+                n.addComponent(SeedPickup);
             }
             for (const ch of n.children) {
                 visit(ch);

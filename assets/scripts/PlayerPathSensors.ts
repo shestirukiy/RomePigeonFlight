@@ -13,6 +13,7 @@ import {
 import { GameManager } from './GameManager';
 import { PlayerAnimationController } from './PlayerAnimationController';
 import { PlayerController } from './PlayerController';
+import { SeedPickup } from './SeedPickup';
 
 const { ccclass, property, executionOrder } = _decorator;
 
@@ -106,6 +107,12 @@ export class PlayerPathSensors extends Component {
     private readonly _electricHazardCoolById = new Map<string, number>();
     private readonly _wallHazardCoolById = new Map<string, number>();
 
+    /** Пока игрок в контакте с hazard-коллайдером (без повторного BEGIN). */
+    private readonly _activeCloudContacts = new Map<string, Collider2D>();
+    private readonly _activeWallContacts = new Map<string, Collider2D>();
+
+    private _wasDamageInvincible = false;
+
     /** Накопление времени при непрерывном контакте снизу (для отложенного включения бега). */
     private _surfaceHoldAccumSec = 0;
 
@@ -120,6 +127,24 @@ export class PlayerPathSensors extends Component {
     /** Есть контакт с поверхностью снизу (бег по земле/платформе). */
     public get isOnSurfaceBelow(): boolean {
         return this._belowCount > 0;
+    }
+
+    /** Новый забег после game over: контакты, кулдауны, блокировки скролла. */
+    public resetForNewRun(): void {
+        this._frontCount = 0;
+        this._backCount = 0;
+        this._belowCount = 0;
+        this._surfaceHoldAccumSec = 0;
+        this._wasDamageInvincible = false;
+        this._frontWalls.clear();
+        this._backWalls.clear();
+        this._belowWalls.clear();
+        this._activeCloudContacts.clear();
+        this._activeWallContacts.clear();
+        this._electricHazardCoolById.clear();
+        this._wallHazardCoolById.clear();
+        this._anim?.setRunningOnSurface(false);
+        GameManager.game?.syncPathSensorBlockCounts(0, 0);
     }
 
     onLoad() {
@@ -178,6 +203,9 @@ export class PlayerPathSensors extends Component {
                 this._frontWalls.clear();
                 this._backWalls.clear();
                 this._belowWalls.clear();
+                this._activeCloudContacts.clear();
+                this._activeWallContacts.clear();
+                this._wasDamageInvincible = false;
                 this._anim?.setRunningOnSurface(false);
             }
             return;
@@ -188,6 +216,13 @@ export class PlayerPathSensors extends Component {
         gm.syncPathSensorBlockCounts(this._frontCount, this._backCount);
 
         this._tickHazardCooldowns(_dt);
+
+        const inv = gm.isDamageInvincible;
+        if (this._wasDamageInvincible && !inv) {
+            this._retickTouchingHazards();
+        }
+        this._wasDamageInvincible = inv;
+
         this._updateSurfaceRunAnimation(_dt);
     }
 
@@ -381,8 +416,26 @@ export class PlayerPathSensors extends Component {
             return;
         }
 
+        if (this._tryCollectSeed(other)) {
+            return;
+        }
+
+        if (this._isLethalGround(other)) {
+            if (this.debugLog) {
+                console.log(
+                    `[PlayerPathSensors] lethal Ground other="${other.node?.name ?? '?'}"`,
+                );
+            }
+            gm.instantKill();
+            return;
+        }
+
         const hazard = this._hazardKind(other);
         if (hazard === 'cloud') {
+            const cloudId = this._colliderId(other);
+            if (cloudId) {
+                this._activeCloudContacts.set(cloudId, other);
+            }
             this._tryElectricCloudHit(other);
             return;
         }
@@ -401,6 +454,10 @@ export class PlayerPathSensors extends Component {
             hazard === 'wall' &&
             (v === 'side' || this._shouldApplyHorizontalScrollBlock(v, other))
         ) {
+            const wallId = this._colliderId(other);
+            if (wallId) {
+                this._activeWallContacts.set(wallId, other);
+            }
             this._tryTowerWallHit(other);
         }
         if (v === 'above') {
@@ -455,6 +512,14 @@ export class PlayerPathSensors extends Component {
 
     private _onEndContact(_self: Collider2D, other: Collider2D, _c: IPhysics2DContact | null) {
         const id = other?.isValid ? this._colliderId(other) : '';
+        if (id && other?.isValid) {
+            const hazard = this._hazardKind(other);
+            if (hazard === 'cloud') {
+                this._activeCloudContacts.delete(id);
+            } else if (hazard === 'wall') {
+                this._activeWallContacts.delete(id);
+            }
+        }
         const ok = other?.isValid && this._isBlockingObstacle(other);
         let changed = false;
         /* Один коллайдер может быть и «впереди», и «снизу» — снимаем со всех карт, не else-if. */
@@ -651,6 +716,38 @@ export class PlayerPathSensors extends Component {
         }
     }
 
+    private _tryCollectSeed(other: Collider2D): boolean {
+        const pickup = SeedPickup.resolve(other.node);
+        if (!pickup || pickup.isCollected) {
+            return false;
+        }
+        if (this.debugLog) {
+            console.log(
+                `[PlayerPathSensors] seed collected other="${other.node?.name ?? '?'}"`,
+            );
+        }
+        pickup.collect();
+        return true;
+    }
+
+    /** ObstaclesContainer/Ground (не SkyGround). */
+    private _isLethalGround(other: Collider2D): boolean {
+        let n: Node | null = other.node;
+        while (n) {
+            if (n === this.node) {
+                return false;
+            }
+            if (n.name === 'SkyGround' || n.name === 'SkySensor') {
+                return false;
+            }
+            if (n.name === 'Ground') {
+                return true;
+            }
+            n = n.parent;
+        }
+        return false;
+    }
+
     private _hazardKind(other: Collider2D): 'cloud' | 'wall' | null {
         let n: Node | null = other.node;
         while (n) {
@@ -668,10 +765,59 @@ export class PlayerPathSensors extends Component {
         return null;
     }
 
+    private _retickTouchingHazards(): void {
+        const cloudRoots = new Set<string>();
+        for (const col of this._activeCloudContacts.values()) {
+            if (!col?.isValid) {
+                continue;
+            }
+            const rootKey = this._hazardRootKey(col, 'cloud');
+            if (cloudRoots.has(rootKey)) {
+                continue;
+            }
+            cloudRoots.add(rootKey);
+            this._tryElectricCloudHit(col);
+        }
+
+        const wallRoots = new Set<string>();
+        for (const col of this._activeWallContacts.values()) {
+            if (!col?.isValid) {
+                continue;
+            }
+            const rootKey = this._hazardRootKey(col, 'wall');
+            if (wallRoots.has(rootKey)) {
+                continue;
+            }
+            wallRoots.add(rootKey);
+            this._tryTowerWallHit(col);
+        }
+    }
+
+    private _hazardRootKey(other: Collider2D, kind: 'cloud' | 'wall'): string {
+        let n: Node | null = other.node;
+        while (n) {
+            if (kind === 'cloud' && n.name === 'CloudBarrier') {
+                return `cloud:${n.uuid}`;
+            }
+            if (
+                kind === 'wall' &&
+                (n.name === 'TowerBarrier' || n.name.startsWith('TowerWall'))
+            ) {
+                return `wall:${n.uuid}`;
+            }
+            n = n.parent;
+        }
+        return `${kind}:${this._colliderId(other)}`;
+    }
+
     private _tryElectricCloudHit(other: Collider2D): void {
+        const gm = GameManager.game;
         const pc = this._playerCtrl;
         const id = this._colliderId(other);
-        if (!pc || !id) {
+        if (!gm?.isPlaying || !pc || !id) {
+            return;
+        }
+        if (gm.isDamageInvincible) {
             return;
         }
         if ((this._electricHazardCoolById.get(id) ?? 0) > 0) {
@@ -684,6 +830,7 @@ export class PlayerPathSensors extends Component {
         }
         pc.applyElectricCloudHit();
         const cd = Math.max(
+            gm.damageInvincibilitySec,
             pc.electricCloudCooldownSeconds,
             pc.electricDefaultLiftLockDuration,
         );
@@ -697,7 +844,10 @@ export class PlayerPathSensors extends Component {
         }
         const pc = this._playerCtrl;
         const id = this._colliderId(other);
-        if (!pc || !id) {
+        if (!gm?.isPlaying || !pc || !id) {
+            return;
+        }
+        if (gm.isDamageInvincible) {
             return;
         }
         if ((this._wallHazardCoolById.get(id) ?? 0) > 0) {
@@ -710,6 +860,7 @@ export class PlayerPathSensors extends Component {
         }
         pc.applyTowerWallHit();
         const cd = Math.max(
+            gm.damageInvincibilitySec,
             pc.towerWallCooldownSeconds,
             pc.towerWallKnockbackDurationSec,
         );
