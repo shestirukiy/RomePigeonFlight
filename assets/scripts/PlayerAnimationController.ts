@@ -32,6 +32,13 @@ export class PlayerAnimationController extends Component {
     flapSpeedPressed = 1.35;
 
     @property({
+        displayName: 'Flap Speed (In Air)',
+        tooltip:
+            'Скорость клипа полёта без удержания (падение после платформы). 0 — замёрзший кадр до первого тапа.',
+    })
+    flapSpeedInAir = 0.65;
+
+    @property({
         displayName: 'Wing Flap Inertia Duration',
         tooltip:
             'Секунды после отпускания: скорость хлопанья линейно падает до нуля (инерция крыльев).',
@@ -141,7 +148,7 @@ export class PlayerAnimationController extends Component {
             this._wallHitOverlayRemain <= 0 &&
             this._electricOverlayRemain <= 0
         ) {
-            this._resumeFlapPlayback();
+            this._resumeFlapPlayback(true);
         }
     }
 
@@ -173,16 +180,25 @@ export class PlayerAnimationController extends Component {
         this._flapState = this._anim.getState(name);
     }
 
-    /** После hazard-клипа снова включаем дорожку flap. */
-    private _resumeFlapPlayback(): void {
+    /**
+     * После hazard-клипа или схода с платформы — снова клип полёта.
+     * @param fromSurfaceEnd после бега: сразу «в воздухе», без ожидания тапа.
+     */
+    private _resumeFlapPlayback(fromSurfaceEnd = false): void {
         if (!this.flapClip || !this._anim) {
             return;
         }
         const name = this.flapClip.name;
         this._anim.play(name);
         this._flapState = this._anim.getState(name);
-        this._wasHeld = this._flight?.isInputHeld === true;
         this._tailTimeLeft = 0;
+        if (fromSurfaceEnd) {
+            this._wasHeld = false;
+            this._flapSpeed = this.flapSpeedInAir;
+            this._applyFlapSpeed(this._flapSpeed);
+            return;
+        }
+        this._wasHeld = this._flight?.isInputHeld === true;
     }
 
     update(dt: number) {
@@ -276,7 +292,7 @@ export class PlayerAnimationController extends Component {
                 const k = Math.min(1, Math.max(0, elapsed / d));
                 this._flapSpeed = this._speedAtTailStart * (1 - k);
             } else {
-                this._flapSpeed = 0;
+                this._flapSpeed = this.flapSpeedInAir;
             }
         }
 
