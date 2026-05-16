@@ -2,12 +2,12 @@
   "ver": "1.1.50",
   "importer": "prefab",
   "imported": true,
-  "uuid": "aba828a0-a019-4724-989b-c6813e0dbee4",
+  "uuid": "91c6a2f0-3366-47c5-8c13-2b84e76e8df6",
   "files": [
     ".json"
   ],
   "subMetas": {},
   "userData": {
-    "syncNodeName": "Chunk_Empty-001"
+    "syncNodeName": "seed"
   }
 }
