@@ -969,7 +969,7 @@
         "__expectedType__": "cc.AnimationClip"
       },
       {
-        "__uuid__": "b2f1960b-b181-4904-b464-96d4f437bbf9",
+        "__uuid__": "05fcafd3-4e55-4d6f-b122-af8c8204f94e",
         "__expectedType__": "cc.AnimationClip"
       }
     ],
@@ -993,7 +993,7 @@
       "__id__": 42
     },
     "stayClip": {
-      "__uuid__": "b2f1960b-b181-4904-b464-96d4f437bbf9",
+      "__uuid__": "05fcafd3-4e55-4d6f-b122-af8c8204f94e",
       "__expectedType__": "cc.AnimationClip"
     },
     "flapClip": {

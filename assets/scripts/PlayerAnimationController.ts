@@ -4,7 +4,6 @@ import {
     Animation,
     AnimationClip,
     AnimationState,
-    WrapMode,
 } from 'cc';
 import { GameManager } from './GameManager';
 import { PlayerFlight } from './PlayerFlight';
@@ -254,11 +253,13 @@ export class PlayerAnimationController extends Component {
         this._anim.stop();
         this._anim.play(name);
         const st = this._anim.getState(name);
-        if (st) {
-            st.wrapMode = WrapMode.Loop;
-            st.speed = 1;
-            st.resume();
+        if (!st) {
+            this._waitingStayActive = false;
+            return;
         }
+        st.wrapMode = AnimationClip.WrapMode.Loop;
+        st.speed = 1;
+        st.resume();
     }
 
     /** @deprecated Используйте playWaitingStay */
@@ -289,7 +290,7 @@ export class PlayerAnimationController extends Component {
     update(dt: number) {
         const playing = GameManager.game?.isPlaying === true;
         if (!playing || !this._anim) {
-            if (!playing) {
+            if (!playing && !this._waitingStayActive) {
                 this.playWaitingStay();
             }
             this._tailTimeLeft = 0;

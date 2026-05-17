@@ -15,6 +15,7 @@ import { PlayerFlight } from './PlayerFlight';
 import { PlayerPathSensors } from './PlayerPathSensors';
 import { PlayerAnimationController } from './PlayerAnimationController';
 import { SceneNodeHub } from './SceneNodeHub';
+import { CameraShake } from './CameraShake';
 import { SoundController } from './SoundController';
 import { SoundId } from './SoundLibrary';
 
@@ -517,6 +518,7 @@ export class GameManager extends Component {
             if (playDamageSound) {
                 SoundController.instance?.play(SoundId.Damage);
             }
+            CameraShake.instance?.shakeOnDamage();
             if (this.damageInvincibilitySec > 0) {
                 this._damageInvincibleRemain = this.damageInvincibilitySec;
             }
