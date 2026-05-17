@@ -13,7 +13,7 @@ import {
 import { GameManager } from './GameManager';
 import { PlayerAnimationController } from './PlayerAnimationController';
 import { PlayerController } from './PlayerController';
-import { SeedPickup } from './SeedPickup';
+import { PickupBase } from './PickupBase';
 
 const { ccclass, property, executionOrder } = _decorator;
 
@@ -416,7 +416,7 @@ export class PlayerPathSensors extends Component {
             return;
         }
 
-        if (this._tryCollectSeed(other)) {
+        if (this._tryCollectPickup(other)) {
             return;
         }
 
@@ -716,14 +716,14 @@ export class PlayerPathSensors extends Component {
         }
     }
 
-    private _tryCollectSeed(other: Collider2D): boolean {
-        const pickup = SeedPickup.resolve(other.node);
+    private _tryCollectPickup(other: Collider2D): boolean {
+        const pickup = PickupBase.resolve(other.node);
         if (!pickup || pickup.isCollected) {
             return false;
         }
         if (this.debugLog) {
             console.log(
-                `[PlayerPathSensors] seed collected other="${other.node?.name ?? '?'}"`,
+                `[PlayerPathSensors] pickup collected other="${other.node?.name ?? '?'}"`,
             );
         }
         pickup.collect();

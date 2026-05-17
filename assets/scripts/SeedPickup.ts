@@ -1,14 +1,14 @@
-import { _decorator, Component, Node } from 'cc';
+import { _decorator, Node } from 'cc';
 import { GameManager } from './GameManager';
+import { PickupBase } from './PickupBase';
 
 const { ccclass, property } = _decorator;
 
 /**
- * Семечко (sensor). Сбор обрабатывается в PlayerPathSensors (коллайдер игрока),
- * здесь — очки и уничтожение ноды.
+ * Семечко. Сбор: коллайдер игрока (PlayerPathSensors) и/или MagnetPickable.
  */
 @ccclass('SeedPickup')
-export class SeedPickup extends Component {
+export class SeedPickup extends PickupBase {
     @property({
         displayName: 'Points',
         tooltip: 'Сколько очков даёт одно семечко.',
@@ -17,34 +17,21 @@ export class SeedPickup extends Component {
 
     private _collected = false;
 
-    public get isCollected(): boolean {
+    public override get isCollected(): boolean {
         return this._collected;
     }
 
-    /** Узел префаба seed (или с компонентом SeedPickup). */
+    /** @deprecated Используйте PickupBase.findPickupRoot */
     public static findSeedRoot(from: Node | null): Node | null {
-        let n: Node | null = from;
-        while (n) {
-            if (n.name === 'seed' || n.getComponent(SeedPickup)) {
-                return n;
-            }
-            n = n.parent;
-        }
-        return null;
+        return PickupBase.findPickupRoot(from);
     }
 
+    /** @deprecated Используйте PickupBase.resolve */
     public static resolve(from: Node | null): SeedPickup | null {
-        const root = SeedPickup.findSeedRoot(from);
-        if (!root) {
-            return null;
-        }
-        return (
-            root.getComponent(SeedPickup) ??
-            (root.name === 'seed' ? root.addComponent(SeedPickup) : null)
-        );
+        return PickupBase.resolve(from) as SeedPickup | null;
     }
 
-    public collect(): void {
+    public override collect(): void {
         if (this._collected || !this.node?.isValid) {
             return;
         }

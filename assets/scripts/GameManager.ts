@@ -13,6 +13,7 @@ import {
 import { LevelGenerator } from './LevelGenerator';
 import { PlayerFlight } from './PlayerFlight';
 import { PlayerPathSensors } from './PlayerPathSensors';
+import { PlayerAnimationController } from './PlayerAnimationController';
 import { SceneNodeHub } from './SceneNodeHub';
 
 const { ccclass, property } = _decorator;
@@ -377,6 +378,9 @@ export class GameManager extends Component {
         if (player) {
             player.getComponent(PlayerFlight)?.resetToSpawn();
             player.getComponent(PlayerPathSensors)?.resetForNewRun();
+            player
+                .getComponent(PlayerAnimationController)
+                ?.resetForNewRun();
         }
     }
 
@@ -487,6 +491,9 @@ export class GameManager extends Component {
         }
         this._gameOver = true;
         this._playing = false;
+        SceneNodeHub.instance?.player
+            ?.getComponent(PlayerAnimationController)
+            ?.freezeIdleFlightPose();
         if (this.gameOverPanel) {
             this.gameOverPanel.active = true;
         }

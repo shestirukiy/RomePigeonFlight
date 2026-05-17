@@ -91,6 +91,9 @@ export class PlayerAnimationController extends Component {
 
     private _wasHeld = false;
 
+    /** После game over уже переключились на клип полёта (не кадр стана). */
+    private _frozenIdlePose = false;
+
     onLoad() {
         this._anim =
             this.getComponent(Animation) ??
@@ -188,23 +191,62 @@ export class PlayerAnimationController extends Component {
         if (!this.flapClip || !this._anim) {
             return;
         }
-        const name = this.flapClip.name;
-        this._anim.play(name);
-        this._flapState = this._anim.getState(name);
         this._tailTimeLeft = 0;
         if (fromSurfaceEnd) {
             this._wasHeld = false;
-            this._flapSpeed = this.flapSpeedInAir;
-            this._applyFlapSpeed(this._flapSpeed);
+            this._restoreFlapClip(this.flapSpeedInAir);
             return;
         }
         this._wasHeld = this._flight?.isInputHeld === true;
+        this._restoreFlapClip(this._wasHeld ? this.flapSpeedPressed : this.flapSpeedInAir);
+    }
+
+    /** Рестарт забега: сброс стана / удара и снова клип полёта. */
+    public resetForNewRun(): void {
+        this._electricOverlayRemain = 0;
+        this._wallHitOverlayRemain = 0;
+        this._surfaceRunActive = false;
+        this._tailTimeLeft = 0;
+        this._wasHeld = false;
+        this._frozenIdlePose = false;
+        this._flapSpeed = this.flapSpeedInAir;
+        this._restoreFlapClip(this.flapSpeedInAir);
+    }
+
+    /** На game over: не оставлять замороженный кадр стана на экране. */
+    public freezeIdleFlightPose(): void {
+        this._electricOverlayRemain = 0;
+        this._wallHitOverlayRemain = 0;
+        this._surfaceRunActive = false;
+        this._tailTimeLeft = 0;
+        this._wasHeld = false;
+        this._flapSpeed = 0;
+        this._restoreFlapClip(0, 0);
+        this._frozenIdlePose = true;
+    }
+
+    private _restoreFlapClip(speed: number, sampleTime = 0): void {
+        if (!this.flapClip || !this._anim) {
+            return;
+        }
+        this._anim.stop();
+        const name = this.flapClip.name;
+        this._anim.play(name);
+        this._flapState = this._anim.getState(name);
+        if (!this._flapState) {
+            return;
+        }
+        this._flapState.time = sampleTime;
+        this._flapSpeed = speed;
+        this._applyFlapSpeed(speed);
     }
 
     update(dt: number) {
         const playing = GameManager.game?.isPlaying === true;
         if (!playing || !this._anim) {
-            this._applyFlapSpeed(0);
+            if (!playing && !this._frozenIdlePose) {
+                this.freezeIdleFlightPose();
+            }
             this._tailTimeLeft = 0;
             this._wasHeld = false;
             this._electricOverlayRemain = 0;
@@ -212,6 +254,8 @@ export class PlayerAnimationController extends Component {
             this._surfaceRunActive = false;
             return;
         }
+
+        this._frozenIdlePose = false;
 
         const prevWall = this._wallHitOverlayRemain;
         const prevElec = this._electricOverlayRemain;
