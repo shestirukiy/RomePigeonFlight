@@ -1,6 +1,8 @@
-import { _decorator, Component, Node } from 'cc';
+import { _decorator, Component, Enum, Node } from 'cc';
+import { SoundController } from './SoundController';
+import { SoundId } from './SoundLibrary';
 
-const { ccclass } = _decorator;
+const { ccclass, property } = _decorator;
 
 /**
  * Базовый пикап: очки/эффект и уничтожение ноды.
@@ -8,9 +10,23 @@ const { ccclass } = _decorator;
  */
 @ccclass('PickupBase')
 export abstract class PickupBase extends Component {
+    @property({
+        type: Enum(SoundId),
+        displayName: 'Collect Sound',
+        tooltip: 'Звук при collect(). None — без звука.',
+    })
+    collectSound = SoundId.None;
+
     public abstract get isCollected(): boolean;
 
     public abstract collect(): void;
+
+    protected playCollectSound(): void {
+        if (this.collectSound === SoundId.None) {
+            return;
+        }
+        SoundController.instance?.play(this.collectSound);
+    }
 
     /** Корень объекта с PickupBase (подъём по иерархии). */
     public static findPickupRoot(from: Node | null): Node | null {

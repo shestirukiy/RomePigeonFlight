@@ -15,6 +15,7 @@ import {
     input,
 } from 'cc';
 import { GameManager } from './GameManager';
+import { SoundController } from './SoundController';
 import { PlayerController } from './PlayerController';
 
 const { ccclass, property } = _decorator;
@@ -304,7 +305,7 @@ export class PlayerFlight extends Component {
     }
 
     private _onTouchStart(_e: EventTouch) {
-        this._held = true;
+        this._onLiftInputDown();
     }
 
     private _onTouchEnd(_e: EventTouch) {
@@ -313,8 +314,23 @@ export class PlayerFlight extends Component {
 
     private _onMouseDown(e: EventMouse) {
         if (e.getButton() === 0) {
-            this._held = true;
+            this._onLiftInputDown();
         }
+    }
+
+    private _onLiftInputDown(): void {
+        const wasHeld = this._held;
+        this._held = true;
+        if (wasHeld) {
+            return;
+        }
+        if (GameManager.game?.isPlaying !== true) {
+            return;
+        }
+        if (this._electricLiftBlockRemain > 0) {
+            return;
+        }
+        SoundController.instance?.tryPlayWingFlap();
     }
 
     private _onMouseUp(e: EventMouse) {

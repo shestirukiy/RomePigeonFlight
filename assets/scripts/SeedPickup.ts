@@ -1,6 +1,7 @@
 import { _decorator, Node } from 'cc';
 import { GameManager } from './GameManager';
 import { PickupBase } from './PickupBase';
+import { SoundId } from './SoundLibrary';
 
 const { ccclass, property } = _decorator;
 
@@ -14,6 +15,8 @@ export class SeedPickup extends PickupBase {
         tooltip: 'Сколько очков даёт одно семечко.',
     })
     points = 1;
+
+    collectSound = SoundId.SeedCollect;
 
     private _collected = false;
 
@@ -36,6 +39,7 @@ export class SeedPickup extends PickupBase {
             return;
         }
         this._collected = true;
+        this.playCollectSound();
         GameManager.game?.addScore(this.points);
         this.node.destroy();
     }

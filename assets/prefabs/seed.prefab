@@ -280,6 +280,7 @@
     "__prefab": {
       "__id__": 15
     },
+    "collectSound": 1,
     "points": 1,
     "_id": ""
   },

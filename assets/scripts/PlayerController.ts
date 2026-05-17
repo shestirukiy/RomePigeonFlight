@@ -2,6 +2,8 @@ import { _decorator, Component, Node } from 'cc';
 import { GameManager } from './GameManager';
 import { PlayerFlight } from './PlayerFlight';
 import { PlayerAnimationController } from './PlayerAnimationController';
+import { SoundController } from './SoundController';
+import { SoundId } from './SoundLibrary';
 
 const { ccclass, property } = _decorator;
 
@@ -96,7 +98,8 @@ export class PlayerController extends Component {
         if (!gm?.isPlaying) {
             return;
         }
-        gm.takeDamage(1);
+        gm.takeDamage(1, false);
+        SoundController.instance?.play(SoundId.ElectricHit);
         const t = this.electricDefaultLiftLockDuration;
         if (t <= 0) {
             return;
@@ -113,7 +116,8 @@ export class PlayerController extends Component {
         if (!gm?.isPlaying) {
             return;
         }
-        gm.takeDamage(1);
+        gm.takeDamage(1, false);
+        SoundController.instance?.play(SoundId.WallHit);
         const kd = this.towerWallKnockbackDurationSec;
         if (kd <= 0) {
             return;

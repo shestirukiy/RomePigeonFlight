@@ -15,6 +15,8 @@ import { PlayerFlight } from './PlayerFlight';
 import { PlayerPathSensors } from './PlayerPathSensors';
 import { PlayerAnimationController } from './PlayerAnimationController';
 import { SceneNodeHub } from './SceneNodeHub';
+import { SoundController } from './SoundController';
+import { SoundId } from './SoundLibrary';
 
 const { ccclass, property } = _decorator;
 
@@ -54,6 +56,10 @@ export class GameManager extends Component {
     private _score = 0;
     private _currentHp = 0;
     private _gameOver = false;
+
+    /** После game over пользователь уже тапнул — показана KTAPanel. */
+    private _ktaPanelShown = false;
+
     private _damageInvincibleRemain = 0;
 
     /** Слева направо: [якорное сердечко, клоны справа]. */
@@ -74,6 +80,10 @@ export class GameManager extends Component {
 
     public get isGameOver(): boolean {
         return this._gameOver;
+    }
+
+    public get isKtaPanelShown(): boolean {
+        return this._ktaPanelShown;
     }
 
     public get isDamageInvincible(): boolean {
@@ -268,6 +278,14 @@ export class GameManager extends Component {
     gameOverPanel: Node | null = null;
 
     @property({
+        type: Node,
+        displayName: 'KTA Panel',
+        tooltip:
+            'Показывается после тапа по Game Over Panel; рестарт — кнопкой на этой панели.',
+    })
+    ktaPanel: Node | null = null;
+
+    @property({
         displayName: 'Damage invincibility (s)',
         tooltip:
             'После потери HP игрок не получает урон повторно, пока не истечёт таймер (одно препятствие / несколько контактов).',
@@ -278,9 +296,7 @@ export class GameManager extends Component {
         GameManager._inst = this;
         this._refreshScoreLabel();
         this.resetHp();
-        if (this.gameOverPanel) {
-            this.gameOverPanel.active = false;
-        }
+        this._hideOverlayPanels();
         input.on(Input.EventType.TOUCH_START, this._onTouchStart, this);
         input.on(Input.EventType.MOUSE_DOWN, this._onMouseDown, this);
     }
@@ -344,18 +360,58 @@ export class GameManager extends Component {
         }
     }
 
-    private _tryStart() {
+    /** Новый забег (первый тап или кнопка на KTAPanel). */
+    public startNewRun(): void {
         if (this._playing) {
             return;
         }
+        SoundController.instance?.playRunStartTap();
         this._gameOver = false;
-        if (this.gameOverPanel) {
-            this.gameOverPanel.active = false;
-        }
+        this._ktaPanelShown = false;
+        this._hideOverlayPanels();
         this._resetRunState();
         this._playing = true;
         this.resetScore();
         this.resetHp();
+        SoundController.instance?.resetVariantRotation();
+    }
+
+    private _hideOverlayPanels(): void {
+        if (this.gameOverPanel?.isValid) {
+            this.gameOverPanel.active = false;
+        }
+        if (this.ktaPanel?.isValid) {
+            this.ktaPanel.active = false;
+        }
+    }
+
+    private _showOverlayPanel(panel: Node | null): void {
+        if (!panel?.isValid) {
+            return;
+        }
+        panel.setPosition(0, 0, 0);
+        panel.active = true;
+    }
+
+    private _showKtaPanel(): void {
+        this._ktaPanelShown = true;
+        if (this.gameOverPanel?.isValid) {
+            this.gameOverPanel.active = false;
+        }
+        this._showOverlayPanel(this.ktaPanel);
+    }
+
+    private _onMenuTap(): void {
+        if (this._playing) {
+            return;
+        }
+        if (this._gameOver) {
+            if (!this._ktaPanelShown) {
+                this._showKtaPanel();
+            }
+            return;
+        }
+        this.startNewRun();
     }
 
     private _resetScrollAndKickback(): void {
@@ -435,7 +491,7 @@ export class GameManager extends Component {
      * Урон: пропадает самое правое сердечко (включая клоны, затем якорь).
      * При 0 HP — {@link gameOver}.
      */
-    public takeDamage(amount = 1): void {
+    public takeDamage(amount = 1, playDamageSound = true): void {
         if (!this.isPlaying || amount <= 0) {
             return;
         }
@@ -457,8 +513,13 @@ export class GameManager extends Component {
             lost++;
         }
 
-        if (lost > 0 && this.damageInvincibilitySec > 0) {
-            this._damageInvincibleRemain = this.damageInvincibilitySec;
+        if (lost > 0) {
+            if (playDamageSound) {
+                SoundController.instance?.play(SoundId.Damage);
+            }
+            if (this.damageInvincibilitySec > 0) {
+                this._damageInvincibleRemain = this.damageInvincibilitySec;
+            }
         }
 
         if (this._currentHp <= 0) {
@@ -481,22 +542,26 @@ export class GameManager extends Component {
         }
         this._currentHp = 0;
         this._damageInvincibleRemain = 0;
-        this.gameOver();
+        SoundController.instance?.play(SoundId.InstantKill);
+        this.gameOver(true);
     }
 
     /** Конец забега — наполните позже (UI, рестарт и т.д.). */
-    public gameOver(): void {
+    public gameOver(skipSound = false): void {
         if (this._gameOver) {
             return;
         }
         this._gameOver = true;
         this._playing = false;
+        this._ktaPanelShown = false;
+        this._hideOverlayPanels();
+        if (!skipSound) {
+            SoundController.instance?.play(SoundId.GameOver);
+        }
         SceneNodeHub.instance?.player
             ?.getComponent(PlayerAnimationController)
             ?.freezeIdleFlightPose();
-        if (this.gameOverPanel) {
-            this.gameOverPanel.active = true;
-        }
+        this._showOverlayPanel(this.gameOverPanel);
     }
 
     private _clearSpawnedHearts(): void {
@@ -522,12 +587,12 @@ export class GameManager extends Component {
     }
 
     private _onTouchStart(_e: EventTouch) {
-        this._tryStart();
+        this._onMenuTap();
     }
 
     private _onMouseDown(e: EventMouse) {
         if (e.getButton() === 0) {
-            this._tryStart();
+            this._onMenuTap();
         }
     }
 }

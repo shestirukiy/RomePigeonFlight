@@ -4,6 +4,7 @@ import {
     Animation,
     AnimationClip,
     AnimationState,
+    WrapMode,
 } from 'cc';
 import { GameManager } from './GameManager';
 import { PlayerFlight } from './PlayerFlight';
@@ -16,6 +17,14 @@ const { ccclass, property } = _decorator;
  */
 @ccclass('PlayerAnimationController')
 export class PlayerAnimationController extends Component {
+    @property({
+        type: AnimationClip,
+        displayName: 'Stay Clip',
+        tooltip:
+            'Ожидание тапа (до старта забега / после game over). Тот же клип в Clips у Animation.',
+    })
+    stayClip: AnimationClip | null = null;
+
     @property({
         type: AnimationClip,
         displayName: 'Flap Clip',
@@ -91,8 +100,8 @@ export class PlayerAnimationController extends Component {
 
     private _wasHeld = false;
 
-    /** После game over уже переключились на клип полёта (не кадр стана). */
-    private _frozenIdlePose = false;
+    /** Сейчас крутится stayClip (игра не идёт). */
+    private _waitingStayActive = false;
 
     onLoad() {
         this._anim =
@@ -102,6 +111,12 @@ export class PlayerAnimationController extends Component {
             this.getComponent(PlayerFlight) ??
             this.node.parent?.getComponent(PlayerFlight) ??
             null;
+    }
+
+    start() {
+        if (GameManager.game?.isPlaying !== true) {
+            this.playWaitingStay();
+        }
     }
 
     /**
@@ -208,21 +223,51 @@ export class PlayerAnimationController extends Component {
         this._surfaceRunActive = false;
         this._tailTimeLeft = 0;
         this._wasHeld = false;
-        this._frozenIdlePose = false;
+        this._waitingStayActive = false;
         this._flapSpeed = this.flapSpeedInAir;
         this._restoreFlapClip(this.flapSpeedInAir);
     }
 
-    /** На game over: не оставлять замороженный кадр стана на экране. */
-    public freezeIdleFlightPose(): void {
+    /** Ожидание тапа: PlayerStay (до старта и после game over). */
+    public playWaitingStay(): void {
         this._electricOverlayRemain = 0;
         this._wallHitOverlayRemain = 0;
         this._surfaceRunActive = false;
         this._tailTimeLeft = 0;
         this._wasHeld = false;
-        this._flapSpeed = 0;
-        this._restoreFlapClip(0, 0);
-        this._frozenIdlePose = true;
+        this._flapState = null;
+
+        if (!this._anim || !this.stayClip) {
+            this._waitingStayActive = false;
+            this._flapSpeed = 0;
+            this._restoreFlapClip(0, 0);
+            return;
+        }
+
+        const name = this.stayClip.name;
+        const cur = this._anim.getState(name);
+        if (this._waitingStayActive && cur?.isPlaying) {
+            return;
+        }
+
+        this._waitingStayActive = true;
+        this._anim.stop();
+        this._anim.play(name);
+        const st = this._anim.getState(name);
+        if (st) {
+            st.wrapMode = WrapMode.Loop;
+            st.speed = 1;
+            st.resume();
+        }
+    }
+
+    /** @deprecated Используйте playWaitingStay */
+    public freezeIdleFlightPose(): void {
+        this.playWaitingStay();
+    }
+
+    private _exitWaitingStay(): void {
+        this._waitingStayActive = false;
     }
 
     private _restoreFlapClip(speed: number, sampleTime = 0): void {
@@ -244,8 +289,8 @@ export class PlayerAnimationController extends Component {
     update(dt: number) {
         const playing = GameManager.game?.isPlaying === true;
         if (!playing || !this._anim) {
-            if (!playing && !this._frozenIdlePose) {
-                this.freezeIdleFlightPose();
+            if (!playing) {
+                this.playWaitingStay();
             }
             this._tailTimeLeft = 0;
             this._wasHeld = false;
@@ -255,7 +300,7 @@ export class PlayerAnimationController extends Component {
             return;
         }
 
-        this._frozenIdlePose = false;
+        this._exitWaitingStay();
 
         const prevWall = this._wallHitOverlayRemain;
         const prevElec = this._electricOverlayRemain;

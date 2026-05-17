@@ -33,7 +33,7 @@
             "_value": true
           },
           "sorting-2d": {
-            "_value": false
+            "_value": true
           },
           "rich-text": {
             "_value": true
@@ -212,6 +212,7 @@
           "procedural-animation",
           "profiler",
           "rich-text",
+          "sorting-2d",
           "spine-3.8",
           "tiled-map",
           "tween",
