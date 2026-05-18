@@ -105,6 +105,11 @@ export class PlayerFlight extends Component {
         return this._held;
     }
 
+    /** Сброс удержания (смерть, game over). */
+    public releaseInput(): void {
+        this._held = false;
+    }
+
     /**
      * Blocks lift for the given duration (renewed if already blocked by a longer remaining time).
      * Called from PlayerController / hazards.

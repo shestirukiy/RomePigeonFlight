@@ -1,0 +1,90 @@
+{
+  "__type__": "cc.SpriteFrame",
+  "content": {
+    "name": "BlueGradientAlpha",
+    "atlas": "",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 434,
+      "height": 694
+    },
+    "offset": {
+      "x": 0,
+      "y": 33.5
+    },
+    "originalSize": {
+      "width": 434,
+      "height": 761
+    },
+    "rotated": false,
+    "capInsets": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "vertices": {
+      "rawPosition": [
+        -217,
+        -347,
+        0,
+        217,
+        -347,
+        0,
+        -217,
+        347,
+        0,
+        217,
+        347,
+        0
+      ],
+      "indexes": [
+        0,
+        1,
+        2,
+        2,
+        1,
+        3
+      ],
+      "uv": [
+        0,
+        761,
+        434,
+        761,
+        0,
+        67,
+        434,
+        67
+      ],
+      "nuv": [
+        0,
+        0.08804204993429698,
+        1,
+        0.08804204993429698,
+        0,
+        1,
+        1,
+        1
+      ],
+      "minPos": {
+        "x": -217,
+        "y": -347,
+        "z": 0
+      },
+      "maxPos": {
+        "x": 217,
+        "y": 347,
+        "z": 0
+      }
+    },
+    "texture": "a8d5ce37-b31a-4b6e-a33f-1c62a27cd6ae@6c48a",
+    "packable": true,
+    "pixelsToUnit": 100,
+    "pivot": {
+      "x": 0.5,
+      "y": 0.5
+    },
+    "meshType": 0
+  }
+}

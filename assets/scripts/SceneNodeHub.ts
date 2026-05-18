@@ -36,6 +36,13 @@ export class SceneNodeHub extends Component {
     })
     viewRoot: Node | null = null;
 
+    @property({
+        type: Node,
+        displayName: 'Game Over Seed Score',
+        tooltip: 'LabelScore на GameOverPanel — узел с числом семечек.',
+    })
+    gameOverSeedScoreNode: Node | null = null;
+
     onLoad() {
         SceneNodeHub._inst = this;
         if (!this.canvasRoot) {

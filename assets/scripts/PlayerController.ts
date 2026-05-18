@@ -98,9 +98,19 @@ export class PlayerController extends Component {
         if (!gm?.isPlaying) {
             return;
         }
-        gm.takeDamage(1, false);
+        const lethal = gm.takeDamage(1, false, true);
         SoundController.instance?.play(SoundId.ElectricHit);
         const t = this.electricDefaultLiftLockDuration;
+        if (lethal) {
+            if (t > 0) {
+                this._flight?.setElectricLiftBlockedFor(t);
+                this._anim?.notifyElectricDamage(t);
+                gm.scheduleDeathAfterHazardAnimation(t);
+            } else {
+                gm.beginDeathSequence();
+            }
+            return;
+        }
         if (t <= 0) {
             return;
         }
@@ -116,9 +126,31 @@ export class PlayerController extends Component {
         if (!gm?.isPlaying) {
             return;
         }
-        gm.takeDamage(1, false);
+        const lethal = gm.takeDamage(1, false, true);
         SoundController.instance?.play(SoundId.WallHit);
         const kd = this.towerWallKnockbackDurationSec;
+        if (lethal) {
+            if (kd > 0) {
+                this._flight?.applyTowerKnockback(
+                    kd,
+                    this.towerWallKnockbackHorizontalPxPerSec,
+                    this.towerWallDownwardImpulse,
+                );
+                const animDur =
+                    this.towerWallHitAnimationDurationSec > 0
+                        ? this.towerWallHitAnimationDurationSec
+                        : kd;
+                this._anim?.notifyWallHit(animDur);
+                const lift = this.towerWallDefaultLiftLockDuration;
+                if (lift > 0) {
+                    this._flight?.setElectricLiftBlockedFor(lift);
+                }
+                gm.scheduleDeathAfterHazardAnimation(animDur);
+            } else {
+                gm.beginDeathSequence();
+            }
+            return;
+        }
         if (kd <= 0) {
             return;
         }

@@ -1,0 +1,8 @@
+{
+  "__type__": "cc.TextAsset",
+  "_name": "Build-Deployer-config",
+  "_objFlags": 0,
+  "__editorExtras__": {},
+  "_native": "",
+  "text": "# Конфигурация для Build-Deployer\r\nProjectName=RomePigeonFlight\r\nSourceDir=build\\super-html\r\n"
+}

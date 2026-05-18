@@ -971,6 +971,10 @@
       {
         "__uuid__": "05fcafd3-4e55-4d6f-b122-af8c8204f94e",
         "__expectedType__": "cc.AnimationClip"
+      },
+      {
+        "__uuid__": "81b075cb-7603-43a9-b6ff-81bd211c2151",
+        "__expectedType__": "cc.AnimationClip"
       }
     ],
     "_defaultClip": null,
@@ -1015,6 +1019,15 @@
       "__uuid__": "622b652b-b248-4f22-8ab3-5525fb448021",
       "__expectedType__": "cc.AnimationClip"
     },
+    "deathClip": {
+      "__uuid__": "81b075cb-7603-43a9-b6ff-81bd211c2151",
+      "__expectedType__": "cc.AnimationClip"
+    },
+    "deathFallNode": {
+      "__id__": 23
+    },
+    "deathFallDeltaY": -1900,
+    "deathSequenceDurationSec": 1.85,
     "_id": ""
   },
   {

@@ -1,0 +1,90 @@
+{
+  "__type__": "cc.SpriteFrame",
+  "content": {
+    "name": "PackShot4Char",
+    "atlas": "",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 1877,
+      "height": 1152
+    },
+    "offset": {
+      "x": 0,
+      "y": 0
+    },
+    "originalSize": {
+      "width": 1877,
+      "height": 1152
+    },
+    "rotated": false,
+    "capInsets": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "vertices": {
+      "rawPosition": [
+        -938.5,
+        -576,
+        0,
+        938.5,
+        -576,
+        0,
+        -938.5,
+        576,
+        0,
+        938.5,
+        576,
+        0
+      ],
+      "indexes": [
+        0,
+        1,
+        2,
+        2,
+        1,
+        3
+      ],
+      "uv": [
+        0,
+        1152,
+        1877,
+        1152,
+        0,
+        0,
+        1877,
+        0
+      ],
+      "nuv": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1
+      ],
+      "minPos": {
+        "x": -938.5,
+        "y": -576,
+        "z": 0
+      },
+      "maxPos": {
+        "x": 938.5,
+        "y": 576,
+        "z": 0
+      }
+    },
+    "texture": "06cfe1ac-a3ce-405e-8198-52847170bdab@6c48a",
+    "packable": true,
+    "pixelsToUnit": 100,
+    "pivot": {
+      "x": 0.5,
+      "y": 0.5
+    },
+    "meshType": 0
+  }
+}

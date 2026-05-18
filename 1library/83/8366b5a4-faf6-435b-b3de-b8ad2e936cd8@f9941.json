@@ -1,0 +1,90 @@
+{
+  "__type__": "cc.SpriteFrame",
+  "content": {
+    "name": "GOScoreboard",
+    "atlas": "",
+    "rect": {
+      "x": 0,
+      "y": 3,
+      "width": 822,
+      "height": 646
+    },
+    "offset": {
+      "x": 0,
+      "y": 27
+    },
+    "originalSize": {
+      "width": 822,
+      "height": 706
+    },
+    "rotated": false,
+    "capInsets": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "vertices": {
+      "rawPosition": [
+        -411,
+        -323,
+        0,
+        411,
+        -323,
+        0,
+        -411,
+        323,
+        0,
+        411,
+        323,
+        0
+      ],
+      "indexes": [
+        0,
+        1,
+        2,
+        2,
+        1,
+        3
+      ],
+      "uv": [
+        0,
+        703,
+        822,
+        703,
+        0,
+        57,
+        822,
+        57
+      ],
+      "nuv": [
+        0,
+        0.08073654390934844,
+        1,
+        0.08073654390934844,
+        0,
+        0.9957507082152974,
+        1,
+        0.9957507082152974
+      ],
+      "minPos": {
+        "x": -411,
+        "y": -323,
+        "z": 0
+      },
+      "maxPos": {
+        "x": 411,
+        "y": 323,
+        "z": 0
+      }
+    },
+    "texture": "8366b5a4-faf6-435b-b3de-b8ad2e936cd8@6c48a",
+    "packable": true,
+    "pixelsToUnit": 100,
+    "pivot": {
+      "x": 0.5,
+      "y": 0.5
+    },
+    "meshType": 0
+  }
+}

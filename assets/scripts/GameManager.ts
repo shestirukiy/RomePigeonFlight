@@ -1,5 +1,6 @@
 import {
     _decorator,
+    Button,
     Component,
     input,
     Input,
@@ -7,8 +8,10 @@ import {
     EventTouch,
     Label,
     Node,
+    Tween,
     UITransform,
     instantiate,
+    tween,
 } from 'cc';
 import { LevelGenerator } from './LevelGenerator';
 import { PlayerFlight } from './PlayerFlight';
@@ -58,8 +61,18 @@ export class GameManager extends Component {
     private _currentHp = 0;
     private _gameOver = false;
 
+    /** 0 HP в воздухе: идёт deathClip, скролл и ввод выкл, UI ещё нет. */
+    private _dying = false;
+
+    /** 0 HP, но сначала доигрывается клип урона (облако / стена). */
+    private _awaitingDeathSequence = false;
+
     /** После game over пользователь уже тапнул — показана KTAPanel. */
     private _ktaPanelShown = false;
+
+    private _playAgainButton: Button | null = null;
+
+    private readonly _gameOverSeedRollCounter = { value: 0 };
 
     private _damageInvincibleRemain = 0;
 
@@ -91,8 +104,17 @@ export class GameManager extends Component {
         return this._damageInvincibleRemain > 0;
     }
 
+    public get isDying(): boolean {
+        return this._dying;
+    }
+
+    /** Смертельный удар: HP уже 0, ждём окончания hazard-клипа. */
+    public get isAwaitingDeathSequence(): boolean {
+        return this._awaitingDeathSequence;
+    }
+
     public get isPlaying(): boolean {
-        return this._playing && !this._gameOver;
+        return this._playing && !this._gameOver && !this._dying;
     }
 
     public get isWorldKickbackActive(): boolean {
@@ -199,7 +221,7 @@ export class GameManager extends Component {
     /** Сдвиг чанков «вперёд по забегу» (влево), без отдачи. Во время отдачи — 0. */
     public getForwardScrollDelta(_dt: number): number {
         if (
-            !this._playing ||
+            !this.isPlaying ||
             this._worldKickbackRemain > 0 ||
             this._forwardScrollBlockRef > 0 ||
             this._forwardScrollHoldRemain > 0
@@ -211,7 +233,7 @@ export class GameManager extends Component {
 
     /** Доп. сдвиг чанков вправо за кадр (отдача от стены). */
     public getWorldKickbackDelta(dt: number): number {
-        if (!this._playing || this._worldKickbackRemain <= 0) {
+        if (!this.isPlaying || this._worldKickbackRemain <= 0) {
             return 0;
         }
         if (
@@ -287,6 +309,13 @@ export class GameManager extends Component {
     ktaPanel: Node | null = null;
 
     @property({
+        displayName: 'Seed Count Roll Duration (s)',
+        tooltip:
+            'За сколько секунд счётчик на game over дойдёт от 0 до фактического счёта.',
+    })
+    gameOverSeedCountRollDurationSec = 1.2;
+
+    @property({
         displayName: 'Damage invincibility (s)',
         tooltip:
             'После потери HP игрок не получает урон повторно, пока не истечёт таймер (одно препятствие / несколько контактов).',
@@ -298,11 +327,14 @@ export class GameManager extends Component {
         this._refreshScoreLabel();
         this.resetHp();
         this._hideOverlayPanels();
+        this._bindPlayAgainButton();
         input.on(Input.EventType.TOUCH_START, this._onTouchStart, this);
         input.on(Input.EventType.MOUSE_DOWN, this._onMouseDown, this);
     }
 
     onDestroy() {
+        this._stopGameOverSeedCountRoll();
+        this._unbindPlayAgainButton();
         input.off(Input.EventType.TOUCH_START, this._onTouchStart, this);
         input.off(Input.EventType.MOUSE_DOWN, this._onMouseDown, this);
         if (GameManager._inst === this) {
@@ -368,6 +400,8 @@ export class GameManager extends Component {
         }
         SoundController.instance?.playRunStartTap();
         this._gameOver = false;
+        this._dying = false;
+        this._cancelDeferredDeathSequence();
         this._ktaPanelShown = false;
         this._hideOverlayPanels();
         this._resetRunState();
@@ -378,6 +412,7 @@ export class GameManager extends Component {
     }
 
     private _hideOverlayPanels(): void {
+        this._stopGameOverSeedCountRoll();
         if (this.gameOverPanel?.isValid) {
             this.gameOverPanel.active = false;
         }
@@ -402,8 +437,41 @@ export class GameManager extends Component {
         this._showOverlayPanel(this.ktaPanel);
     }
 
+    private _bindPlayAgainButton(): void {
+        const btnNode = this.ktaPanel?.getChildByName('PlayAgainBttn');
+        const button = btnNode?.getComponent(Button) ?? null;
+        if (!button) {
+            return;
+        }
+        this._playAgainButton = button;
+        button.node.on(Button.EventType.CLICK, this._onPlayAgainClick, this);
+    }
+
+    private _unbindPlayAgainButton(): void {
+        if (!this._playAgainButton?.node?.isValid) {
+            this._playAgainButton = null;
+            return;
+        }
+        this._playAgainButton.node.off(
+            Button.EventType.CLICK,
+            this._onPlayAgainClick,
+            this,
+        );
+        this._playAgainButton = null;
+    }
+
+    private _onPlayAgainClick(): void {
+        if (this._dying || !this._gameOver || !this._ktaPanelShown) {
+            return;
+        }
+        this.startNewRun();
+    }
+
     private _onMenuTap(): void {
-        if (this._playing) {
+        if (this._dying) {
+            return;
+        }
+        if (this._playing && !this._gameOver) {
             return;
         }
         if (this._gameOver) {
@@ -435,10 +503,21 @@ export class GameManager extends Component {
         if (player) {
             player.getComponent(PlayerFlight)?.resetToSpawn();
             player.getComponent(PlayerPathSensors)?.resetForNewRun();
-            player
-                .getComponent(PlayerAnimationController)
-                ?.resetForNewRun();
+            this._findPlayerAnimation(player)?.resetForNewRun();
         }
+    }
+
+    /** PlayerAnimationController висит на Pigeon, не на корне Player. */
+    private _findPlayerAnimation(
+        player: Node | null,
+    ): PlayerAnimationController | null {
+        if (!player?.isValid) {
+            return null;
+        }
+        return (
+            player.getComponent(PlayerAnimationController) ??
+            player.getComponentInChildren(PlayerAnimationController)
+        );
     }
 
     public resetScore(): void {
@@ -490,14 +569,25 @@ export class GameManager extends Component {
 
     /**
      * Урон: пропадает самое правое сердечко (включая клоны, затем якорь).
-     * При 0 HP — {@link gameOver}.
+     * При 0 HP — {@link beginDeathSequence} (клип смерти), кроме {@link instantKill}.
+     * @param deferDeathSequence true — 0 HP, но {@link beginDeathSequence} вызовет вызывающий после hazard-клипа.
+     * @returns true, если HP стало 0.
      */
-    public takeDamage(amount = 1, playDamageSound = true): void {
-        if (!this.isPlaying || amount <= 0) {
-            return;
+    public takeDamage(
+        amount = 1,
+        playDamageSound = true,
+        deferDeathSequence = false,
+    ): boolean {
+        if (
+            !this.isPlaying ||
+            amount <= 0 ||
+            this._awaitingDeathSequence ||
+            this._dying
+        ) {
+            return false;
         }
         if (this._damageInvincibleRemain > 0) {
-            return;
+            return false;
         }
 
         let lost = 0;
@@ -525,16 +615,83 @@ export class GameManager extends Component {
         }
 
         if (this._currentHp <= 0) {
+            if (deferDeathSequence) {
+                this._awaitingDeathSequence = true;
+                return true;
+            }
+            this.beginDeathSequence();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * После hazard-клипа при смертельном ударе — запуск {@link beginDeathSequence}.
+     */
+    public scheduleDeathAfterHazardAnimation(delaySec: number): void {
+        if (!this._awaitingDeathSequence) {
+            this.beginDeathSequence();
+            return;
+        }
+        this.unschedule(this._onDeferredDeathSequence);
+        this.scheduleOnce(
+            this._onDeferredDeathSequence,
+            Math.max(0.05, delaySec),
+        );
+    }
+
+    private _onDeferredDeathSequence = (): void => {
+        if (!this._awaitingDeathSequence || this._gameOver) {
+            return;
+        }
+        this._awaitingDeathSequence = false;
+        this.beginDeathSequence();
+    };
+
+    private _cancelDeferredDeathSequence(): void {
+        this.unschedule(this._onDeferredDeathSequence);
+        this._awaitingDeathSequence = false;
+    }
+
+    /**
+     * 0 HP в воздухе: стоп скролла/ввода, deathClip, затем {@link gameOver}.
+     */
+    public beginDeathSequence(): void {
+        if (this._dying || this._gameOver || !this._playing) {
+            return;
+        }
+        this._cancelDeferredDeathSequence();
+        this._dying = true;
+        this._damageInvincibleRemain = 0;
+        this.cancelWorldKickback();
+        this._resetScrollAndKickback();
+
+        const player = SceneNodeHub.instance?.player;
+        player?.getComponent(PlayerFlight)?.releaseInput();
+
+        const anim = this._findPlayerAnimation(player ?? null);
+        const started =
+            anim?.playDeath(() => {
+                this._dying = false;
+                this.gameOver();
+            }) === true;
+        if (!started) {
+            this._dying = false;
             this.gameOver();
         }
     }
 
     /**
-     * Смертельное препятствие (нода Ground): сразу 0 HP и game over.
+     * Касание Ground: птица уже «упала» — без deathClip, сразу game over.
      * Игнорирует неуязвимость после обычного урона.
      */
     public instantKill(): void {
-        if (!this.isPlaying || this._gameOver) {
+        if (
+            !this._playing ||
+            this._gameOver ||
+            this._dying ||
+            this._awaitingDeathSequence
+        ) {
             return;
         }
         for (const heart of this._heartNodes) {
@@ -553,6 +710,8 @@ export class GameManager extends Component {
         if (this._gameOver) {
             return;
         }
+        this._cancelDeferredDeathSequence();
+        this._dying = false;
         this._gameOver = true;
         this._playing = false;
         this._ktaPanelShown = false;
@@ -560,10 +719,54 @@ export class GameManager extends Component {
         if (!skipSound) {
             SoundController.instance?.play(SoundId.GameOver);
         }
-        SceneNodeHub.instance?.player
-            ?.getComponent(PlayerAnimationController)
+        this._findPlayerAnimation(SceneNodeHub.instance?.player ?? null)
             ?.freezeIdleFlightPose();
         this._showOverlayPanel(this.gameOverPanel);
+        this._playGameOverSeedCountRoll(this._score);
+    }
+
+    private _playGameOverSeedCountRoll(targetScore: number): void {
+        const label =
+            SceneNodeHub.instance?.gameOverSeedScoreNode?.getComponent(Label);
+        if (!label?.isValid) {
+            return;
+        }
+
+        this._stopGameOverSeedCountRoll();
+
+        const target = Math.max(0, Math.floor(targetScore));
+        this._gameOverSeedRollCounter.value = 0;
+        label.string = '0';
+
+        if (target <= 0) {
+            return;
+        }
+
+        const duration = Math.max(0.05, this.gameOverSeedCountRollDurationSec);
+        tween(this._gameOverSeedRollCounter)
+            .to(
+                duration,
+                { value: target },
+                {
+                    easing: 'quadOut',
+                    onUpdate: () => {
+                        if (label.isValid) {
+                            label.string = `${Math.round(this._gameOverSeedRollCounter.value)}`;
+                        }
+                    },
+                },
+            )
+            .call(() => {
+                if (label.isValid) {
+                    label.string = `${target}`;
+                }
+            })
+            .start();
+    }
+
+    private _stopGameOverSeedCountRoll(): void {
+        Tween.stopAllByTarget(this._gameOverSeedRollCounter);
+        this._gameOverSeedRollCounter.value = 0;
     }
 
     private _clearSpawnedHearts(): void {

@@ -1,0 +1,748 @@
+{
+  "version": "1.0.1",
+  "map": {
+    "anim": {
+      "time": 1779053010782.1191,
+      "uuid": "3caaec7c-a3f4-4d5d-b010-7027cade8ad4"
+    },
+    "Build-Deployer": {
+      "time": 1778399882563.4172,
+      "uuid": "236b4c5d-619c-4f40-9af8-39a56de100dc"
+    },
+    "prefabs": {
+      "time": 1778920669946.052,
+      "uuid": "4d2de024-27ad-4cc3-aed0-32cce4f783bf"
+    },
+    "scripts": {
+      "time": 1779033120473.9058,
+      "uuid": "2d2ade15-6328-4205-b78c-e160711bb109"
+    },
+    "sprites": {
+      "time": 1779092259600.9358,
+      "uuid": "bd4ab3a7-dc5d-4608-a56b-9fcfc6b745af"
+    },
+    "prefabs\\Chunks": {
+      "time": 1779006508934.3477,
+      "uuid": "ba9f9d6b-7a06-4cd8-8c46-41b4821fb028"
+    },
+    "sprites\\Player": {
+      "time": 1778591440795.8948,
+      "uuid": "a6730a02-e672-46cf-8758-87ce1fac6dc4"
+    },
+    "scripts\\EditorOnly.ts": {
+      "time": 1776883935746.2146,
+      "uuid": "1f438aeb-2d63-4843-b9cc-890590d46cd8"
+    },
+    "scripts\\ElectricCloudHazard.ts": {
+      "time": 1778850827807.056,
+      "uuid": "1b18a374-fe10-4bd1-a3a8-d5460c30b7af"
+    },
+    "scripts\\GameManager.ts": {
+      "time": 1779093674621.422,
+      "uuid": "c8942f1b-a26b-47a6-9565-5ba79f5ce692"
+    },
+    "scripts\\LevelGenerator.ts": {
+      "time": 1778962050696.6875,
+      "uuid": "b61559b0-61d2-4a34-a6a0-79930e868c43"
+    },
+    "scripts\\PlayerAnimationController.ts": {
+      "time": 1779088179712.5645,
+      "uuid": "c2b8a3e1-6d4f-42c1-9e2a-7f01d4e8b5c3"
+    },
+    "scripts\\PlayerController.ts": {
+      "time": 1779004111147.8845,
+      "uuid": "8132a2c0-cf42-470d-924c-6801a90ee39a"
+    },
+    "scripts\\PlayerFlight.ts": {
+      "time": 1779036575883.8457,
+      "uuid": "a7e4d2c8-9f01-4b3e-a6d5-8c2e1f0b4a9d"
+    },
+    "scripts\\PlayerPathSensors.ts": {
+      "time": 1778961463258.1582,
+      "uuid": "8c3a4f6d-8f38-4e83-9fd5-0db9b0f4a3e1"
+    },
+    "scripts\\SceneNodeHub.ts": {
+      "time": 1778433602391.517,
+      "uuid": "f3e8c9a1-2b4d-4e6f-8a0c-1d2e3f4a5b6c"
+    },
+    "scripts\\TowerWallHazard.ts": {
+      "time": 1778850184323.7686,
+      "uuid": "e8b14c33-5a2f-4c91-b9ed-1f6d0a8e3c72"
+    },
+    "scripts\\WeightedChunk.ts": {
+      "time": 1778415096992.354,
+      "uuid": "c3f18a2e-6b41-4d90-9e3c-7a8f5d2e1b90"
+    },
+    "anim.meta": {
+      "time": 1778354760707.725
+    },
+    "Build-Deployer.meta": {
+      "time": 1778399882556.8994
+    },
+    "prefabs.meta": {
+      "time": 1778341024566.7004
+    },
+    "scripts.meta": {
+      "time": 1778340959765.1653
+    },
+    "sprites.meta": {
+      "time": 1778344906068.672
+    },
+    "prefabs\\Chunks.meta": {
+      "time": 1778343135496.678
+    },
+    "sprites\\Player.meta": {
+      "time": 1778588824922.2961
+    },
+    "scripts\\EditorOnly.ts.meta": {
+      "time": 1775557191848.064
+    },
+    "scripts\\ElectricCloudHazard.ts.meta": {
+      "time": 1778409540827.0112
+    },
+    "scripts\\GameManager.ts.meta": {
+      "time": 1778351445409.0068
+    },
+    "scripts\\LevelGenerator.ts.meta": {
+      "time": 1778348406748.948
+    },
+    "scripts\\PlayerAnimationController.ts.meta": {
+      "time": 1778396548745.7588
+    },
+    "scripts\\PlayerController.ts.meta": {
+      "time": 1778409540827.5144
+    },
+    "scripts\\PlayerFlight.ts.meta": {
+      "time": 1778940588118.3306
+    },
+    "scripts\\PlayerPathSensors.ts.meta": {
+      "time": 1778503074653.474
+    },
+    "scripts\\SceneNodeHub.ts.meta": {
+      "time": 1778351699301.933
+    },
+    "scripts\\TowerWallHazard.ts.meta": {
+      "time": 1778434109877.697
+    },
+    "scripts\\WeightedChunk.ts.meta": {
+      "time": 1778415162024.64
+    },
+    "Main.scene": {
+      "time": 1779054238372.4065,
+      "uuid": "b7709a8d-cfa5-454e-8cc7-597be0e0aeed"
+    },
+    "Текстовый документ.txt": {
+      "time": 1778249608880.8142,
+      "uuid": "23eed167-5070-42de-a3ea-20177dd78098"
+    },
+    "anim\\PlayerFlashDamage.anim": {
+      "time": 1778598374869.1628,
+      "uuid": "b6788b28-1f6f-4e9a-99da-22f24547804c"
+    },
+    "anim\\PlayerFly.anim": {
+      "time": 1779052541389.545,
+      "uuid": "33f3a7a3-47be-4bd7-8668-498e65ce6653"
+    },
+    "anim\\PlayerStun.anim": {
+      "time": 1778598412611.7937,
+      "uuid": "1c60da38-6bc5-41be-a3f3-26946ead5a06"
+    },
+    "anim\\PlayerSurfaceRun.anim": {
+      "time": 1779025750217.23,
+      "uuid": "622b652b-b248-4f22-8ab3-5525fb448021"
+    },
+    "Build-Deployer\\Build-Deployer-config.txt": {
+      "time": 1778399871016.2761,
+      "uuid": "3408c164-a40f-4529-9173-1eea8ea71c6e"
+    },
+    "Build-Deployer\\Build-Deployer-start.bat": {
+      "time": 1777027253829.558,
+      "uuid": "faf05db6-8dcf-4e25-8100-50913a02bc45"
+    },
+    "Build-Deployer\\Build-Deployer-v1.0.1.ps1": {
+      "time": 1777030321790.162,
+      "uuid": "d577ec19-dfe5-4f45-afa3-5d38e7a758cb"
+    },
+    "Build-Deployer\\index.html": {
+      "time": 1777038135926.7502,
+      "uuid": "6fc774b8-f284-495e-ac0d-3c8e2fba849f"
+    },
+    "prefabs\\CloudBarrier.prefab": {
+      "time": 1778852044730.9084,
+      "uuid": "d4edcc55-a03c-4396-a9d7-f40c1adfb9f5"
+    },
+    "prefabs\\Player.prefab": {
+      "time": 1779088225429.5845,
+      "uuid": "0203e76e-995e-4a73-8c01-5b4d5f01a4ad"
+    },
+    "prefabs\\Sky.prefab": {
+      "time": 1779023168507.9924,
+      "uuid": "251c574b-2fd4-4fa9-bb32-b15470bde8b6"
+    },
+    "prefabs\\TowerBarrier.prefab": {
+      "time": 1778852225868.8813,
+      "uuid": "69942b09-ac30-4584-a621-e3d793b6ea48"
+    },
+    "prefabs\\TowerWall.prefab": {
+      "time": 1778570571441.152,
+      "uuid": "bd82274d-6a36-4d36-9a17-273c5012070d"
+    },
+    "prefabs\\TownBack.prefab": {
+      "time": 1779025055986.613,
+      "uuid": "96039ee0-9011-4e8a-90c9-1722dd68c1f3"
+    },
+    "sprites\\16+.png": {
+      "time": 1778339499103.042,
+      "uuid": "faa2c27a-0c95-4a49-a4bc-43bdbb93857e"
+    },
+    "sprites\\BoltBack.png": {
+      "time": 1778339329300.632,
+      "uuid": "894267a4-9eca-48f1-88b1-471d3eb67c7f"
+    },
+    "sprites\\BoltFront.png": {
+      "time": 1778339364628.3438,
+      "uuid": "b1d9af1e-4b35-4e0f-aa7f-770c6cfac6a5"
+    },
+    "sprites\\Cesar.png": {
+      "time": 1778340721622.9648,
+      "uuid": "f2404576-fa35-4dce-99b1-15e14dd5653b"
+    },
+    "sprites\\Cloud.png": {
+      "time": 1778339122839.9019,
+      "uuid": "73e47542-db4e-4f64-8258-819c4e390bc2"
+    },
+    "sprites\\CloudBack.png": {
+      "time": 1778339760429.1057,
+      "uuid": "5acff780-0e50-483b-a9a3-5ae772ab09da"
+    },
+    "sprites\\CloudsPackShot.png": {
+      "time": 1778339634637.496,
+      "uuid": "8611d253-9f07-4381-b0e6-50f73e179a1f"
+    },
+    "sprites\\Crowd.png": {
+      "time": 1779025463909.89,
+      "uuid": "453f4284-3a3f-463e-a675-4506ac63ed5b"
+    },
+    "sprites\\Ground.png": {
+      "time": 1778339217000.73,
+      "uuid": "f7ae7ad2-0bdb-4556-b68c-7ee122c76d9c"
+    },
+    "sprites\\HOLD-TO-FLY.png": {
+      "time": 1779092259573.9521,
+      "uuid": "b7ca455b-d8c6-4886-953a-685b7596f48c"
+    },
+    "sprites\\Logo.png": {
+      "time": 1778339477603.2178,
+      "uuid": "97051332-a67b-4b29-9206-1ed26967197f"
+    },
+    "sprites\\PackShot4Char.png": {
+      "time": 1778339711958.0122,
+      "uuid": "06cfe1ac-a3ce-405e-8198-52847170bdab"
+    },
+    "sprites\\PigeonFly.png": {
+      "time": 1778336385020.2876,
+      "uuid": "0dfe354a-1a54-4d71-bd07-a642bdd44034"
+    },
+    "sprites\\PigeonFlyLight.png": {
+      "time": 1778408326803.5837,
+      "uuid": "37b05030-fba9-46e0-9221-fd70d849cd9e"
+    },
+    "sprites\\PigeonFlyWing.png": {
+      "time": 1778338088670.6028,
+      "uuid": "ae90168a-d016-4a50-ba1b-3365747af0c4"
+    },
+    "sprites\\PigeonStun.png": {
+      "time": 1778520940186.6582,
+      "uuid": "ddb66518-bb12-4de6-9838-24ef52a1399f"
+    },
+    "sprites\\PolyDont.png": {
+      "time": 1779031396663.784,
+      "uuid": "22b6d9ee-1a05-4867-97db-98739780fd8e"
+    },
+    "sprites\\ShareBttn.png": {
+      "time": 1779031854385.489,
+      "uuid": "ab29178f-57a8-4e29-897e-777b2f086375"
+    },
+    "sprites\\SkyBack.png": {
+      "time": 1778339084545.7676,
+      "uuid": "54d51eff-8d69-4245-875b-1465c7407a3a"
+    },
+    "sprites\\Soldiers.png": {
+      "time": 1778340834866.2817,
+      "uuid": "83701867-af91-415a-acc8-2afe08104921"
+    },
+    "sprites\\StartPlate.png": {
+      "time": 1778338433596.653,
+      "uuid": "843863ad-176d-4e44-9480-7088db11ec81"
+    },
+    "sprites\\Tower.png": {
+      "time": 1778338304933.007,
+      "uuid": "756cee4b-e521-4bd6-ac48-7b319bf1325e"
+    },
+    "sprites\\Tower1.png": {
+      "time": 1778339166249.1653,
+      "uuid": "5c0f23a6-ca38-4abf-b018-20b96e5b45c8"
+    },
+    "sprites\\TownBack.png": {
+      "time": 1778404867760.1533,
+      "uuid": "f0a234eb-479f-4e26-9303-0a91d5974182"
+    },
+    "prefabs\\Chunks\\Chunk_1Tower.prefab": {
+      "time": 1779007527929.177,
+      "uuid": "2b19a339-7ffc-4ef2-827f-2846f4a88f10"
+    },
+    "prefabs\\Chunks\\Chunk_2Clouds.prefab": {
+      "time": 1778852121086.8906,
+      "uuid": "bacfe63a-2898-4b00-ab75-be967ca44aea"
+    },
+    "prefabs\\Chunks\\Chunk_Empty.prefab": {
+      "time": 1778417410806.8723,
+      "uuid": "3314d254-6572-48b1-9e43-9fed4d86f01e"
+    },
+    "sprites\\Player\\Empty.png": {
+      "time": 1778408419566.4326,
+      "uuid": "4bf94ec0-36c2-4db1-9199-d900a11e3079"
+    },
+    "sprites\\Player\\FootA.png": {
+      "time": 1778519051229.234,
+      "uuid": "1347e0dd-3095-4ea3-85bd-6cf4904804c1"
+    },
+    "sprites\\Player\\FootB.png": {
+      "time": 1778519087937.03,
+      "uuid": "ea665880-e639-4568-a2a8-cbbeeb5a065b"
+    },
+    "sprites\\Player\\PigeonRunBody.png": {
+      "time": 1778590042213.225,
+      "uuid": "b30dd910-ef0d-48cc-a809-5f31553684d7"
+    },
+    "sprites\\Player\\PigeonRunBodyWing.png": {
+      "time": 1778589018338.7942,
+      "uuid": "f7ed0d66-a8e7-4647-b230-b74d23272809"
+    },
+    "sprites\\Player\\PigeonStay.png": {
+      "time": 1778589374244.4153,
+      "uuid": "28325d7d-3262-4868-897a-594a375fbcbd"
+    },
+    "Текстовый документ.txt.meta": {
+      "time": 1778249627601.058
+    },
+    "anim\\PlayerFly.anim.meta": {
+      "time": 1778395875384.2742
+    },
+    "Main.scene.meta": {
+      "time": 1779027070051.4614
+    },
+    "anim\\PlayerStun.anim.meta": {
+      "time": 1778519795528.6216
+    },
+    "anim\\PlayerSurfaceRun.anim.meta": {
+      "time": 1778588708331.8987
+    },
+    "anim\\PlayerFlashDamage.anim.meta": {
+      "time": 1778588714204.5562
+    },
+    "Build-Deployer\\Build-Deployer-config.txt.meta": {
+      "time": 1778399883015.6477
+    },
+    "Build-Deployer\\Build-Deployer-start.bat.meta": {
+      "time": 1778399883061.1267
+    },
+    "prefabs\\CloudBarrier.prefab.meta": {
+      "time": 1778405342331.0393
+    },
+    "Build-Deployer\\Build-Deployer-v1.0.1.ps1.meta": {
+      "time": 1778399883063.2825
+    },
+    "prefabs\\Player.prefab.meta": {
+      "time": 1778343114861.0415
+    },
+    "prefabs\\TowerBarrier.prefab.meta": {
+      "time": 1778419062629.907
+    },
+    "prefabs\\TowerWall.prefab.meta": {
+      "time": 1778570571443.1538
+    },
+    "prefabs\\TownBack.prefab.meta": {
+      "time": 1778344086409.7124
+    },
+    "prefabs\\Sky.prefab.meta": {
+      "time": 1778344050997.4187
+    },
+    "Build-Deployer\\index.html.meta": {
+      "time": 1778399883124.5159
+    },
+    "sprites\\16+.png.meta": {
+      "time": 1778340980204.6062
+    },
+    "sprites\\BoltFront.png.meta": {
+      "time": 1778340980157.0608
+    },
+    "sprites\\Cesar.png.meta": {
+      "time": 1778340980182.6528
+    },
+    "sprites\\BoltBack.png.meta": {
+      "time": 1778340980195.3572
+    },
+    "sprites\\CloudBack.png.meta": {
+      "time": 1778340980674.6667
+    },
+    "sprites\\Cloud.png.meta": {
+      "time": 1778340980212.4482
+    },
+    "sprites\\Ground.png.meta": {
+      "time": 1778340980677.6655
+    },
+    "sprites\\Crowd.png.meta": {
+      "time": 1779007395611.9119
+    },
+    "sprites\\CloudsPackShot.png.meta": {
+      "time": 1778340980685.3262
+    },
+    "sprites\\PigeonFly.png.meta": {
+      "time": 1778340980796.8867
+    },
+    "sprites\\HOLD-TO-FLY.png.meta": {
+      "time": 1779093326777.644
+    },
+    "sprites\\PigeonFlyLight.png.meta": {
+      "time": 1778408466995.6248
+    },
+    "sprites\\PigeonFlyWing.png.meta": {
+      "time": 1778340981374.887
+    },
+    "sprites\\PackShot4Char.png.meta": {
+      "time": 1778340980987.896
+    },
+    "sprites\\PolyDont.png.meta": {
+      "time": 1779031422637.876
+    },
+    "sprites\\PigeonStun.png.meta": {
+      "time": 1778520952366.5774
+    },
+    "sprites\\ShareBttn.png.meta": {
+      "time": 1779031865766.4436
+    },
+    "sprites\\Logo.png.meta": {
+      "time": 1778340980986.4001
+    },
+    "sprites\\Soldiers.png.meta": {
+      "time": 1778340980849.4993
+    },
+    "sprites\\SkyBack.png.meta": {
+      "time": 1778340980980.2734
+    },
+    "sprites\\StartPlate.png.meta": {
+      "time": 1778340980989.4727
+    },
+    "sprites\\Tower.png.meta": {
+      "time": 1778340981085.5176
+    },
+    "prefabs\\Chunks\\Chunk_2Clouds.prefab.meta": {
+      "time": 1778405921602.4092
+    },
+    "sprites\\Tower1.png.meta": {
+      "time": 1778340981122.332
+    },
+    "prefabs\\Chunks\\Chunk_1Tower.prefab.meta": {
+      "time": 1778418585804.9104
+    },
+    "prefabs\\Chunks\\Chunk_Empty.prefab.meta": {
+      "time": 1778414723392.1785
+    },
+    "sprites\\Player\\Empty.png.meta": {
+      "time": 1778408467007.1897
+    },
+    "sprites\\Player\\FootA.png.meta": {
+      "time": 1778588829262.2478
+    },
+    "sprites\\Player\\FootB.png.meta": {
+      "time": 1778588829293.8616
+    },
+    "sprites\\Player\\PigeonRunBody.png.meta": {
+      "time": 1778590060535.6292
+    },
+    "sprites\\Player\\PigeonRunBodyWing.png.meta": {
+      "time": 1778589400285.261
+    },
+    "sprites\\Player\\PigeonStay.png.meta": {
+      "time": 1778589400310.9304
+    },
+    "sprites\\TownBack.png.meta": {
+      "time": 1778404886242.0974
+    },
+    "sprites\\hp_Icon.png.meta": {
+      "time": 1778920279325.4033
+    },
+    "sprites\\seed_Icon.png.meta": {
+      "time": 1778920562502.611
+    },
+    "sprites\\seed_Icon.png": {
+      "time": 1778920512824.7183,
+      "uuid": "9a52eea3-4918-49fb-bfc3-32adf1bd5efe"
+    },
+    "sprites\\hp_Icon.png": {
+      "time": 1778920236653.8147,
+      "uuid": "9e090628-a8a2-4145-a1dd-3f621b091883"
+    },
+    "sprites\\seed.png.meta": {
+      "time": 1778920562482.5708
+    },
+    "sprites\\seed.png": {
+      "time": 1778916636914.9802,
+      "uuid": "aa89ba13-36fb-42e0-951c-48aca82acfac"
+    },
+    "prefabs\\Chunks\\Chunk_SeedWave.prefab.meta": {
+      "time": 1778920611585.372
+    },
+    "prefabs\\Chunks\\Chunk_SeedWave.prefab": {
+      "time": 1778922500200.207,
+      "uuid": "aba828a0-a019-4724-989b-c6813e0dbee4"
+    },
+    "prefabs\\seed.prefab.meta": {
+      "time": 1778920669950.8718
+    },
+    "prefabs\\seed.prefab": {
+      "time": 1779018034338.447,
+      "uuid": "91c6a2f0-3366-47c5-8c13-2b84e76e8df6"
+    },
+    "scripts\\SeedPickup.ts.meta": {
+      "time": 1778921508746.7292
+    },
+    "scripts\\SeedPickup.ts": {
+      "time": 1779004111147.8845,
+      "uuid": "e66b3b1d-ff8d-4f1e-906d-bdffa64dc993"
+    },
+    "scripts\\FeatherFloat.ts.meta": {
+      "time": 1778959416612.4624
+    },
+    "scripts\\FeatherFloat.ts": {
+      "time": 1778959816595.2505,
+      "uuid": "24521e6e-cf56-497f-bbc8-2819b8c553e0"
+    },
+    "scripts\\MagnetPickable.ts.meta": {
+      "time": 1778961472599.8152
+    },
+    "scripts\\PickupBase.ts.meta": {
+      "time": 1778961472601.1821
+    },
+    "scripts\\MagnetPickable.ts": {
+      "time": 1778962493941.8037,
+      "uuid": "6d115a64-8ffa-4ba1-b99f-c1ce690737db"
+    },
+    "scripts\\PickupBase.ts": {
+      "time": 1779004111146.885,
+      "uuid": "8731dd14-d241-4afd-899e-b461f1f113e9"
+    },
+    "scripts\\SoundController.ts.meta": {
+      "time": 1779004438189.5588
+    },
+    "scripts\\SoundLibrary.ts.meta": {
+      "time": 1779004438191.5579
+    },
+    "scripts\\SoundController.ts": {
+      "time": 1779007250255.3633,
+      "uuid": "323dd74b-2d7d-4bfc-804f-b9ed4d5d0f26"
+    },
+    "scripts\\SoundLibrary.ts": {
+      "time": 1779006329363.0825,
+      "uuid": "2eac656f-28a0-4056-b682-7ab7bf8ea166"
+    },
+    "sounds.meta": {
+      "time": 1779005042614.132
+    },
+    "sounds": {
+      "time": 1779017945951.4062,
+      "uuid": "0f5c6c0d-45ca-4861-b49c-5b907833521d"
+    },
+    "sounds\\SeedCrack2.mp3.meta": {
+      "time": 1779005069050.33
+    },
+    "sounds\\SeedCrack2.mp3": {
+      "time": 1779003840174.7444,
+      "uuid": "2bcbf5be-b501-4e83-9f9f-b448b1425285"
+    },
+    "sounds\\SeedCrack1.mp3.meta": {
+      "time": 1779005069082.6462
+    },
+    "sounds\\SeedCrack1.mp3": {
+      "time": 1779003738421.021,
+      "uuid": "e0625ff0-6fb2-4868-9932-00e181712da3"
+    },
+    "sounds\\SeedCrack3.mp3.meta": {
+      "time": 1779005069114.3965
+    },
+    "sounds\\SeedCrack3.mp3": {
+      "time": 1779004622878.467,
+      "uuid": "59460a6a-7f69-43a5-a37f-c953bae21abd"
+    },
+    "sounds\\SeedCrack4.mp3.meta": {
+      "time": 1779005069113.397
+    },
+    "sounds\\SeedCrack4.mp3": {
+      "time": 1779004662513.3853,
+      "uuid": "53ab4fcc-75cf-404e-add3-054b1d0a8843"
+    },
+    "sounds\\SeedCrack5.mp3.meta": {
+      "time": 1779005069113.397
+    },
+    "sounds\\SeedCrack5.mp3": {
+      "time": 1779004735473.3052,
+      "uuid": "5d5acbc4-5c4b-4fd3-b68e-986961cbfab4"
+    },
+    "sounds\\SeedCrack6.mp3.meta": {
+      "time": 1779005069097.638
+    },
+    "sounds\\SeedCrack6.mp3": {
+      "time": 1779017908216.4514,
+      "uuid": "ec161a05-3e24-4ff3-a039-d707ad149adb"
+    },
+    "prefabs\\Chunks\\Chunk_Start.prefab.meta": {
+      "time": 1779006508958.0044
+    },
+    "prefabs\\Chunks\\Chunk_Start.prefab": {
+      "time": 1779025714438.743,
+      "uuid": "cd15523e-58d9-4829-83e6-0411dcc4b9f3"
+    },
+    "sounds\\WingFlap5.mp3.meta": {
+      "time": 1779009723900.5737
+    },
+    "sounds\\WingFlap3.mp3.meta": {
+      "time": 1779009723974.9595
+    },
+    "sounds\\WingFlap4.mp3.meta": {
+      "time": 1779009724020.364
+    },
+    "sounds\\WingFlap1.mp3.meta": {
+      "time": 1779009724099.496
+    },
+    "sounds\\WingFlap2.mp3.meta": {
+      "time": 1779009724119.5393
+    },
+    "sounds\\WingFlap6.mp3.meta": {
+      "time": 1779009724137.191
+    },
+    "sounds\\WingFlap5.mp3": {
+      "time": 1779007860453.2412,
+      "uuid": "54ccfb1c-5d9a-4b84-aaad-f32528f817f9"
+    },
+    "sounds\\WingFlap3.mp3": {
+      "time": 1779007731838.7114,
+      "uuid": "405d50e5-09d4-40f7-b916-ac9630c7ca0d"
+    },
+    "sounds\\WingFlap4.mp3": {
+      "time": 1779007782634.1052,
+      "uuid": "cc93da05-2314-42ec-9229-f90aa6b4a2ba"
+    },
+    "sounds\\WingFlap1.mp3": {
+      "time": 1779007085547.5325,
+      "uuid": "0d74909b-961c-49a4-a50b-bf7f078bdb3f"
+    },
+    "sounds\\WingFlap2.mp3": {
+      "time": 1779007752973.1807,
+      "uuid": "b81b94c2-0a23-40c5-bf7f-647fe82ab49e"
+    },
+    "sounds\\WingFlap6.mp3": {
+      "time": 1779008833328.0396,
+      "uuid": "5f6c634d-2478-43de-943c-9a88fc6afec8"
+    },
+    "anim\\PlayerStay.anim.meta": {
+      "time": 1779024498111.421
+    },
+    "anim\\PlayerStay.anim": {
+      "time": 1779024653289.88,
+      "uuid": "05fcafd3-4e55-4d6f-b122-af8c8204f94e"
+    },
+    "sprites\\DeadPlayer.png.meta": {
+      "time": 1779027507354.4746
+    },
+    "sprites\\DeadPlayerFoot.png.meta": {
+      "time": 1779027507386.968
+    },
+    "sprites\\GOHeap.png.meta": {
+      "time": 1779027507518.9856
+    },
+    "sprites\\DeadPlayer.png": {
+      "time": 1779027230118.6294,
+      "uuid": "c3436f27-5c1f-4b29-a378-f3a71651af48"
+    },
+    "sprites\\DeadPlayerFoot.png": {
+      "time": 1779027278205.0737,
+      "uuid": "f7713266-4b25-40b6-9be2-13e709c261ac"
+    },
+    "sprites\\GOHeap.png": {
+      "time": 1779026468217.5037,
+      "uuid": "ea170c23-9603-4c01-b370-0aa3c5a45b02"
+    },
+    "sprites\\GOScoreboard.png.meta": {
+      "time": 1779092216982.6743
+    },
+    "sprites\\GOScoreboard.png": {
+      "time": 1779092212341.3975,
+      "uuid": "8366b5a4-faf6-435b-b3de-b8ad2e936cd8"
+    },
+    "sprites\\BlackGradientAlpha.png.meta": {
+      "time": 1779029996124.2285
+    },
+    "sprites\\BlueGradientAlpha.png.meta": {
+      "time": 1779029996143.8132
+    },
+    "sprites\\BlackGradientAlpha.png": {
+      "time": 1779029561596.7883,
+      "uuid": "684bd2b4-5cc6-428a-b3c6-87ef64af0c0e"
+    },
+    "sprites\\BlueGradientAlpha.png": {
+      "time": 1779029842939.892,
+      "uuid": "a8d5ce37-b31a-4b6e-a33f-1c62a27cd6ae"
+    },
+    "sprites\\WoodSign1.png.meta": {
+      "time": 1779030723914.7854
+    },
+    "sprites\\WoodSign1.png": {
+      "time": 1779030712512.5747,
+      "uuid": "b4c70b7a-ee1e-4362-b13b-4dd4b8f96abd"
+    },
+    "sprites\\YouTubeBttn.png.meta": {
+      "time": 1779031734903.381
+    },
+    "sprites\\YouTubeBttn.png": {
+      "time": 1779031724659.124,
+      "uuid": "0dfb2e52-f467-40f5-a3c1-5bce95f1ffa5"
+    },
+    "sprites\\PlayAgainBttn.png.meta": {
+      "time": 1779031919951.7173
+    },
+    "sprites\\PlayAgainBttn.png": {
+      "time": 1779031917313.7073,
+      "uuid": "4ffe2842-a3f7-4eef-b53e-9d9a3b82d33d"
+    },
+    "anim\\GameOverPanelAnim.anim.meta": {
+      "time": 1779032447872.245
+    },
+    "anim\\GameOverPanelAnim.anim": {
+      "time": 1779092134911.1086,
+      "uuid": "bee44714-4d72-43c2-a586-cd7d0a7a26fa"
+    },
+    "scripts\\CameraShake.ts.meta": {
+      "time": 1779033120608.3694
+    },
+    "scripts\\CameraShake.ts": {
+      "time": 1779033190938.712,
+      "uuid": "b3241413-12b8-4d39-be90-a9f1cb7c3234"
+    },
+    "anim\\PlayerDeath.anim.meta": {
+      "time": 1779036289246.7756
+    },
+    "anim\\PlayerDeath.anim": {
+      "time": 1779094044007.706,
+      "uuid": "81b075cb-7603-43a9-b6ff-81bd211c2151"
+    },
+    "anim\\DeadPlayer.anim.meta": {
+      "time": 1779053010786.221
+    },
+    "anim\\DeadPlayer.anim": {
+      "time": 1779053832069.4575,
+      "uuid": "b5dea272-5a06-4257-a8ed-31879493493b"
+    }
+  },
+  "missing": {}
+}

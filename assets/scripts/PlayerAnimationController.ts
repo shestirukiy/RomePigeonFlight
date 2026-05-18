@@ -4,6 +4,10 @@ import {
     Animation,
     AnimationClip,
     AnimationState,
+    Node,
+    Tween,
+    tween,
+    Vec3,
 } from 'cc';
 import { GameManager } from './GameManager';
 import { PlayerFlight } from './PlayerFlight';
@@ -78,6 +82,36 @@ export class PlayerAnimationController extends Component {
     })
     surfaceRunClip: AnimationClip | null = null;
 
+    @property({
+        type: AnimationClip,
+        displayName: 'Death Clip',
+        tooltip:
+            'Смерть на месте (0 HP не от Ground). Один раз; по окончании — game over. Тот же клип в Clips у Animation.',
+    })
+    deathClip: AnimationClip | null = null;
+
+    @property({
+        type: Node,
+        displayName: 'Death Fall Node',
+        tooltip:
+            'Узел, который едет вниз при смерти (обычно PigeonBody). Пусто — Player/Pigeon/PigeonBody.',
+    })
+    deathFallNode: Node | null = null;
+
+    @property({
+        displayName: 'Death Fall Delta Y',
+        tooltip:
+            'На сколько local Y сместить узел за время death-клипа (от текущей позы, отрицательное = вниз).',
+    })
+    deathFallDeltaY = -900;
+
+    @property({
+        displayName: 'Death Sequence Duration',
+        tooltip:
+            'Сколько ждать до game over, если длина клипа в Animation = 0. Обычно совпадает с PlayerDeath (~1.83).',
+    })
+    deathSequenceDurationSec = 1.85;
+
     private _anim: Animation | null = null;
     private _flapState: AnimationState | null = null;
     private _flight: PlayerFlight | null = null;
@@ -102,14 +136,29 @@ export class PlayerAnimationController extends Component {
     /** Сейчас крутится stayClip (игра не идёт). */
     private _waitingStayActive = false;
 
+    /** Проигрывается deathClip до вызова onComplete. */
+    private _deathSequenceActive = false;
+
+    /** Local position PigeonBody в префабе — сброс после забега. */
+    private readonly _deathFallSpawnLocal = new Vec3();
+
+    private _deathWingWasActive = true;
+
     onLoad() {
+        const pigeon = this._resolvePigeonRoot() ?? this.node;
         this._anim =
+            pigeon.getComponent(Animation) ??
             this.getComponent(Animation) ??
             this.getComponentInChildren(Animation);
         this._flight =
             this.getComponent(PlayerFlight) ??
             this.node.parent?.getComponent(PlayerFlight) ??
             null;
+
+        const fallNode = this._resolveDeathFallNode();
+        if (fallNode) {
+            this._deathFallSpawnLocal.set(fallNode.position);
+        }
     }
 
     start() {
@@ -122,7 +171,11 @@ export class PlayerAnimationController extends Component {
      * Hazard layer: hold wing-flap logic while clip / timer runs.
      */
     public notifyElectricDamage(overlayDurationSec: number): void {
-        if (overlayDurationSec <= 0) {
+        if (
+            overlayDurationSec <= 0 ||
+            this._deathSequenceActive ||
+            GameManager.game?.isDying
+        ) {
             return;
         }
         this._surfaceRunActive = false;
@@ -171,7 +224,7 @@ export class PlayerAnimationController extends Component {
 
     /** Препятствие «стена»: пауза хлопанья на время клипа удара. */
     public notifyWallHit(overlayDurationSec: number): void {
-        if (overlayDurationSec <= 0) {
+        if (overlayDurationSec <= 0 || this._deathSequenceActive || GameManager.game?.isDying) {
             return;
         }
         this._surfaceRunActive = false;
@@ -215,8 +268,183 @@ export class PlayerAnimationController extends Component {
         this._restoreFlapClip(this._wasHeld ? this.flapSpeedPressed : this.flapSpeedInAir);
     }
 
+    /**
+     * 0 HP в воздухе: смерть на месте; по окончании клипа — onComplete (обычно gameOver).
+     * @returns false если клипа нет — вызывающий сразу завершает забег.
+     */
+    public playDeath(onComplete?: () => void): boolean {
+        this.unschedule(this._onDeathSequenceEnd);
+        this._deathSequenceActive = true;
+        this._electricOverlayRemain = 0;
+        this._wallHitOverlayRemain = 0;
+        this._surfaceRunActive = false;
+        this._tailTimeLeft = 0;
+        this._wasHeld = false;
+        this._waitingStayActive = false;
+        this._flapState = null;
+
+        if (!this._anim || !this.deathClip) {
+            this._deathSequenceActive = false;
+            return false;
+        }
+
+        this._ensureClipOnAnimator(this.deathClip);
+
+        const name = this.deathClip.name;
+        this._stopAllAnimatorStates();
+        if (typeof this._anim.crossFade === 'function') {
+            this._anim.crossFade(name, 0);
+        } else {
+            this._anim.play(name);
+        }
+
+        const st = this._anim.getState(name);
+        if (st) {
+            st.wrapMode = AnimationClip.WrapMode.Normal;
+            st.speed = 1;
+            st.time = 0;
+            st.sample();
+            st.resume();
+        }
+
+        const duration = this._resolveDeathSequenceDuration(st);
+        this._hideWingForDeath();
+        this._startDeathFallTween(duration);
+        this.scheduleOnce(this._onDeathSequenceEnd, duration);
+        this._deathCompleteCallback = onComplete ?? null;
+        return true;
+    }
+
+    private _ensureClipOnAnimator(clip: AnimationClip): void {
+        if (!this._anim) {
+            return;
+        }
+        const clips = this._anim.clips;
+        if (clips.indexOf(clip) >= 0) {
+            return;
+        }
+        this._anim.addClip(clip);
+    }
+
+    /** Снять PlayerFly / Stay и др., чтобы deathClip единолично вёл spriteFrame. */
+    private _stopAllAnimatorStates(): void {
+        if (!this._anim) {
+            return;
+        }
+        this._anim.stop();
+        for (const clip of this._anim.clips) {
+            if (!clip) {
+                continue;
+            }
+            const st = this._anim.getState(clip.name);
+            if (st) {
+                st.stop();
+            }
+        }
+    }
+
+    private _resolveDeathSequenceDuration(st: AnimationState | null): number {
+        let duration = this.deathSequenceDurationSec;
+        if (this.deathClip && this.deathClip.duration > 0) {
+            duration = Math.max(duration, this.deathClip.duration);
+        }
+        if (st && st.duration > 0) {
+            duration = Math.max(
+                duration,
+                st.duration / Math.max(Math.abs(st.speed), 1e-5),
+            );
+        }
+        return Math.max(0.05, duration);
+    }
+
+    private _deathCompleteCallback: (() => void) | null = null;
+
+    private _onDeathSequenceEnd = (): void => {
+        if (!this._deathSequenceActive) {
+            return;
+        }
+        this._deathSequenceActive = false;
+        const cb = this._deathCompleteCallback;
+        this._deathCompleteCallback = null;
+        cb?.();
+    };
+
+    private _resolvePigeonRoot(): Node | null {
+        if (this.node.name === 'Pigeon') {
+            return this.node;
+        }
+        return this.node.getChildByName('Pigeon');
+    }
+
+    /** Спрайт тела — всегда PigeonBody, не путать с узлом падения. */
+    private _resolvePigeonBodyNode(): Node | null {
+        return this._resolvePigeonRoot()?.getChildByName('PigeonBody') ?? null;
+    }
+
+    private _resolveDeathFallNode(): Node | null {
+        if (this.deathFallNode?.isValid) {
+            const body = this._resolvePigeonBodyNode();
+            if (body && this.deathFallNode !== body) {
+                const name = this.deathFallNode.name;
+                if (name === 'Pigeon' || name === 'Player') {
+                    return body;
+                }
+            }
+            return this.deathFallNode;
+        }
+        return this._resolvePigeonBodyNode();
+    }
+
+    /** Падение вниз от текущей local-позы (без сброса к 0-му кадру клипа). */
+    private _startDeathFallTween(durationSec: number): void {
+        const fallNode = this._resolveDeathFallNode();
+        if (!fallNode || Math.abs(this.deathFallDeltaY) < 1e-3) {
+            return;
+        }
+        Tween.stopAllByTarget(fallNode);
+        const from = fallNode.position.clone();
+        const to = new Vec3(from.x, from.y + this.deathFallDeltaY, from.z);
+        tween(fallNode).to(durationSec, { position: to }, { easing: 'quadIn' }).start();
+    }
+
+    private _resetDeathFallPose(): void {
+        const fallNode = this._resolveDeathFallNode();
+        if (!fallNode?.isValid) {
+            return;
+        }
+        Tween.stopAllByTarget(fallNode);
+        fallNode.setPosition(this._deathFallSpawnLocal);
+
+        const wing = fallNode.getChildByName('PigeonFlyWing');
+        if (wing?.isValid) {
+            wing.active = this._deathWingWasActive;
+        }
+    }
+
+    /** После смерти playDeath выключает узел — для забега / бега снова включаем. */
+    private _restoreWingVisibility(): void {
+        const wing = this._resolvePigeonBodyNode()?.getChildByName('PigeonFlyWing');
+        if (wing?.isValid) {
+            wing.active = true;
+        }
+    }
+
+    /** Спрайты тела/ног — только из deathClip; код лишь прячет крыло, если клип его не гасит. */
+    private _hideWingForDeath(): void {
+        const wing = this._resolvePigeonBodyNode()?.getChildByName('PigeonFlyWing');
+        if (wing?.isValid) {
+            this._deathWingWasActive = wing.active;
+            wing.active = false;
+        }
+    }
+
     /** Рестарт забега: сброс стана / удара и снова клип полёта. */
     public resetForNewRun(): void {
+        this.unschedule(this._onDeathSequenceEnd);
+        this._deathSequenceActive = false;
+        this._deathCompleteCallback = null;
+        this._resetDeathFallPose();
+        this._restoreWingVisibility();
         this._electricOverlayRemain = 0;
         this._wallHitOverlayRemain = 0;
         this._surfaceRunActive = false;
@@ -288,9 +516,14 @@ export class PlayerAnimationController extends Component {
     }
 
     update(dt: number) {
+        if (this._deathSequenceActive) {
+            return;
+        }
+
         const playing = GameManager.game?.isPlaying === true;
+        const dying = GameManager.game?.isDying === true;
         if (!playing || !this._anim) {
-            if (!playing && !this._waitingStayActive) {
+            if (!playing && !dying && !this._waitingStayActive) {
                 this.playWaitingStay();
             }
             this._tailTimeLeft = 0;
@@ -329,11 +562,18 @@ export class PlayerAnimationController extends Component {
             this._wallHitOverlayRemain <= 0 &&
             this._electricOverlayRemain <= 0
         ) {
+            if (GameManager.game?.isAwaitingDeathSequence) {
+                return;
+            }
             if (this._surfaceRunActive && this.surfaceRunClip) {
                 this._anim.play(this.surfaceRunClip.name);
             } else {
                 this._resumeFlapPlayback();
             }
+        }
+
+        if (GameManager.game?.isAwaitingDeathSequence) {
+            return;
         }
 
         if (

@@ -1,0 +1,1623 @@
+{
+  "3caaec7c-a3f4-4d5d-b010-7027cade8ad4": {
+    "url": "db://assets/anim",
+    "value": {},
+    "versionCode": 1
+  },
+  "236b4c5d-619c-4f40-9af8-39a56de100dc": {
+    "url": "db://assets/Build-Deployer",
+    "value": {},
+    "versionCode": 1
+  },
+  "4d2de024-27ad-4cc3-aed0-32cce4f783bf": {
+    "url": "db://assets/prefabs",
+    "value": {},
+    "versionCode": 1
+  },
+  "2d2ade15-6328-4205-b78c-e160711bb109": {
+    "url": "db://assets/scripts",
+    "value": {},
+    "versionCode": 1
+  },
+  "bd4ab3a7-dc5d-4608-a56b-9fcfc6b745af": {
+    "url": "db://assets/sprites",
+    "value": {},
+    "versionCode": 1
+  },
+  "ba9f9d6b-7a06-4cd8-8c46-41b4821fb028": {
+    "url": "db://assets/prefabs/Chunks",
+    "value": {},
+    "versionCode": 1
+  },
+  "a6730a02-e672-46cf-8758-87ce1fac6dc4": {
+    "url": "db://assets/sprites/Player",
+    "value": {},
+    "versionCode": 1
+  },
+  "1f438aeb-2d63-4843-b9cc-890590d46cd8": {
+    "url": "db://assets/scripts/EditorOnly.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "1b18a374-fe10-4bd1-a3a8-d5460c30b7af": {
+    "url": "db://assets/scripts/ElectricCloudHazard.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "c8942f1b-a26b-47a6-9565-5ba79f5ce692": {
+    "url": "db://assets/scripts/GameManager.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "b61559b0-61d2-4a34-a6a0-79930e868c43": {
+    "url": "db://assets/scripts/LevelGenerator.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "c2b8a3e1-6d4f-42c1-9e2a-7f01d4e8b5c3": {
+    "url": "db://assets/scripts/PlayerAnimationController.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "8132a2c0-cf42-470d-924c-6801a90ee39a": {
+    "url": "db://assets/scripts/PlayerController.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "a7e4d2c8-9f01-4b3e-a6d5-8c2e1f0b4a9d": {
+    "url": "db://assets/scripts/PlayerFlight.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "8c3a4f6d-8f38-4e83-9fd5-0db9b0f4a3e1": {
+    "url": "db://assets/scripts/PlayerPathSensors.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "f3e8c9a1-2b4d-4e6f-8a0c-1d2e3f4a5b6c": {
+    "url": "db://assets/scripts/SceneNodeHub.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "e8b14c33-5a2f-4c91-b9ed-1f6d0a8e3c72": {
+    "url": "db://assets/scripts/TowerWallHazard.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "c3f18a2e-6b41-4d90-9e3c-7a8f5d2e1b90": {
+    "url": "db://assets/scripts/WeightedChunk.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "b7709a8d-cfa5-454e-8cc7-597be0e0aeed": {
+    "url": "db://assets/Main.scene",
+    "value": {
+      "depends": [
+        "96039ee0-9011-4e8a-90c9-1722dd68c1f3",
+        "251c574b-2fd4-4fa9-bb32-b15470bde8b6",
+        "3314d254-6572-48b1-9e43-9fed4d86f01e",
+        "aba828a0-a019-4724-989b-c6813e0dbee4",
+        "0203e76e-995e-4a73-8c01-5b4d5f01a4ad",
+        "b6788b28-1f6f-4e9a-99da-22f24547804c",
+        "05fcafd3-4e55-4d6f-b122-af8c8204f94e",
+        "81b075cb-7603-43a9-b6ff-81bd211c2151",
+        "33f3a7a3-47be-4bd7-8668-498e65ce6653",
+        "7d8f9b89-4fd1-4c9f-a3ab-38ec7cded7ca@f9941",
+        "d4edcc55-a03c-4396-a9d7-f40c1adfb9f5",
+        "9e090628-a8a2-4145-a1dd-3f621b091883@f9941",
+        "9a52eea3-4918-49fb-bfc3-32adf1bd5efe@f9941",
+        "b4c70b7a-ee1e-4362-b13b-4dd4b8f96abd@f9941",
+        "a8d5ce37-b31a-4b6e-a33f-1c62a27cd6ae@f9941",
+        "ea170c23-9603-4c01-b370-0aa3c5a45b02@f9941",
+        "8366b5a4-faf6-435b-b3de-b8ad2e936cd8@f9941",
+        "f7713266-4b25-40b6-9be2-13e709c261ac@f9941",
+        "b5dea272-5a06-4257-a8ed-31879493493b",
+        "c3436f27-5c1f-4b29-a378-f3a71651af48@f9941",
+        "aa89ba13-36fb-42e0-951c-48aca82acfac@f9941",
+        "684bd2b4-5cc6-428a-b3c6-87ef64af0c0e@f9941",
+        "bee44714-4d72-43c2-a586-cd7d0a7a26fa",
+        "e0625ff0-6fb2-4868-9932-00e181712da3",
+        "2bcbf5be-b501-4e83-9f9f-b448b1425285",
+        "59460a6a-7f69-43a5-a37f-c953bae21abd",
+        "53ab4fcc-75cf-404e-add3-054b1d0a8843",
+        "5d5acbc4-5c4b-4fd3-b68e-986961cbfab4",
+        "ec161a05-3e24-4ff3-a039-d707ad149adb",
+        "0d74909b-961c-49a4-a50b-bf7f078bdb3f",
+        "b81b94c2-0a23-40c5-bf7f-647fe82ab49e",
+        "405d50e5-09d4-40f7-b916-ac9630c7ca0d",
+        "cc93da05-2314-42ec-9229-f90aa6b4a2ba",
+        "54ccfb1c-5d9a-4b84-aaad-f32528f817f9",
+        "5f6c634d-2478-43de-943c-9a88fc6afec8",
+        "22b6d9ee-1a05-4867-97db-98739780fd8e@f9941",
+        "0dfb2e52-f467-40f5-a3c1-5bce95f1ffa5@f9941",
+        "06cfe1ac-a3ce-405e-8198-52847170bdab@f9941",
+        "97051332-a67b-4b29-9206-1ed26967197f@f9941",
+        "ab29178f-57a8-4e29-897e-777b2f086375@f9941",
+        "4ffe2842-a3f7-4eef-b53e-9d9a3b82d33d@f9941",
+        "cd15523e-58d9-4829-83e6-0411dcc4b9f3",
+        "bacfe63a-2898-4b00-ab75-be967ca44aea",
+        "2b19a339-7ffc-4ef2-827f-2846f4a88f10"
+      ],
+      "dependScripts": [
+        "b61559b0-61d2-4a34-a6a0-79930e868c43",
+        "b3241413-12b8-4d39-be90-a9f1cb7c3234",
+        "1f438aeb-2d63-4843-b9cc-890590d46cd8",
+        "CC3eba29-7abb-723a-f7ab-ae275e2277e8",
+        "8132a2c0-cf42-470d-924c-6801a90ee39a",
+        "1b18a374-fe10-4bd1-a3a8-d5460c30b7af",
+        "323dd74b-2d7d-4bfc-804f-b9ed4d5d0f26",
+        "2eac656f-28a0-4056-b682-7ab7bf8ea166",
+        "c8942f1b-a26b-47a6-9565-5ba79f5ce692",
+        "f3e8c9a1-2b4d-4e6f-8a0c-1d2e3f4a5b6c"
+      ]
+    },
+    "versionCode": 2
+  },
+  "b6788b28-1f6f-4e9a-99da-22f24547804c": {
+    "url": "db://assets/anim/PlayerFlashDamage.anim",
+    "value": {
+      "depends": [
+        "0dfe354a-1a54-4d71-bd07-a642bdd44034@f9941",
+        "37b05030-fba9-46e0-9221-fd70d849cd9e@f9941",
+        "4bf94ec0-36c2-4db1-9199-d900a11e3079@f9941"
+      ]
+    },
+    "versionCode": 2
+  },
+  "33f3a7a3-47be-4bd7-8668-498e65ce6653": {
+    "url": "db://assets/anim/PlayerFly.anim",
+    "value": {
+      "depends": [
+        "0dfe354a-1a54-4d71-bd07-a642bdd44034@f9941",
+        "4bf94ec0-36c2-4db1-9199-d900a11e3079@f9941",
+        "ae90168a-d016-4a50-ba1b-3365747af0c4@f9941"
+      ]
+    },
+    "versionCode": 2
+  },
+  "b2f1960b-b181-4904-b464-96d4f437bbf9": {
+    "url": "db://assets/anim/PlayerStay.anim",
+    "value": {},
+    "versionCode": 2
+  },
+  "23eed167-5070-42de-a3ea-20177dd78098": {
+    "url": "db://assets/Текстовый документ.txt",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "1c60da38-6bc5-41be-a3f3-26946ead5a06": {
+    "url": "db://assets/anim/PlayerStun.anim",
+    "value": {
+      "depends": [
+        "ddb66518-bb12-4de6-9838-24ef52a1399f@f9941",
+        "4bf94ec0-36c2-4db1-9199-d900a11e3079@f9941"
+      ]
+    },
+    "versionCode": 2
+  },
+  "622b652b-b248-4f22-8ab3-5525fb448021": {
+    "url": "db://assets/anim/PlayerSurfaceRun.anim",
+    "value": {
+      "depends": [
+        "b30dd910-ef0d-48cc-a809-5f31553684d7@f9941",
+        "ea665880-e639-4568-a2a8-cbbeeb5a065b@f9941",
+        "1347e0dd-3095-4ea3-85bd-6cf4904804c1@f9941",
+        "f7ed0d66-a8e7-4647-b230-b74d23272809@f9941",
+        "4bf94ec0-36c2-4db1-9199-d900a11e3079@f9941"
+      ]
+    },
+    "versionCode": 2
+  },
+  "3408c164-a40f-4529-9173-1eea8ea71c6e": {
+    "url": "db://assets/Build-Deployer/Build-Deployer-config.txt",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "faf05db6-8dcf-4e25-8100-50913a02bc45": {
+    "url": "db://assets/Build-Deployer/Build-Deployer-start.bat",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "d577ec19-dfe5-4f45-afa3-5d38e7a758cb": {
+    "url": "db://assets/Build-Deployer/Build-Deployer-v1.0.1.ps1",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "6fc774b8-f284-495e-ac0d-3c8e2fba849f": {
+    "url": "db://assets/Build-Deployer/index.html",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "d4edcc55-a03c-4396-a9d7-f40c1adfb9f5": {
+    "url": "db://assets/prefabs/CloudBarrier.prefab",
+    "value": {
+      "depends": [
+        "73e47542-db4e-4f64-8258-819c4e390bc2@f9941"
+      ],
+      "dependScripts": [
+        "1b18a374-fe10-4bd1-a3a8-d5460c30b7af"
+      ]
+    },
+    "versionCode": 2
+  },
+  "0203e76e-995e-4a73-8c01-5b4d5f01a4ad": {
+    "url": "db://assets/prefabs/Player.prefab",
+    "value": {
+      "depends": [
+        "ae90168a-d016-4a50-ba1b-3365747af0c4@f9941",
+        "0dfe354a-1a54-4d71-bd07-a642bdd44034@f9941",
+        "33f3a7a3-47be-4bd7-8668-498e65ce6653",
+        "b6788b28-1f6f-4e9a-99da-22f24547804c",
+        "1c60da38-6bc5-41be-a3f3-26946ead5a06",
+        "622b652b-b248-4f22-8ab3-5525fb448021",
+        "05fcafd3-4e55-4d6f-b122-af8c8204f94e",
+        "81b075cb-7603-43a9-b6ff-81bd211c2151",
+        "c3436f27-5c1f-4b29-a378-f3a71651af48@f9941",
+        "f7713266-4b25-40b6-9be2-13e709c261ac@f9941"
+      ],
+      "dependScripts": [
+        "c2b8a3e1-6d4f-42c1-9e2a-7f01d4e8b5c3",
+        "a7e4d2c8-9f01-4b3e-a6d5-8c2e1f0b4a9d",
+        "8c3a4f6d-8f38-4e83-9fd5-0db9b0f4a3e1"
+      ]
+    },
+    "versionCode": 2
+  },
+  "251c574b-2fd4-4fa9-bb32-b15470bde8b6": {
+    "url": "db://assets/prefabs/Sky.prefab",
+    "value": {
+      "depends": [
+        "7d8f9b89-4fd1-4c9f-a3ab-38ec7cded7ca@f9941",
+        "5acff780-0e50-483b-a9a3-5ae772ab09da@f9941",
+        "54d51eff-8d69-4245-875b-1465c7407a3a@f9941"
+      ],
+      "dependScripts": []
+    },
+    "versionCode": 2
+  },
+  "69942b09-ac30-4584-a621-e3d793b6ea48": {
+    "url": "db://assets/prefabs/TowerBarrier.prefab",
+    "value": {
+      "depends": [
+        "5c0f23a6-ca38-4abf-b018-20b96e5b45c8@f9941",
+        "7d8f9b89-4fd1-4c9f-a3ab-38ec7cded7ca@f9941"
+      ],
+      "dependScripts": [
+        "1f438aeb-2d63-4843-b9cc-890590d46cd8",
+        "e8b14c33-5a2f-4c91-b9ed-1f6d0a8e3c72"
+      ]
+    },
+    "versionCode": 2
+  },
+  "bd82274d-6a36-4d36-9a17-273c5012070d": {
+    "url": "db://assets/prefabs/TowerWall.prefab",
+    "value": {
+      "depends": [
+        "7d8f9b89-4fd1-4c9f-a3ab-38ec7cded7ca@f9941"
+      ],
+      "dependScripts": [
+        "1f438aeb-2d63-4843-b9cc-890590d46cd8"
+      ]
+    },
+    "versionCode": 2
+  },
+  "96039ee0-9011-4e8a-90c9-1722dd68c1f3": {
+    "url": "db://assets/prefabs/TownBack.prefab",
+    "value": {
+      "depends": [
+        "f0a234eb-479f-4e26-9303-0a91d5974182@f9941",
+        "7d8f9b89-4fd1-4c9f-a3ab-38ec7cded7ca@f9941"
+      ],
+      "dependScripts": []
+    },
+    "versionCode": 2
+  },
+  "faa2c27a-0c95-4a49-a4bc-43bdbb93857e": {
+    "url": "db://assets/sprites/16+.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "894267a4-9eca-48f1-88b1-471d3eb67c7f": {
+    "url": "db://assets/sprites/BoltBack.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "b1d9af1e-4b35-4e0f-aa7f-770c6cfac6a5": {
+    "url": "db://assets/sprites/BoltFront.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "f2404576-fa35-4dce-99b1-15e14dd5653b": {
+    "url": "db://assets/sprites/Cesar.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "73e47542-db4e-4f64-8258-819c4e390bc2": {
+    "url": "db://assets/sprites/Cloud.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "faa2c27a-0c95-4a49-a4bc-43bdbb93857e@6c48a": {
+    "url": "db://assets/sprites/16+.png@6c48a",
+    "value": {
+      "depends": [
+        "faa2c27a-0c95-4a49-a4bc-43bdbb93857e"
+      ]
+    },
+    "versionCode": 1
+  },
+  "f2404576-fa35-4dce-99b1-15e14dd5653b@6c48a": {
+    "url": "db://assets/sprites/Cesar.png@6c48a",
+    "value": {
+      "depends": [
+        "f2404576-fa35-4dce-99b1-15e14dd5653b"
+      ]
+    },
+    "versionCode": 1
+  },
+  "894267a4-9eca-48f1-88b1-471d3eb67c7f@6c48a": {
+    "url": "db://assets/sprites/BoltBack.png@6c48a",
+    "value": {
+      "depends": [
+        "894267a4-9eca-48f1-88b1-471d3eb67c7f"
+      ]
+    },
+    "versionCode": 1
+  },
+  "b1d9af1e-4b35-4e0f-aa7f-770c6cfac6a5@6c48a": {
+    "url": "db://assets/sprites/BoltFront.png@6c48a",
+    "value": {
+      "depends": [
+        "b1d9af1e-4b35-4e0f-aa7f-770c6cfac6a5"
+      ]
+    },
+    "versionCode": 1
+  },
+  "faa2c27a-0c95-4a49-a4bc-43bdbb93857e@f9941": {
+    "url": "db://assets/sprites/16+.png@f9941",
+    "value": {
+      "depends": [
+        "faa2c27a-0c95-4a49-a4bc-43bdbb93857e@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "5acff780-0e50-483b-a9a3-5ae772ab09da": {
+    "url": "db://assets/sprites/CloudBack.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "b1d9af1e-4b35-4e0f-aa7f-770c6cfac6a5@f9941": {
+    "url": "db://assets/sprites/BoltFront.png@f9941",
+    "value": {
+      "depends": [
+        "b1d9af1e-4b35-4e0f-aa7f-770c6cfac6a5@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "8611d253-9f07-4381-b0e6-50f73e179a1f": {
+    "url": "db://assets/sprites/CloudsPackShot.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "f2404576-fa35-4dce-99b1-15e14dd5653b@f9941": {
+    "url": "db://assets/sprites/Cesar.png@f9941",
+    "value": {
+      "depends": [
+        "f2404576-fa35-4dce-99b1-15e14dd5653b@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "453f4284-3a3f-463e-a675-4506ac63ed5b": {
+    "url": "db://assets/sprites/Crowd.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "894267a4-9eca-48f1-88b1-471d3eb67c7f@f9941": {
+    "url": "db://assets/sprites/BoltBack.png@f9941",
+    "value": {
+      "depends": [
+        "894267a4-9eca-48f1-88b1-471d3eb67c7f@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "f7ae7ad2-0bdb-4556-b68c-7ee122c76d9c": {
+    "url": "db://assets/sprites/Ground.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "73e47542-db4e-4f64-8258-819c4e390bc2@6c48a": {
+    "url": "db://assets/sprites/Cloud.png@6c48a",
+    "value": {
+      "depends": [
+        "73e47542-db4e-4f64-8258-819c4e390bc2"
+      ]
+    },
+    "versionCode": 1
+  },
+  "5acff780-0e50-483b-a9a3-5ae772ab09da@6c48a": {
+    "url": "db://assets/sprites/CloudBack.png@6c48a",
+    "value": {
+      "depends": [
+        "5acff780-0e50-483b-a9a3-5ae772ab09da"
+      ]
+    },
+    "versionCode": 1
+  },
+  "f7ae7ad2-0bdb-4556-b68c-7ee122c76d9c@6c48a": {
+    "url": "db://assets/sprites/Ground.png@6c48a",
+    "value": {
+      "depends": [
+        "f7ae7ad2-0bdb-4556-b68c-7ee122c76d9c"
+      ]
+    },
+    "versionCode": 1
+  },
+  "453f4284-3a3f-463e-a675-4506ac63ed5b@6c48a": {
+    "url": "db://assets/sprites/Crowd.png@6c48a",
+    "value": {
+      "depends": [
+        "453f4284-3a3f-463e-a675-4506ac63ed5b"
+      ]
+    },
+    "versionCode": 1
+  },
+  "5acff780-0e50-483b-a9a3-5ae772ab09da@f9941": {
+    "url": "db://assets/sprites/CloudBack.png@f9941",
+    "value": {
+      "depends": [
+        "5acff780-0e50-483b-a9a3-5ae772ab09da@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "8611d253-9f07-4381-b0e6-50f73e179a1f@6c48a": {
+    "url": "db://assets/sprites/CloudsPackShot.png@6c48a",
+    "value": {
+      "depends": [
+        "8611d253-9f07-4381-b0e6-50f73e179a1f"
+      ]
+    },
+    "versionCode": 1
+  },
+  "b7ca455b-d8c6-4886-953a-685b7596f48c": {
+    "url": "db://assets/sprites/HOLD-TO-FLY.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "73e47542-db4e-4f64-8258-819c4e390bc2@f9941": {
+    "url": "db://assets/sprites/Cloud.png@f9941",
+    "value": {
+      "depends": [
+        "73e47542-db4e-4f64-8258-819c4e390bc2@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "97051332-a67b-4b29-9206-1ed26967197f": {
+    "url": "db://assets/sprites/Logo.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "f7ae7ad2-0bdb-4556-b68c-7ee122c76d9c@f9941": {
+    "url": "db://assets/sprites/Ground.png@f9941",
+    "value": {
+      "depends": [
+        "f7ae7ad2-0bdb-4556-b68c-7ee122c76d9c@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "06cfe1ac-a3ce-405e-8198-52847170bdab": {
+    "url": "db://assets/sprites/PackShot4Char.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "453f4284-3a3f-463e-a675-4506ac63ed5b@f9941": {
+    "url": "db://assets/sprites/Crowd.png@f9941",
+    "value": {
+      "depends": [
+        "453f4284-3a3f-463e-a675-4506ac63ed5b@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "0dfe354a-1a54-4d71-bd07-a642bdd44034": {
+    "url": "db://assets/sprites/PigeonFly.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "8611d253-9f07-4381-b0e6-50f73e179a1f@f9941": {
+    "url": "db://assets/sprites/CloudsPackShot.png@f9941",
+    "value": {
+      "depends": [
+        "8611d253-9f07-4381-b0e6-50f73e179a1f@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "37b05030-fba9-46e0-9221-fd70d849cd9e": {
+    "url": "db://assets/sprites/PigeonFlyLight.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "b7ca455b-d8c6-4886-953a-685b7596f48c@6c48a": {
+    "url": "db://assets/sprites/HOLD-TO-FLY.png@6c48a",
+    "value": {
+      "depends": [
+        "b7ca455b-d8c6-4886-953a-685b7596f48c"
+      ]
+    },
+    "versionCode": 1
+  },
+  "0dfe354a-1a54-4d71-bd07-a642bdd44034@6c48a": {
+    "url": "db://assets/sprites/PigeonFly.png@6c48a",
+    "value": {
+      "depends": [
+        "0dfe354a-1a54-4d71-bd07-a642bdd44034"
+      ]
+    },
+    "versionCode": 1
+  },
+  "0dfe354a-1a54-4d71-bd07-a642bdd44034@f9941": {
+    "url": "db://assets/sprites/PigeonFly.png@f9941",
+    "value": {
+      "depends": [
+        "0dfe354a-1a54-4d71-bd07-a642bdd44034@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "ae90168a-d016-4a50-ba1b-3365747af0c4": {
+    "url": "db://assets/sprites/PigeonFlyWing.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "37b05030-fba9-46e0-9221-fd70d849cd9e@6c48a": {
+    "url": "db://assets/sprites/PigeonFlyLight.png@6c48a",
+    "value": {
+      "depends": [
+        "37b05030-fba9-46e0-9221-fd70d849cd9e"
+      ]
+    },
+    "versionCode": 1
+  },
+  "b7ca455b-d8c6-4886-953a-685b7596f48c@f9941": {
+    "url": "db://assets/sprites/HOLD-TO-FLY.png@f9941",
+    "value": {
+      "depends": [
+        "b7ca455b-d8c6-4886-953a-685b7596f48c@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "37b05030-fba9-46e0-9221-fd70d849cd9e@f9941": {
+    "url": "db://assets/sprites/PigeonFlyLight.png@f9941",
+    "value": {
+      "depends": [
+        "37b05030-fba9-46e0-9221-fd70d849cd9e@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "ddb66518-bb12-4de6-9838-24ef52a1399f": {
+    "url": "db://assets/sprites/PigeonStun.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "22b6d9ee-1a05-4867-97db-98739780fd8e": {
+    "url": "db://assets/sprites/PolyDont.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "06cfe1ac-a3ce-405e-8198-52847170bdab@6c48a": {
+    "url": "db://assets/sprites/PackShot4Char.png@6c48a",
+    "value": {
+      "depends": [
+        "06cfe1ac-a3ce-405e-8198-52847170bdab"
+      ]
+    },
+    "versionCode": 1
+  },
+  "ae90168a-d016-4a50-ba1b-3365747af0c4@6c48a": {
+    "url": "db://assets/sprites/PigeonFlyWing.png@6c48a",
+    "value": {
+      "depends": [
+        "ae90168a-d016-4a50-ba1b-3365747af0c4"
+      ]
+    },
+    "versionCode": 1
+  },
+  "ae90168a-d016-4a50-ba1b-3365747af0c4@f9941": {
+    "url": "db://assets/sprites/PigeonFlyWing.png@f9941",
+    "value": {
+      "depends": [
+        "ae90168a-d016-4a50-ba1b-3365747af0c4@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "ab29178f-57a8-4e29-897e-777b2f086375": {
+    "url": "db://assets/sprites/ShareBttn.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "97051332-a67b-4b29-9206-1ed26967197f@6c48a": {
+    "url": "db://assets/sprites/Logo.png@6c48a",
+    "value": {
+      "depends": [
+        "97051332-a67b-4b29-9206-1ed26967197f"
+      ]
+    },
+    "versionCode": 1
+  },
+  "06cfe1ac-a3ce-405e-8198-52847170bdab@f9941": {
+    "url": "db://assets/sprites/PackShot4Char.png@f9941",
+    "value": {
+      "depends": [
+        "06cfe1ac-a3ce-405e-8198-52847170bdab@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "54d51eff-8d69-4245-875b-1465c7407a3a": {
+    "url": "db://assets/sprites/SkyBack.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "22b6d9ee-1a05-4867-97db-98739780fd8e@6c48a": {
+    "url": "db://assets/sprites/PolyDont.png@6c48a",
+    "value": {
+      "depends": [
+        "22b6d9ee-1a05-4867-97db-98739780fd8e"
+      ]
+    },
+    "versionCode": 1
+  },
+  "ddb66518-bb12-4de6-9838-24ef52a1399f@6c48a": {
+    "url": "db://assets/sprites/PigeonStun.png@6c48a",
+    "value": {
+      "depends": [
+        "ddb66518-bb12-4de6-9838-24ef52a1399f"
+      ]
+    },
+    "versionCode": 1
+  },
+  "22b6d9ee-1a05-4867-97db-98739780fd8e@f9941": {
+    "url": "db://assets/sprites/PolyDont.png@f9941",
+    "value": {
+      "depends": [
+        "22b6d9ee-1a05-4867-97db-98739780fd8e@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "ab29178f-57a8-4e29-897e-777b2f086375@6c48a": {
+    "url": "db://assets/sprites/ShareBttn.png@6c48a",
+    "value": {
+      "depends": [
+        "ab29178f-57a8-4e29-897e-777b2f086375"
+      ]
+    },
+    "versionCode": 1
+  },
+  "83701867-af91-415a-acc8-2afe08104921": {
+    "url": "db://assets/sprites/Soldiers.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "ddb66518-bb12-4de6-9838-24ef52a1399f@f9941": {
+    "url": "db://assets/sprites/PigeonStun.png@f9941",
+    "value": {
+      "depends": [
+        "ddb66518-bb12-4de6-9838-24ef52a1399f@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "843863ad-176d-4e44-9480-7088db11ec81": {
+    "url": "db://assets/sprites/StartPlate.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "ab29178f-57a8-4e29-897e-777b2f086375@f9941": {
+    "url": "db://assets/sprites/ShareBttn.png@f9941",
+    "value": {
+      "depends": [
+        "ab29178f-57a8-4e29-897e-777b2f086375@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "756cee4b-e521-4bd6-ac48-7b319bf1325e": {
+    "url": "db://assets/sprites/Tower.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "54d51eff-8d69-4245-875b-1465c7407a3a@6c48a": {
+    "url": "db://assets/sprites/SkyBack.png@6c48a",
+    "value": {
+      "depends": [
+        "54d51eff-8d69-4245-875b-1465c7407a3a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "97051332-a67b-4b29-9206-1ed26967197f@f9941": {
+    "url": "db://assets/sprites/Logo.png@f9941",
+    "value": {
+      "depends": [
+        "97051332-a67b-4b29-9206-1ed26967197f@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "5c0f23a6-ca38-4abf-b018-20b96e5b45c8": {
+    "url": "db://assets/sprites/Tower1.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "83701867-af91-415a-acc8-2afe08104921@6c48a": {
+    "url": "db://assets/sprites/Soldiers.png@6c48a",
+    "value": {
+      "depends": [
+        "83701867-af91-415a-acc8-2afe08104921"
+      ]
+    },
+    "versionCode": 1
+  },
+  "843863ad-176d-4e44-9480-7088db11ec81@6c48a": {
+    "url": "db://assets/sprites/StartPlate.png@6c48a",
+    "value": {
+      "depends": [
+        "843863ad-176d-4e44-9480-7088db11ec81"
+      ]
+    },
+    "versionCode": 1
+  },
+  "83701867-af91-415a-acc8-2afe08104921@f9941": {
+    "url": "db://assets/sprites/Soldiers.png@f9941",
+    "value": {
+      "depends": [
+        "83701867-af91-415a-acc8-2afe08104921@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "f0a234eb-479f-4e26-9303-0a91d5974182": {
+    "url": "db://assets/sprites/TownBack.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "54d51eff-8d69-4245-875b-1465c7407a3a@f9941": {
+    "url": "db://assets/sprites/SkyBack.png@f9941",
+    "value": {
+      "depends": [
+        "54d51eff-8d69-4245-875b-1465c7407a3a@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "2b19a339-7ffc-4ef2-827f-2846f4a88f10": {
+    "url": "db://assets/prefabs/Chunks/Chunk_1Tower.prefab",
+    "value": {
+      "depends": [
+        "69942b09-ac30-4584-a621-e3d793b6ea48"
+      ],
+      "dependScripts": [
+        "CC3eba29-7abb-723a-f7ab-ae275e2277e8"
+      ]
+    },
+    "versionCode": 2
+  },
+  "843863ad-176d-4e44-9480-7088db11ec81@f9941": {
+    "url": "db://assets/sprites/StartPlate.png@f9941",
+    "value": {
+      "depends": [
+        "843863ad-176d-4e44-9480-7088db11ec81@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "bacfe63a-2898-4b00-ab75-be967ca44aea": {
+    "url": "db://assets/prefabs/Chunks/Chunk_2Clouds.prefab",
+    "value": {
+      "depends": [
+        "d4edcc55-a03c-4396-a9d7-f40c1adfb9f5"
+      ],
+      "dependScripts": [
+        "CC3eba29-7abb-723a-f7ab-ae275e2277e8"
+      ]
+    },
+    "versionCode": 2
+  },
+  "756cee4b-e521-4bd6-ac48-7b319bf1325e@6c48a": {
+    "url": "db://assets/sprites/Tower.png@6c48a",
+    "value": {
+      "depends": [
+        "756cee4b-e521-4bd6-ac48-7b319bf1325e"
+      ]
+    },
+    "versionCode": 1
+  },
+  "5c0f23a6-ca38-4abf-b018-20b96e5b45c8@6c48a": {
+    "url": "db://assets/sprites/Tower1.png@6c48a",
+    "value": {
+      "depends": [
+        "5c0f23a6-ca38-4abf-b018-20b96e5b45c8"
+      ]
+    },
+    "versionCode": 1
+  },
+  "756cee4b-e521-4bd6-ac48-7b319bf1325e@f9941": {
+    "url": "db://assets/sprites/Tower.png@f9941",
+    "value": {
+      "depends": [
+        "756cee4b-e521-4bd6-ac48-7b319bf1325e@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "aba828a0-a019-4724-989b-c6813e0dbee4": {
+    "url": "db://assets/prefabs/Chunks/Chunk_SeedWave.prefab",
+    "value": {
+      "depends": [
+        "91c6a2f0-3366-47c5-8c13-2b84e76e8df6"
+      ],
+      "dependScripts": [
+        "CC3eba29-7abb-723a-f7ab-ae275e2277e8"
+      ]
+    },
+    "versionCode": 2
+  },
+  "3314d254-6572-48b1-9e43-9fed4d86f01e": {
+    "url": "db://assets/prefabs/Chunks/Chunk_Empty.prefab",
+    "value": {
+      "depends": [],
+      "dependScripts": []
+    },
+    "versionCode": 2
+  },
+  "5c0f23a6-ca38-4abf-b018-20b96e5b45c8@f9941": {
+    "url": "db://assets/sprites/Tower1.png@f9941",
+    "value": {
+      "depends": [
+        "5c0f23a6-ca38-4abf-b018-20b96e5b45c8@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "4bf94ec0-36c2-4db1-9199-d900a11e3079": {
+    "url": "db://assets/sprites/Player/Empty.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "1347e0dd-3095-4ea3-85bd-6cf4904804c1": {
+    "url": "db://assets/sprites/Player/FootA.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "ea665880-e639-4568-a2a8-cbbeeb5a065b": {
+    "url": "db://assets/sprites/Player/FootB.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "b30dd910-ef0d-48cc-a809-5f31553684d7": {
+    "url": "db://assets/sprites/Player/PigeonRunBody.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "4bf94ec0-36c2-4db1-9199-d900a11e3079@6c48a": {
+    "url": "db://assets/sprites/Player/Empty.png@6c48a",
+    "value": {
+      "depends": [
+        "4bf94ec0-36c2-4db1-9199-d900a11e3079"
+      ]
+    },
+    "versionCode": 1
+  },
+  "4bf94ec0-36c2-4db1-9199-d900a11e3079@f9941": {
+    "url": "db://assets/sprites/Player/Empty.png@f9941",
+    "value": {
+      "depends": [
+        "4bf94ec0-36c2-4db1-9199-d900a11e3079@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "f7ed0d66-a8e7-4647-b230-b74d23272809": {
+    "url": "db://assets/sprites/Player/PigeonRunBodyWing.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "1347e0dd-3095-4ea3-85bd-6cf4904804c1@6c48a": {
+    "url": "db://assets/sprites/Player/FootA.png@6c48a",
+    "value": {
+      "depends": [
+        "1347e0dd-3095-4ea3-85bd-6cf4904804c1"
+      ]
+    },
+    "versionCode": 1
+  },
+  "ea665880-e639-4568-a2a8-cbbeeb5a065b@6c48a": {
+    "url": "db://assets/sprites/Player/FootB.png@6c48a",
+    "value": {
+      "depends": [
+        "ea665880-e639-4568-a2a8-cbbeeb5a065b"
+      ]
+    },
+    "versionCode": 1
+  },
+  "1347e0dd-3095-4ea3-85bd-6cf4904804c1@f9941": {
+    "url": "db://assets/sprites/Player/FootA.png@f9941",
+    "value": {
+      "depends": [
+        "1347e0dd-3095-4ea3-85bd-6cf4904804c1@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "28325d7d-3262-4868-897a-594a375fbcbd": {
+    "url": "db://assets/sprites/Player/PigeonStay.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "b30dd910-ef0d-48cc-a809-5f31553684d7@6c48a": {
+    "url": "db://assets/sprites/Player/PigeonRunBody.png@6c48a",
+    "value": {
+      "depends": [
+        "b30dd910-ef0d-48cc-a809-5f31553684d7"
+      ]
+    },
+    "versionCode": 1
+  },
+  "ea665880-e639-4568-a2a8-cbbeeb5a065b@f9941": {
+    "url": "db://assets/sprites/Player/FootB.png@f9941",
+    "value": {
+      "depends": [
+        "ea665880-e639-4568-a2a8-cbbeeb5a065b@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "f0a234eb-479f-4e26-9303-0a91d5974182@6c48a": {
+    "url": "db://assets/sprites/TownBack.png@6c48a",
+    "value": {
+      "depends": [
+        "f0a234eb-479f-4e26-9303-0a91d5974182"
+      ]
+    },
+    "versionCode": 1
+  },
+  "b30dd910-ef0d-48cc-a809-5f31553684d7@f9941": {
+    "url": "db://assets/sprites/Player/PigeonRunBody.png@f9941",
+    "value": {
+      "depends": [
+        "b30dd910-ef0d-48cc-a809-5f31553684d7@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "f7ed0d66-a8e7-4647-b230-b74d23272809@6c48a": {
+    "url": "db://assets/sprites/Player/PigeonRunBodyWing.png@6c48a",
+    "value": {
+      "depends": [
+        "f7ed0d66-a8e7-4647-b230-b74d23272809"
+      ]
+    },
+    "versionCode": 1
+  },
+  "f7ed0d66-a8e7-4647-b230-b74d23272809@f9941": {
+    "url": "db://assets/sprites/Player/PigeonRunBodyWing.png@f9941",
+    "value": {
+      "depends": [
+        "f7ed0d66-a8e7-4647-b230-b74d23272809@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "28325d7d-3262-4868-897a-594a375fbcbd@6c48a": {
+    "url": "db://assets/sprites/Player/PigeonStay.png@6c48a",
+    "value": {
+      "depends": [
+        "28325d7d-3262-4868-897a-594a375fbcbd"
+      ]
+    },
+    "versionCode": 1
+  },
+  "28325d7d-3262-4868-897a-594a375fbcbd@f9941": {
+    "url": "db://assets/sprites/Player/PigeonStay.png@f9941",
+    "value": {
+      "depends": [
+        "28325d7d-3262-4868-897a-594a375fbcbd@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "f0a234eb-479f-4e26-9303-0a91d5974182@f9941": {
+    "url": "db://assets/sprites/TownBack.png@f9941",
+    "value": {
+      "depends": [
+        "f0a234eb-479f-4e26-9303-0a91d5974182@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "9e090628-a8a2-4145-a1dd-3f621b091883": {
+    "url": "db://assets/sprites/hp_Icon.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "9a52eea3-4918-49fb-bfc3-32adf1bd5efe": {
+    "url": "db://assets/sprites/seed_Icon.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "9a52eea3-4918-49fb-bfc3-32adf1bd5efe@6c48a": {
+    "url": "db://assets/sprites/seed_Icon.png@6c48a",
+    "value": {
+      "depends": [
+        "9a52eea3-4918-49fb-bfc3-32adf1bd5efe"
+      ]
+    },
+    "versionCode": 1
+  },
+  "9e090628-a8a2-4145-a1dd-3f621b091883@6c48a": {
+    "url": "db://assets/sprites/hp_Icon.png@6c48a",
+    "value": {
+      "depends": [
+        "9e090628-a8a2-4145-a1dd-3f621b091883"
+      ]
+    },
+    "versionCode": 1
+  },
+  "9a52eea3-4918-49fb-bfc3-32adf1bd5efe@f9941": {
+    "url": "db://assets/sprites/seed_Icon.png@f9941",
+    "value": {
+      "depends": [
+        "9a52eea3-4918-49fb-bfc3-32adf1bd5efe@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "9e090628-a8a2-4145-a1dd-3f621b091883@f9941": {
+    "url": "db://assets/sprites/hp_Icon.png@f9941",
+    "value": {
+      "depends": [
+        "9e090628-a8a2-4145-a1dd-3f621b091883@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "aa89ba13-36fb-42e0-951c-48aca82acfac": {
+    "url": "db://assets/sprites/seed.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "aa89ba13-36fb-42e0-951c-48aca82acfac@6c48a": {
+    "url": "db://assets/sprites/seed.png@6c48a",
+    "value": {
+      "depends": [
+        "aa89ba13-36fb-42e0-951c-48aca82acfac"
+      ]
+    },
+    "versionCode": 1
+  },
+  "aa89ba13-36fb-42e0-951c-48aca82acfac@f9941": {
+    "url": "db://assets/sprites/seed.png@f9941",
+    "value": {
+      "depends": [
+        "aa89ba13-36fb-42e0-951c-48aca82acfac@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "91c6a2f0-3366-47c5-8c13-2b84e76e8df6": {
+    "url": "db://assets/prefabs/seed.prefab",
+    "value": {
+      "depends": [
+        "aa89ba13-36fb-42e0-951c-48aca82acfac@f9941"
+      ],
+      "dependScripts": [
+        "24521e6e-cf56-497f-bbc8-2819b8c553e0",
+        "6d115a64-8ffa-4ba1-b99f-c1ce690737db",
+        "e66b3b1d-ff8d-4f1e-906d-bdffa64dc993"
+      ]
+    },
+    "versionCode": 2
+  },
+  "944b82cd-dd50-4d3a-bd2f-ac131465738f": {
+    "url": "db://assets/scripts/ScoreManager.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "4ce39432-6b51-488d-a79c-879741560080": {
+    "url": "db://assets/scripts/ScoreUI.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "e66b3b1d-ff8d-4f1e-906d-bdffa64dc993": {
+    "url": "db://assets/scripts/SeedPickup.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "24521e6e-cf56-497f-bbc8-2819b8c553e0": {
+    "url": "db://assets/scripts/FeatherFloat.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "6d115a64-8ffa-4ba1-b99f-c1ce690737db": {
+    "url": "db://assets/scripts/MagnetPickable.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "8731dd14-d241-4afd-899e-b461f1f113e9": {
+    "url": "db://assets/scripts/PickupBase.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "323dd74b-2d7d-4bfc-804f-b9ed4d5d0f26": {
+    "url": "db://assets/scripts/SoundController.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "2eac656f-28a0-4056-b682-7ab7bf8ea166": {
+    "url": "db://assets/scripts/SoundLibrary.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "0f5c6c0d-45ca-4861-b49c-5b907833521d": {
+    "url": "db://assets/sounds",
+    "value": {},
+    "versionCode": 1
+  },
+  "2bcbf5be-b501-4e83-9f9f-b448b1425285": {
+    "url": "db://assets/sounds/SeedCrack2.mp3",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "e0625ff0-6fb2-4868-9932-00e181712da3": {
+    "url": "db://assets/sounds/SeedCrack1.mp3",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "59460a6a-7f69-43a5-a37f-c953bae21abd": {
+    "url": "db://assets/sounds/SeedCrack3.mp3",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "53ab4fcc-75cf-404e-add3-054b1d0a8843": {
+    "url": "db://assets/sounds/SeedCrack4.mp3",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "ec161a05-3e24-4ff3-a039-d707ad149adb": {
+    "url": "db://assets/sounds/SeedCrack6.mp3",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "5d5acbc4-5c4b-4fd3-b68e-986961cbfab4": {
+    "url": "db://assets/sounds/SeedCrack5.mp3",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "cd15523e-58d9-4829-83e6-0411dcc4b9f3": {
+    "url": "db://assets/prefabs/Chunks/Chunk_Start.prefab",
+    "value": {
+      "depends": [
+        "843863ad-176d-4e44-9480-7088db11ec81@f9941",
+        "453f4284-3a3f-463e-a675-4506ac63ed5b@f9941",
+        "7d8f9b89-4fd1-4c9f-a3ab-38ec7cded7ca@f9941",
+        "b7ca455b-d8c6-4886-953a-685b7596f48c@f9941"
+      ],
+      "dependScripts": [
+        "1f438aeb-2d63-4843-b9cc-890590d46cd8"
+      ]
+    },
+    "versionCode": 2
+  },
+  "54ccfb1c-5d9a-4b84-aaad-f32528f817f9": {
+    "url": "db://assets/sounds/WingFlap5.mp3",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "405d50e5-09d4-40f7-b916-ac9630c7ca0d": {
+    "url": "db://assets/sounds/WingFlap3.mp3",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "cc93da05-2314-42ec-9229-f90aa6b4a2ba": {
+    "url": "db://assets/sounds/WingFlap4.mp3",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "0d74909b-961c-49a4-a50b-bf7f078bdb3f": {
+    "url": "db://assets/sounds/WingFlap1.mp3",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "b81b94c2-0a23-40c5-bf7f-647fe82ab49e": {
+    "url": "db://assets/sounds/WingFlap2.mp3",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "5f6c634d-2478-43de-943c-9a88fc6afec8": {
+    "url": "db://assets/sounds/WingFlap6.mp3",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "46269daa-bcf3-4029-84ad-9af8b50adc87": {
+    "url": "db://assets/anim/PlayerStay.anim",
+    "value": {},
+    "versionCode": 2
+  },
+  "05fcafd3-4e55-4d6f-b122-af8c8204f94e": {
+    "url": "db://assets/anim/PlayerStay.anim",
+    "value": {
+      "depends": [
+        "b30dd910-ef0d-48cc-a809-5f31553684d7@f9941",
+        "ea665880-e639-4568-a2a8-cbbeeb5a065b@f9941",
+        "1347e0dd-3095-4ea3-85bd-6cf4904804c1@f9941",
+        "f7ed0d66-a8e7-4647-b230-b74d23272809@f9941"
+      ]
+    },
+    "versionCode": 2
+  },
+  "c3436f27-5c1f-4b29-a378-f3a71651af48": {
+    "url": "db://assets/sprites/DeadPlayer.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "c3436f27-5c1f-4b29-a378-f3a71651af48@6c48a": {
+    "url": "db://assets/sprites/DeadPlayer.png@6c48a",
+    "value": {
+      "depends": [
+        "c3436f27-5c1f-4b29-a378-f3a71651af48"
+      ]
+    },
+    "versionCode": 1
+  },
+  "c3436f27-5c1f-4b29-a378-f3a71651af48@f9941": {
+    "url": "db://assets/sprites/DeadPlayer.png@f9941",
+    "value": {
+      "depends": [
+        "c3436f27-5c1f-4b29-a378-f3a71651af48@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "f7713266-4b25-40b6-9be2-13e709c261ac": {
+    "url": "db://assets/sprites/DeadPlayerFoot.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "f7713266-4b25-40b6-9be2-13e709c261ac@6c48a": {
+    "url": "db://assets/sprites/DeadPlayerFoot.png@6c48a",
+    "value": {
+      "depends": [
+        "f7713266-4b25-40b6-9be2-13e709c261ac"
+      ]
+    },
+    "versionCode": 1
+  },
+  "f7713266-4b25-40b6-9be2-13e709c261ac@f9941": {
+    "url": "db://assets/sprites/DeadPlayerFoot.png@f9941",
+    "value": {
+      "depends": [
+        "f7713266-4b25-40b6-9be2-13e709c261ac@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "ea170c23-9603-4c01-b370-0aa3c5a45b02": {
+    "url": "db://assets/sprites/GOHeap.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "ea170c23-9603-4c01-b370-0aa3c5a45b02@6c48a": {
+    "url": "db://assets/sprites/GOHeap.png@6c48a",
+    "value": {
+      "depends": [
+        "ea170c23-9603-4c01-b370-0aa3c5a45b02"
+      ]
+    },
+    "versionCode": 1
+  },
+  "ea170c23-9603-4c01-b370-0aa3c5a45b02@f9941": {
+    "url": "db://assets/sprites/GOHeap.png@f9941",
+    "value": {
+      "depends": [
+        "ea170c23-9603-4c01-b370-0aa3c5a45b02@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "8366b5a4-faf6-435b-b3de-b8ad2e936cd8": {
+    "url": "db://assets/sprites/GOScoreboard.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "8366b5a4-faf6-435b-b3de-b8ad2e936cd8@6c48a": {
+    "url": "db://assets/sprites/GOScoreboard.png@6c48a",
+    "value": {
+      "depends": [
+        "8366b5a4-faf6-435b-b3de-b8ad2e936cd8"
+      ]
+    },
+    "versionCode": 1
+  },
+  "8366b5a4-faf6-435b-b3de-b8ad2e936cd8@f9941": {
+    "url": "db://assets/sprites/GOScoreboard.png@f9941",
+    "value": {
+      "depends": [
+        "8366b5a4-faf6-435b-b3de-b8ad2e936cd8@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "684bd2b4-5cc6-428a-b3c6-87ef64af0c0e": {
+    "url": "db://assets/sprites/BlackGradientAlpha.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "a8d5ce37-b31a-4b6e-a33f-1c62a27cd6ae": {
+    "url": "db://assets/sprites/BlueGradientAlpha.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "684bd2b4-5cc6-428a-b3c6-87ef64af0c0e@6c48a": {
+    "url": "db://assets/sprites/BlackGradientAlpha.png@6c48a",
+    "value": {
+      "depends": [
+        "684bd2b4-5cc6-428a-b3c6-87ef64af0c0e"
+      ]
+    },
+    "versionCode": 1
+  },
+  "a8d5ce37-b31a-4b6e-a33f-1c62a27cd6ae@6c48a": {
+    "url": "db://assets/sprites/BlueGradientAlpha.png@6c48a",
+    "value": {
+      "depends": [
+        "a8d5ce37-b31a-4b6e-a33f-1c62a27cd6ae"
+      ]
+    },
+    "versionCode": 1
+  },
+  "684bd2b4-5cc6-428a-b3c6-87ef64af0c0e@f9941": {
+    "url": "db://assets/sprites/BlackGradientAlpha.png@f9941",
+    "value": {
+      "depends": [
+        "684bd2b4-5cc6-428a-b3c6-87ef64af0c0e@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "a8d5ce37-b31a-4b6e-a33f-1c62a27cd6ae@f9941": {
+    "url": "db://assets/sprites/BlueGradientAlpha.png@f9941",
+    "value": {
+      "depends": [
+        "a8d5ce37-b31a-4b6e-a33f-1c62a27cd6ae@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "b4c70b7a-ee1e-4362-b13b-4dd4b8f96abd": {
+    "url": "db://assets/sprites/WoodSign1.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "b4c70b7a-ee1e-4362-b13b-4dd4b8f96abd@6c48a": {
+    "url": "db://assets/sprites/WoodSign1.png@6c48a",
+    "value": {
+      "depends": [
+        "b4c70b7a-ee1e-4362-b13b-4dd4b8f96abd"
+      ]
+    },
+    "versionCode": 1
+  },
+  "b4c70b7a-ee1e-4362-b13b-4dd4b8f96abd@f9941": {
+    "url": "db://assets/sprites/WoodSign1.png@f9941",
+    "value": {
+      "depends": [
+        "b4c70b7a-ee1e-4362-b13b-4dd4b8f96abd@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "0dfb2e52-f467-40f5-a3c1-5bce95f1ffa5": {
+    "url": "db://assets/sprites/YouTubeBttn.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "0dfb2e52-f467-40f5-a3c1-5bce95f1ffa5@6c48a": {
+    "url": "db://assets/sprites/YouTubeBttn.png@6c48a",
+    "value": {
+      "depends": [
+        "0dfb2e52-f467-40f5-a3c1-5bce95f1ffa5"
+      ]
+    },
+    "versionCode": 1
+  },
+  "0dfb2e52-f467-40f5-a3c1-5bce95f1ffa5@f9941": {
+    "url": "db://assets/sprites/YouTubeBttn.png@f9941",
+    "value": {
+      "depends": [
+        "0dfb2e52-f467-40f5-a3c1-5bce95f1ffa5@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "4ffe2842-a3f7-4eef-b53e-9d9a3b82d33d": {
+    "url": "db://assets/sprites/PlayAgainBttn.png",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 1
+  },
+  "4ffe2842-a3f7-4eef-b53e-9d9a3b82d33d@6c48a": {
+    "url": "db://assets/sprites/PlayAgainBttn.png@6c48a",
+    "value": {
+      "depends": [
+        "4ffe2842-a3f7-4eef-b53e-9d9a3b82d33d"
+      ]
+    },
+    "versionCode": 1
+  },
+  "4ffe2842-a3f7-4eef-b53e-9d9a3b82d33d@f9941": {
+    "url": "db://assets/sprites/PlayAgainBttn.png@f9941",
+    "value": {
+      "depends": [
+        "4ffe2842-a3f7-4eef-b53e-9d9a3b82d33d@6c48a"
+      ]
+    },
+    "versionCode": 1
+  },
+  "bee44714-4d72-43c2-a586-cd7d0a7a26fa": {
+    "url": "db://assets/anim/GameOverPanelAnim.anim",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 2
+  },
+  "b3241413-12b8-4d39-be90-a9f1cb7c3234": {
+    "url": "db://assets/scripts/CameraShake.ts",
+    "value": {},
+    "versionCode": 1
+  },
+  "81b075cb-7603-43a9-b6ff-81bd211c2151": {
+    "url": "db://assets/anim/PlayerDeath.anim",
+    "value": {
+      "depends": [
+        "ddb66518-bb12-4de6-9838-24ef52a1399f@f9941",
+        "4bf94ec0-36c2-4db1-9199-d900a11e3079@f9941"
+      ]
+    },
+    "versionCode": 2
+  },
+  "b5dea272-5a06-4257-a8ed-31879493493b": {
+    "url": "db://assets/anim/DeadPlayer.anim",
+    "value": {
+      "depends": []
+    },
+    "versionCode": 2
+  }
+}
