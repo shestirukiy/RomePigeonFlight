@@ -19,6 +19,15 @@ export enum SoundId {
 
 ccenum(SoundId);
 
+/** Фоновая музыка по фазам сессии. */
+export enum MusicTrack {
+    Waiting = 0,
+    Gameplay = 1,
+    Kta = 2,
+}
+
+ccenum(MusicTrack);
+
 const G_GAMEPLAY = { id: 'Gameplay', name: 'Gameplay' };
 const G_PLAYER = { id: 'Player', name: 'Player' };
 const G_UI = { id: 'UI', name: 'UI' };
@@ -70,13 +79,25 @@ export class SoundLibrary extends Component {
     @property({ group: G_GAMEPLAY, type: AudioClip })
     electricHit: AudioClip | null = null;
 
-    @property({ group: G_GAMEPLAY, type: AudioClip })
+    @property({
+        group: G_GAMEPLAY,
+        type: AudioClip,
+        displayName: 'Wall Hit',
+        tooltip:
+            'Удар о стену в забеге и доп. «удар» при показе Game Over (вместе с джинглом).',
+    })
     wallHit: AudioClip | null = null;
 
     @property({ group: G_GAMEPLAY, type: AudioClip })
     instantKill: AudioClip | null = null;
 
-    @property({ group: G_UI, type: AudioClip })
+    @property({
+        group: G_UI,
+        type: AudioClip,
+        displayName: 'Game Over Jingle',
+        tooltip:
+            'Однократный джингл при поражении (отдельно от Wall Hit; можно другой клип).',
+    })
     gameOver: AudioClip | null = null;
 
     @property({
@@ -87,8 +108,43 @@ export class SoundLibrary extends Component {
     })
     tapStart: AudioClip | null = null;
 
-    @property({ group: G_MUSIC, type: AudioClip })
-    bgmLoop: AudioClip | null = null;
+    @property({
+        group: G_MUSIC,
+        type: AudioClip,
+        displayName: 'BGM · Waiting',
+        tooltip: 'Пока игрок не начал забег (ожидание тапа).',
+    })
+    bgmWaiting: AudioClip | null = null;
+
+    @property({
+        group: G_MUSIC,
+        type: AudioClip,
+        displayName: 'BGM · Gameplay',
+        tooltip: 'Во время активного забега.',
+    })
+    bgmGameplay: AudioClip | null = null;
+
+    @property({
+        group: G_MUSIC,
+        type: AudioClip,
+        displayName: 'BGM · KTA',
+        tooltip:
+            'С открытия KTA; рестарт только при входе на KTA. Play Again — трек продолжается до нового забега.',
+    })
+    bgmKta: AudioClip | null = null;
+
+    public getMusicClip(track: MusicTrack): AudioClip | null {
+        switch (track) {
+            case MusicTrack.Waiting:
+                return this.bgmWaiting;
+            case MusicTrack.Gameplay:
+                return this.bgmGameplay;
+            case MusicTrack.Kta:
+                return this.bgmKta;
+            default:
+                return null;
+        }
+    }
 
     private _lastSeedCollectIndex = -1;
     private _lastWingFlapIndex = -1;

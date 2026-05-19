@@ -1006,7 +1006,7 @@
     },
     "flapSpeedPressed": 1.5,
     "flapSpeedInAir": 0.65,
-    "wingFlapInertiaDuration": 2,
+    "wingFlapInertiaDuration": 1,
     "electricDamageClip": {
       "__uuid__": "b6788b28-1f6f-4e9a-99da-22f24547804c",
       "__expectedType__": "cc.AnimationClip"

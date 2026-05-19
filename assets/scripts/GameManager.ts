@@ -72,9 +72,15 @@ export class GameManager extends Component {
 
     private _playAgainButton: Button | null = null;
 
+    /** После Play Again — игнорировать тап, пока палец/кнопка мыши не отпущены. */
+    private _suppressTapToStart = false;
+
     private readonly _gameOverSeedRollCounter = { value: 0 };
 
     private _damageInvincibleRemain = 0;
+
+    /** Сколько порогов seedsPerExtraLife уже выдали за этот забег. */
+    private _seedLifeBonusesGranted = 0;
 
     /** Слева направо: [якорное сердечко, клоны справа]. */
     private readonly _heartNodes: Node[] = [];
@@ -88,8 +94,9 @@ export class GameManager extends Component {
         return this._currentHp;
     }
 
+    /** Текущее число слотов сердечек в ряду (растёт с бонусами за семечки). */
     public get maxHp(): number {
-        return this.maxHpCount;
+        return this._heartNodes.length;
     }
 
     public get isGameOver(): boolean {
@@ -281,10 +288,11 @@ export class GameManager extends Component {
     hpHeartAnchor: Node | null = null;
 
     @property({
-        displayName: 'Max HP',
-        tooltip: 'Сколько сердечек в ряду, включая якорное.',
+        displayName: 'Starting HP',
+        tooltip:
+            'Сердечек в начале забега (якорь + клоны). Верхнего лимита нет — за семечки ряд растёт.',
     })
-    maxHpCount = 3;
+    startingHpCount = 3;
 
     @property({
         displayName: 'Heart spacing X',
@@ -292,6 +300,13 @@ export class GameManager extends Component {
             'Доп. отступ между сердечками по X. Шаг = ширина UITransform якоря + это значение.',
     })
     heartSpacingX = 4;
+
+    @property({
+        displayName: 'Seeds Per Extra Life',
+        tooltip:
+            'За каждые N собранных семечек за забег — +1 HP. 0 — бонус выключен.',
+    })
+    seedsPerExtraLife = 100;
 
     @property({
         type: Node,
@@ -304,7 +319,7 @@ export class GameManager extends Component {
         type: Node,
         displayName: 'KTA Panel',
         tooltip:
-            'Показывается после тапа по Game Over Panel; рестарт — кнопкой на этой панели.',
+            'Показывается после тапа по Game Over Panel; Play Again возвращает к ожиданию тапа.',
     })
     ktaPanel: Node | null = null;
 
@@ -329,14 +344,20 @@ export class GameManager extends Component {
         this._hideOverlayPanels();
         this._bindPlayAgainButton();
         input.on(Input.EventType.TOUCH_START, this._onTouchStart, this);
+        input.on(Input.EventType.TOUCH_END, this._onTouchEnd, this);
+        input.on(Input.EventType.TOUCH_CANCEL, this._onTouchEnd, this);
         input.on(Input.EventType.MOUSE_DOWN, this._onMouseDown, this);
+        input.on(Input.EventType.MOUSE_UP, this._onMouseUp, this);
     }
 
     onDestroy() {
         this._stopGameOverSeedCountRoll();
         this._unbindPlayAgainButton();
         input.off(Input.EventType.TOUCH_START, this._onTouchStart, this);
+        input.off(Input.EventType.TOUCH_END, this._onTouchEnd, this);
+        input.off(Input.EventType.TOUCH_CANCEL, this._onTouchEnd, this);
         input.off(Input.EventType.MOUSE_DOWN, this._onMouseDown, this);
+        input.off(Input.EventType.MOUSE_UP, this._onMouseUp, this);
         if (GameManager._inst === this) {
             GameManager._inst = null;
         }
@@ -393,7 +414,28 @@ export class GameManager extends Component {
         }
     }
 
-    /** Новый забег (первый тап или кнопка на KTAPanel). */
+    /**
+     * Play Again: сброс уровня/игрока и ожидание тапа (как при первом входе в сцену).
+     */
+    public returnToTapToStart(): void {
+        this._gameOver = false;
+        this._dying = false;
+        this._cancelDeferredDeathSequence();
+        this._ktaPanelShown = false;
+        this._playing = false;
+        this._suppressTapToStart = true;
+        this._hideOverlayPanels();
+        this._resetRunState();
+        this.resetScore();
+        this.resetHp();
+        SoundController.instance?.resetVariantRotation();
+        SoundController.instance?.continueKtaMusicAfterPlayAgain();
+
+        const player = SceneNodeHub.instance?.player;
+        this._findPlayerAnimation(player)?.playWaitingStay();
+    }
+
+    /** Новый забег по тапу (первый вход или после returnToTapToStart). */
     public startNewRun(): void {
         if (this._playing) {
             return;
@@ -409,6 +451,7 @@ export class GameManager extends Component {
         this.resetScore();
         this.resetHp();
         SoundController.instance?.resetVariantRotation();
+        SoundController.instance?.playMusicForNewRun();
     }
 
     private _hideOverlayPanels(): void {
@@ -435,6 +478,7 @@ export class GameManager extends Component {
             this.gameOverPanel.active = false;
         }
         this._showOverlayPanel(this.ktaPanel);
+        SoundController.instance?.playMusicForKtaPanel(true);
     }
 
     private _bindPlayAgainButton(): void {
@@ -464,10 +508,13 @@ export class GameManager extends Component {
         if (this._dying || !this._gameOver || !this._ktaPanelShown) {
             return;
         }
-        this.startNewRun();
+        this.returnToTapToStart();
     }
 
     private _onMenuTap(): void {
+        if (this._suppressTapToStart) {
+            return;
+        }
         if (this._dying) {
             return;
         }
@@ -522,6 +569,7 @@ export class GameManager extends Component {
 
     public resetScore(): void {
         this._score = 0;
+        this._seedLifeBonusesGranted = 0;
         this._refreshScoreLabel();
     }
 
@@ -531,6 +579,54 @@ export class GameManager extends Component {
         }
         this._score += delta;
         this._refreshScoreLabel();
+        this._applySeedLifeBonuses();
+    }
+
+    /** Пороги семечек → +1 HP (см. seedsPerExtraLife). */
+    private _applySeedLifeBonuses(): void {
+        const per = this.seedsPerExtraLife;
+        if (per <= 0) {
+            return;
+        }
+
+        const milestones = Math.floor(this._score / per);
+        while (this._seedLifeBonusesGranted < milestones) {
+            this._seedLifeBonusesGranted++;
+            this._tryGrantExtraLife();
+        }
+    }
+
+    /** +1 HP: восстанавливает скрытое сердечко или добавляет новое справа. */
+    private _tryGrantExtraLife(): boolean {
+        if (this._currentHp < this._heartNodes.length) {
+            const heart = this._heartNodes[this._currentHp];
+            if (heart?.isValid) {
+                heart.active = true;
+            }
+            this._currentHp++;
+            return true;
+        }
+
+        const anchor = this.hpHeartAnchor;
+        if (!anchor?.isValid) {
+            return false;
+        }
+        const parent = anchor.parent;
+        if (!parent) {
+            return false;
+        }
+
+        const last = this._heartNodes[this._heartNodes.length - 1] ?? anchor;
+        const p = last.position;
+        const step = this._heartStepX();
+        const heart = instantiate(anchor);
+        heart.parent = parent;
+        heart.setPosition(p.x + step, p.y, p.z);
+        heart.active = true;
+        this._spawnedHearts.push(heart);
+        this._heartNodes.push(heart);
+        this._currentHp++;
+        return true;
     }
 
     /** Восстанавливает ряд сердечек (якорь + клоны справа). */
@@ -540,7 +636,8 @@ export class GameManager extends Component {
         this._currentHp = 0;
 
         const anchor = this.hpHeartAnchor;
-        if (!anchor?.isValid || this.maxHpCount <= 0) {
+        const startHp = Math.max(0, Math.floor(this.startingHpCount));
+        if (!anchor?.isValid || startHp <= 0) {
             return;
         }
 
@@ -554,7 +651,7 @@ export class GameManager extends Component {
         anchor.active = true;
         this._heartNodes.push(anchor);
 
-        for (let i = 1; i < this.maxHpCount; i++) {
+        for (let i = 1; i < startHp; i++) {
             const heart = instantiate(anchor);
             heart.parent = parent;
             heart.setPosition(base.x + step * i, base.y, base.z);
@@ -563,7 +660,7 @@ export class GameManager extends Component {
             this._heartNodes.push(heart);
         }
 
-        this._currentHp = this.maxHpCount;
+        this._currentHp = startHp;
         this._damageInvincibleRemain = 0;
     }
 
@@ -701,12 +798,14 @@ export class GameManager extends Component {
         }
         this._currentHp = 0;
         this._damageInvincibleRemain = 0;
-        SoundController.instance?.play(SoundId.InstantKill);
-        this.gameOver(true);
+        if (SoundController.instance?.library?.getClip(SoundId.InstantKill)) {
+            SoundController.instance.play(SoundId.InstantKill);
+        }
+        this.gameOver();
     }
 
     /** Конец забега — наполните позже (UI, рестарт и т.д.). */
-    public gameOver(skipSound = false): void {
+    public gameOver(): void {
         if (this._gameOver) {
             return;
         }
@@ -716,9 +815,10 @@ export class GameManager extends Component {
         this._playing = false;
         this._ktaPanelShown = false;
         this._hideOverlayPanels();
-        if (!skipSound) {
-            SoundController.instance?.play(SoundId.GameOver);
-        }
+        SoundController.instance?.endKtaBgmPhase();
+        SoundController.instance?.stopBgm();
+        SoundController.instance?.play(SoundId.WallHit);
+        SoundController.instance?.playGameOverJingle();
         this._findPlayerAnimation(SceneNodeHub.instance?.player ?? null)
             ?.freezeIdleFlightPose();
         this._showOverlayPanel(this.gameOverPanel);
@@ -795,9 +895,19 @@ export class GameManager extends Component {
         this._onMenuTap();
     }
 
+    private _onTouchEnd(_e: EventTouch | EventMouse) {
+        this._suppressTapToStart = false;
+    }
+
     private _onMouseDown(e: EventMouse) {
         if (e.getButton() === 0) {
             this._onMenuTap();
+        }
+    }
+
+    private _onMouseUp(e: EventMouse) {
+        if (e.getButton() === 0) {
+            this._onTouchEnd(e);
         }
     }
 }
