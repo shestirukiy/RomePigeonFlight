@@ -1,4 +1,5 @@
 import { _decorator, Component, Node } from 'cc';
+import { MilestoneDistanceLabel } from './MilestoneDistanceLabel';
 
 const { ccclass, property } = _decorator;
 
@@ -42,6 +43,14 @@ export class SceneNodeHub extends Component {
         tooltip: 'LabelScore на GameOverPanel — узел с числом семечек.',
     })
     gameOverSeedScoreNode: Node | null = null;
+
+    @property({
+        type: MilestoneDistanceLabel,
+        displayName: 'Game Over Milestone Sign',
+        tooltip:
+            'MilestoneDistanceLabel на префабе Sign в Game Over: показывает последнюю пройденную веху (м).',
+    })
+    gameOverMilestoneSign: MilestoneDistanceLabel | null = null;
 
     onLoad() {
         SceneNodeHub._inst = this;

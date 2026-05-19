@@ -41,6 +41,6 @@ export class SeedPickup extends PickupBase {
         this._collected = true;
         this.playCollectSound();
         GameManager.game?.addScore(this.points);
-        this.node.destroy();
+        this.destroyPickupNode();
     }
 }

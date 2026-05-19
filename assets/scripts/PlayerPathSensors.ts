@@ -14,6 +14,8 @@ import { GameManager } from './GameManager';
 import { PlayerAnimationController } from './PlayerAnimationController';
 import { PlayerController } from './PlayerController';
 import { PickupBase } from './PickupBase';
+import { MilestoneSign } from './MilestoneSign';
+import { MilestoneDistanceLabel } from './MilestoneDistanceLabel';
 
 const { ccclass, property, executionOrder } = _decorator;
 
@@ -420,6 +422,10 @@ export class PlayerPathSensors extends Component {
             return;
         }
 
+        if (this._tryMilestoneSignPass(other)) {
+            return;
+        }
+
         if (this._isLethalGround(other)) {
             if (this.debugLog) {
                 console.log(
@@ -746,6 +752,37 @@ export class PlayerPathSensors extends Component {
             n = n.parent;
         }
         return false;
+    }
+
+    private _tryMilestoneSignPass(other: Collider2D): boolean {
+        const sign = this._findMilestoneSign(other);
+        if (!sign) {
+            return false;
+        }
+        if (this.debugLog) {
+            console.log(
+                `[PlayerPathSensors] milestone sign other="${other.node?.name ?? '?'}" m=${sign.milestoneMeters}`,
+            );
+        }
+        return sign.tryPassFromPlayerContact();
+    }
+
+    private _findMilestoneSign(other: Collider2D): MilestoneSign | null {
+        let n: Node | null = other.node;
+        while (n) {
+            const existing = n.getComponent(MilestoneSign);
+            if (existing) {
+                return existing;
+            }
+            if (
+                n.name === 'MilestoneSign' ||
+                n.getComponent(MilestoneDistanceLabel)
+            ) {
+                return MilestoneSign.ensureOn(n);
+            }
+            n = n.parent;
+        }
+        return null;
     }
 
     private _hazardKind(other: Collider2D): 'cloud' | 'wall' | null {

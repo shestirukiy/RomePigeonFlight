@@ -4,6 +4,8 @@ import {
     AudioSource,
     Component,
     Node,
+    tween,
+    Tween,
 } from 'cc';
 import { MusicTrack, SoundId, SoundLibrary } from './SoundLibrary';
 
@@ -82,6 +84,18 @@ export class SoundController extends Component {
     })
     musicVolume = 0.65;
 
+    @property({
+        group: G_VOL,
+        displayName: 'Music Crossfade (s)',
+        slide: true,
+        min: 0,
+        max: 5,
+        step: 0.05,
+        tooltip:
+            'Плавный переход между BGM (Waiting → Gameplay и др.). 0 — мгновенная смена.',
+    })
+    musicCrossfadeDurationSec = 1.5;
+
     @property({ displayName: 'SFX Enabled' })
     sfxEnabled = true;
 
@@ -97,6 +111,12 @@ export class SoundController extends Component {
 
     private readonly _sfxPool: AudioSource[] = [];
     private _musicSource: AudioSource | null = null;
+    private _musicAltSource: AudioSource | null = null;
+    private _musicCrossfadeTween: Tween<{ t: number }> | null = null;
+
+    /** Узел Music для ENDED; в onDestroy node у AudioSource уже может быть null. */
+    private _musicEventNode: Node | null = null;
+
     private _poolCursor = 0;
     private _currentMusic: MusicTrack | null = null;
 
@@ -123,7 +143,10 @@ export class SoundController extends Component {
     }
 
     onDestroy() {
+        this._cancelMusicCrossfade();
         this._unbindMusicEnded();
+        this._musicSource = null;
+        this._musicAltSource = null;
         if (SoundController._inst === this) {
             SoundController._inst = null;
         }
@@ -227,7 +250,7 @@ export class SoundController extends Component {
         loop = true,
         forceRestart = false,
     ): void {
-        if (!this._musicSource) {
+        if (!this._musicSource || !this._musicAltSource) {
             return;
         }
         if (!this.musicEnabled) {
@@ -238,34 +261,32 @@ export class SoundController extends Component {
         const clip = this._clipForMusicTrack(track);
         if (!clip) {
             if (this._currentMusic !== track) {
+                this._cancelMusicCrossfade();
                 this._musicSource.stop();
+                this._musicAltSource.stop();
                 this._currentMusic = null;
             }
             return;
         }
 
+        const out = this._musicSource;
         const sameTrack =
-            this._currentMusic === track && this._musicSource.clip === clip;
+            this._currentMusic === track && out.clip === clip;
 
-        if (sameTrack && this._musicSource.playing) {
+        if (sameTrack && out.playing) {
             if (!forceRestart) {
                 return;
             }
-            this._musicSource.stop();
-            this._musicSource.clip = clip;
-            this._musicSource.loop = loop;
-            this._musicSource.volume = this.musicVolume;
-            this._musicSource.play();
-            this._currentMusic = track;
+        }
+
+        const fadeSec = Math.max(0, this.musicCrossfadeDurationSec);
+        const canCrossfade = fadeSec > 0 && out.playing;
+        if (!canCrossfade) {
+            this._playMusicInstant(track, clip, loop);
             return;
         }
 
-        this._musicSource.stop();
-        this._musicSource.clip = clip;
-        this._musicSource.loop = loop;
-        this._musicSource.volume = this.musicVolume;
-        this._musicSource.play();
-        this._currentMusic = track;
+        this._crossfadeMusic(track, clip, loop, out, this._musicAltSource, fadeSec);
     }
 
     /** KTA: отдельный BGM (не gameplay); с начала при открытии панели. */
@@ -301,7 +322,9 @@ export class SoundController extends Component {
     }
 
     public stopBgm(): void {
+        this._cancelMusicCrossfade();
         this._musicSource?.stop();
+        this._musicAltSource?.stop();
         this._currentMusic = null;
     }
 
@@ -346,34 +369,116 @@ export class SoundController extends Component {
     }
 
     private _ensureMusicSource(): void {
-        let musicNode = this.node.getChildByName('Music');
+        this._musicSource = this._getOrCreateMusicSource('Music');
+        this._musicAltSource = this._getOrCreateMusicSource('MusicB');
+    }
+
+    private _getOrCreateMusicSource(nodeName: string): AudioSource {
+        let musicNode = this.node.getChildByName(nodeName);
         if (!musicNode) {
-            musicNode = new Node('Music');
+            musicNode = new Node(nodeName);
             musicNode.parent = this.node;
         }
-        this._musicSource =
+        const src =
             musicNode.getComponent(AudioSource) ??
             musicNode.addComponent(AudioSource);
-        this._musicSource.playOnAwake = false;
+        src.playOnAwake = false;
+        return src;
+    }
+
+    private _playMusicInstant(
+        track: MusicTrack,
+        clip: AudioClip,
+        loop: boolean,
+    ): void {
+        this._cancelMusicCrossfade();
+        const out = this._musicSource;
+        const alt = this._musicAltSource;
+        if (!out || !alt) {
+            return;
+        }
+        alt.stop();
+        out.stop();
+        out.clip = clip;
+        out.loop = loop;
+        out.volume = this.musicVolume;
+        out.play();
+        this._currentMusic = track;
+        this._bindMusicEnded();
+    }
+
+    private _crossfadeMusic(
+        track: MusicTrack,
+        clip: AudioClip,
+        loop: boolean,
+        out: AudioSource,
+        inn: AudioSource,
+        durationSec: number,
+    ): void {
+        this._cancelMusicCrossfade();
+
+        inn.stop();
+        inn.clip = clip;
+        inn.loop = loop;
+        inn.volume = 0;
+        inn.play();
+
+        const targetVol = this.musicVolume;
+        const startOutVol = out.playing ? out.volume : 0;
+        const state = { t: 0 };
+
+        this._musicCrossfadeTween = tween(state)
+            .to(
+                durationSec,
+                { t: 1 },
+                {
+                    easing: 'sineInOut',
+                    onUpdate: () => {
+                        const t = state.t;
+                        if (out.playing) {
+                            out.volume = startOutVol * (1 - t);
+                        }
+                        inn.volume = targetVol * t;
+                    },
+                },
+            )
+            .call(() => {
+                this._musicCrossfadeTween = null;
+                out.stop();
+                out.volume = targetVol;
+                inn.volume = targetVol;
+                this._musicSource = inn;
+                this._musicAltSource = out;
+                this._currentMusic = track;
+                this._bindMusicEnded();
+            })
+            .start();
+    }
+
+    private _cancelMusicCrossfade(): void {
+        if (this._musicCrossfadeTween) {
+            this._musicCrossfadeTween.stop();
+            this._musicCrossfadeTween = null;
+        }
     }
 
     private _bindMusicEnded(): void {
-        if (!this._musicSource) {
+        this._unbindMusicEnded();
+        const node = this._musicSource?.node;
+        if (!node?.isValid) {
             return;
         }
-        this._musicSource.node.on(
-            AudioSource.EventType.ENDED,
-            this._onMusicEnded,
-            this,
-        );
+        this._musicEventNode = node;
+        node.on(AudioSource.EventType.ENDED, this._onMusicEnded, this);
     }
 
     private _unbindMusicEnded(): void {
-        this._musicSource?.node.off(
-            AudioSource.EventType.ENDED,
-            this._onMusicEnded,
-            this,
-        );
+        const node = this._musicEventNode;
+        this._musicEventNode = null;
+        if (!node?.isValid) {
+            return;
+        }
+        node.off(AudioSource.EventType.ENDED, this._onMusicEnded, this);
     }
 
     private _onMusicEnded(): void {

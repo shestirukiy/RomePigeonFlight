@@ -1,0 +1,13 @@
+{
+  "__type__": "cc.Material",
+  "_name": "SpriteSolidFill",
+  "_objFlags": 0,
+  "_native": "",
+  "_effectAsset": {
+    "__uuid__": "c4e8a1f2-9b3d-4e6a-8f1c-2d5e7a9b0c3d"
+  },
+  "_techIdx": 0,
+  "_defines": [],
+  "_states": [],
+  "_props": []
+}

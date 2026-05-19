@@ -1,0 +1,72 @@
+// Однородная заливка по альфе спрайта: RGB = fillColor, прозрачность = fillColor.a × fillOpacity × alpha текстуры.
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: vs:vert
+      frag: fs:frag
+      depthStencilState:
+        depthTest: false
+        depthWrite: false
+      blendState:
+        targets:
+        - blend: true
+          blendSrc: src_alpha
+          blendDst: one_minus_src_alpha
+          blendDstAlpha: one_minus_src_alpha
+      rasterizerState:
+        cullMode: none
+      properties:
+        fillColor: { value: [1.0, 1.0, 1.0, 1.0], editor: { type: color, displayName: Fill Color } }
+        fillOpacity: { value: 1.0, editor: { slide: true, range: [0, 1], step: 0.01, displayName: Fill Opacity } }
+}%
+
+CCProgram vs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  #if USE_LOCAL
+    #include <builtin/uniforms/cc-local>
+  #endif
+  in vec3 a_position;
+  in vec2 a_texCoord;
+  in vec4 a_color;
+
+  out vec4 v_color;
+  out mediump vec2 v_uv0;
+
+  vec4 vert () {
+    vec4 pos = vec4(a_position, 1.0);
+    #if USE_LOCAL
+      pos = cc_matWorld * pos;
+    #endif
+    pos = cc_matViewProj * pos;
+    v_uv0 = a_texCoord;
+    v_color = a_color;
+    return pos;
+  }
+}%
+
+CCProgram fs %{
+  precision highp float;
+  #include <builtin/internal/embedded-alpha>
+  #include <builtin/internal/alpha-test>
+
+  in mediump vec2 v_uv0;
+  in vec4 v_color;
+
+  uniform Constant {
+    vec4 fillColor;
+    float fillOpacity;
+  };
+
+  #pragma builtin(local)
+  layout(set = 2, binding = 11) uniform sampler2D cc_spriteTexture;
+
+  vec4 frag () {
+    vec4 maskSample = CCSampleWithAlphaSeparated(cc_spriteTexture, v_uv0);
+    float mask = maskSample.a * v_color.a;
+    float alpha = fillColor.a * fillOpacity * mask;
+    vec4 o = vec4(fillColor.rgb, alpha);
+    ALPHA_TEST(o);
+    return o;
+  }
+}%

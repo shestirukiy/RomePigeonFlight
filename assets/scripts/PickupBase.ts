@@ -28,6 +28,21 @@ export abstract class PickupBase extends Component {
         SoundController.instance?.play(this.collectSound);
     }
 
+    /**
+     * Уничтожение ноды с RigidBody2D нельзя вызывать из BEGIN_CONTACT — Box2D ещё в колбэке.
+     */
+    protected destroyPickupNode(): void {
+        const node = this.node;
+        if (!node?.isValid) {
+            return;
+        }
+        this.scheduleOnce(() => {
+            if (node.isValid) {
+                node.destroy();
+            }
+        }, 0);
+    }
+
     /** Корень объекта с PickupBase (подъём по иерархии). */
     public static findPickupRoot(from: Node | null): Node | null {
         let n: Node | null = from;

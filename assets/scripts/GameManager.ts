@@ -22,7 +22,13 @@ import { CameraShake } from './CameraShake';
 import { SoundController } from './SoundController';
 import { SoundId } from './SoundLibrary';
 
-const { ccclass, property } = _decorator;
+const { ccclass, property, executionOrder } = _decorator;
+
+const G_SCROLL = { id: 'Scroll', name: 'Scrolling' };
+const G_MILESTONE = { id: 'Milestones', name: 'Milestone signs' };
+const G_UI = { id: 'UI', name: 'UI' };
+const G_HP = { id: 'Health', name: 'Health & seeds' };
+const G_COMBAT = { id: 'Combat', name: 'Combat' };
 
 /**
  * First tap starts the run; scrollSpeed drives LevelGenerator chunk movement.
@@ -30,6 +36,7 @@ const { ccclass, property } = _decorator;
  * Стоп скролла вперёд: PlayerPathSensors вызывает syncPathSensorBlockCounts раз в кадр.
  */
 @ccclass('GameManager')
+@executionOrder(-95)
 export class GameManager extends Component {
     private static _inst: GameManager | null = null;
 
@@ -82,12 +89,53 @@ export class GameManager extends Component {
     /** Сколько порогов seedsPerExtraLife уже выдали за этот забег. */
     private _seedLifeBonusesGranted = 0;
 
+    /** Пройденная дистанция забега (пиксели сдвига мира вперёд). */
+    private _flightDistancePx = 0;
+
+    /** Следующий порог вехи в метрах (кумулятивно: 50, 100, 175, …). */
+    private _nextMilestoneMeters = 0;
+
+    /** Индекс для gap(k) при постановке следующего столба в очередь. */
+    private _milestoneGapIndex = 0;
+
+    private _milestonesPassedCount = 0;
+
+    private _lastCompletedMilestoneMeters = 0;
+
+    /** Вехи, для которых уже поставлен в очередь Chunk_Sign, но ещё не пройдены. */
+    private readonly _activeMilestoneSigns = new Set<number>();
+
+    /** Доп. множитель скорости после прохождения столба (1 = только milestoneSpeedMultiplier). */
+    private _milestonePassBoostFactor = 1;
+    private _milestonePassBoostHoldRemain = 0;
+    private _milestonePassBoostSettleRemain = 0;
+
     /** Слева направо: [якорное сердечко, клоны справа]. */
     private readonly _heartNodes: Node[] = [];
     private readonly _spawnedHearts: Node[] = [];
 
     public get score(): number {
         return this._score;
+    }
+
+    public get lastCompletedMilestoneMeters(): number {
+        return this._lastCompletedMilestoneMeters;
+    }
+
+    public get milestonesPassedCount(): number {
+        return this._milestonesPassedCount;
+    }
+
+    public get flightDistanceMeters(): number {
+        const ppm = this.pixelsPerMeter;
+        if (ppm <= 0) {
+            return 0;
+        }
+        return this._flightDistancePx / ppm;
+    }
+
+    public get flightDistancePx(): number {
+        return this._flightDistancePx;
     }
 
     public get currentHp(): number {
@@ -235,7 +283,27 @@ export class GameManager extends Component {
         ) {
             return 0;
         }
-        return this.scrollSpeed * _dt;
+        return this.getEffectiveScrollSpeed() * _dt;
+    }
+
+    /** Скорость мира: scrollSpeed × вехи × кратковременный буст после столба. */
+    public getEffectiveScrollSpeed(): number {
+        const base = Math.max(0, this.scrollSpeed);
+        return (
+            base *
+            this._getMilestoneSpeedMultiplier() *
+            this._milestonePassBoostFactor
+        );
+    }
+
+    private _getMilestoneSpeedMultiplier(): number {
+        if (this._milestonesPassedCount <= 0) {
+            return 1;
+        }
+        return Math.pow(
+            this.milestoneSpeedMultiplier,
+            this._milestonesPassedCount,
+        );
     }
 
     /** Доп. сдвиг чанков вправо за кадр (отдача от стены). */
@@ -253,6 +321,7 @@ export class GameManager extends Component {
     }
 
     @property({
+        group: G_SCROLL,
         displayName: 'Scroll Speed',
         tooltip:
             'Скорость «мира» (пикс/с): использует Level Generator для сдвига чанков после старта игры.',
@@ -260,6 +329,7 @@ export class GameManager extends Component {
     scrollSpeed = 280;
 
     @property({
+        group: G_SCROLL,
         displayName: 'Forward contact min hold (s)',
         tooltip:
             'Пока есть хотя бы один контакт, скролл остановлен. После последнего END hold сбрасывается сразу; это значение используется только если BEGIN был без пары END в том же кадре (редкий глитч физики).',
@@ -267,12 +337,110 @@ export class GameManager extends Component {
     forwardContactMinHoldSec = 0.05;
 
     @property({
+        group: G_SCROLL,
         displayName: 'Back contact min hold (s)',
         tooltip: 'То же для заднего сенсора во время отскока.',
     })
     backContactMinHoldSec = 0.05;
 
     @property({
+        group: G_MILESTONE,
+        displayName: 'Pixels Per Meter',
+        tooltip:
+            'Сколько пикселей прокрутки мира = 1 «метр» на столбе (тюнинг отображения).',
+    })
+    pixelsPerMeter = 150;
+
+    @property({
+        group: G_MILESTONE,
+        displayName: 'First Milestone (m)',
+        tooltip:
+            'Первый столб на этой дистанции (50 — ранний «win»). 0 — вехи выкл.',
+    })
+    firstMilestoneMeters = 50;
+
+    @property({
+        group: G_MILESTONE,
+        displayName: 'Milestone Gap Base (m)',
+        tooltip:
+            'Базовый зазор до следующего порога: gap(0) = base (второй столб ≈ first + base).',
+    })
+    milestoneGapBase = 50;
+
+    @property({
+        group: G_MILESTONE,
+        displayName: 'Milestone Gap Growth (m)',
+        tooltip:
+            'Прирост зазора: gap(k) = base + growth × k^exp. Без потолка — дальше столбы реже.',
+    })
+    milestoneGapGrowth = 35;
+
+    @property({
+        group: G_MILESTONE,
+        displayName: 'Milestone Gap Exponent',
+        tooltip:
+            'Степень роста зазора: gap(k) = base + growth × k^exp. ' +
+            'exp > 1 — поздние вехи заметно реже (1 = линейно).',
+    })
+    milestoneGapExponent = 1.35;
+
+    @property({
+        group: G_MILESTONE,
+        displayName: 'Milestone Speed Multiplier',
+        tooltip:
+            'Множитель скорости за каждую пройденную веху (×1.05 → +5% к scrollSpeed). ' +
+            'Без потолка: скорость растёт, пока игрок не упрётся в свою реакцию.',
+    })
+    milestoneSpeedMultiplier = 1.05;
+
+    @property({
+        group: G_MILESTONE,
+        displayName: 'Milestone Round Step (m)',
+        tooltip:
+            'Пороги и цифры на столбах — только кратные этому шагу (50 → 50, 100, 150… 700, 750). 0 — без округления.',
+    })
+    milestoneRoundStep = 50;
+
+    @property({
+        group: G_MILESTONE,
+        displayName: 'Pass Boost Enabled',
+        tooltip:
+            'После прохождения столба: краткий рывок скорости, затем плавный возврат к обычному множителю вехи.',
+    })
+    milestonePassBoostEnabled = true;
+
+    @property({
+        group: G_MILESTONE,
+        displayName: 'Pass Boost Multiplier',
+        tooltip: 'Во время рывка: скорость × этот множитель (поверх множителя вехи).',
+        visible() {
+            return (this as GameManager).milestonePassBoostEnabled;
+        },
+    })
+    milestonePassBoostMultiplier = 2;
+
+    @property({
+        group: G_MILESTONE,
+        displayName: 'Pass Boost Hold (s)',
+        tooltip: 'Сколько секунд держать пиковый множитель перед плавным спадом.',
+        visible() {
+            return (this as GameManager).milestonePassBoostEnabled;
+        },
+    })
+    milestonePassBoostHoldSec = 1;
+
+    @property({
+        group: G_MILESTONE,
+        displayName: 'Pass Boost Settle (s)',
+        tooltip: 'Длительность плавного снижения с пика до обычной скорости вехи.',
+        visible() {
+            return (this as GameManager).milestonePassBoostEnabled;
+        },
+    })
+    milestonePassBoostSettleSec = 0.85;
+
+    @property({
+        group: G_UI,
         type: Label,
         displayName: 'Score Label',
         tooltip: 'Label на Canvas, куда выводится счёт очков.',
@@ -280,35 +448,7 @@ export class GameManager extends Component {
     scoreLabel: Label | null = null;
 
     @property({
-        type: Node,
-        displayName: 'HP Heart (anchor)',
-        tooltip:
-            'Первое сердечко в ряду HP (слева). Остальные клонируются вправо при старте.',
-    })
-    hpHeartAnchor: Node | null = null;
-
-    @property({
-        displayName: 'Starting HP',
-        tooltip:
-            'Сердечек в начале забега (якорь + клоны). Верхнего лимита нет — за семечки ряд растёт.',
-    })
-    startingHpCount = 3;
-
-    @property({
-        displayName: 'Heart spacing X',
-        tooltip:
-            'Доп. отступ между сердечками по X. Шаг = ширина UITransform якоря + это значение.',
-    })
-    heartSpacingX = 4;
-
-    @property({
-        displayName: 'Seeds Per Extra Life',
-        tooltip:
-            'За каждые N собранных семечек за забег — +1 HP. 0 — бонус выключен.',
-    })
-    seedsPerExtraLife = 100;
-
-    @property({
+        group: G_UI,
         type: Node,
         displayName: 'Game Over Panel',
         tooltip: 'Панель поражения; включается в gameOver().',
@@ -316,6 +456,7 @@ export class GameManager extends Component {
     gameOverPanel: Node | null = null;
 
     @property({
+        group: G_UI,
         type: Node,
         displayName: 'KTA Panel',
         tooltip:
@@ -324,6 +465,7 @@ export class GameManager extends Component {
     ktaPanel: Node | null = null;
 
     @property({
+        group: G_UI,
         displayName: 'Seed Count Roll Duration (s)',
         tooltip:
             'За сколько секунд счётчик на game over дойдёт от 0 до фактического счёта.',
@@ -331,6 +473,40 @@ export class GameManager extends Component {
     gameOverSeedCountRollDurationSec = 1.2;
 
     @property({
+        group: G_HP,
+        type: Node,
+        displayName: 'HP Heart (anchor)',
+        tooltip:
+            'Первое сердечко в ряду HP (слева). Остальные клонируются вправо при старте.',
+    })
+    hpHeartAnchor: Node | null = null;
+
+    @property({
+        group: G_HP,
+        displayName: 'Starting HP',
+        tooltip:
+            'Сердечек в начале забега (якорь + клоны). Верхнего лимита нет — за семечки ряд растёт.',
+    })
+    startingHpCount = 3;
+
+    @property({
+        group: G_HP,
+        displayName: 'Heart spacing X',
+        tooltip:
+            'Доп. отступ между сердечками по X. Шаг = ширина UITransform якоря + это значение.',
+    })
+    heartSpacingX = 4;
+
+    @property({
+        group: G_HP,
+        displayName: 'Seeds Per Extra Life',
+        tooltip:
+            'За каждые N собранных семечек за забег — +1 HP. 0 — бонус выключен.',
+    })
+    seedsPerExtraLife = 100;
+
+    @property({
+        group: G_COMBAT,
         displayName: 'Damage invincibility (s)',
         tooltip:
             'После потери HP игрок не получает урон повторно, пока не истечёт таймер (одно препятствие / несколько контактов).',
@@ -412,6 +588,154 @@ export class GameManager extends Component {
         ) {
             this.cancelWorldKickback();
         }
+
+        this._tickMilestonePassBoost(dt);
+        this._tickFlightDistanceAndMilestones(dt);
+    }
+
+    private _tickFlightDistanceAndMilestones(dt: number): void {
+        if (!this.isPlaying) {
+            return;
+        }
+        const delta = this.getForwardScrollDelta(dt);
+        if (delta <= 0) {
+            return;
+        }
+        this._flightDistancePx += delta;
+
+        const first = this.firstMilestoneMeters;
+        const ppm = this.pixelsPerMeter;
+        if (first <= 0 || ppm <= 0) {
+            return;
+        }
+
+        const levelGen = this.getComponent(LevelGenerator);
+        while (this._flightDistancePx >= this._nextMilestoneMeters * ppm) {
+            const m = this._nextMilestoneMeters;
+            this._activeMilestoneSigns.add(m);
+            levelGen?.queueMilestoneChunk(m);
+            const gap = this._computeMilestoneGap(this._milestoneGapIndex);
+            this._milestoneGapIndex++;
+            this._nextMilestoneMeters = this._snapMilestoneMeters(m + gap, m);
+        }
+    }
+
+    /**
+     * «Круглые» метры на столбе: 700, 750, не 731. Следующий порог строго больше предыдущего.
+     */
+    private _snapMilestoneMeters(raw: number, afterMeters: number): number {
+        const step = this.milestoneRoundStep;
+        let m = Math.max(0, Math.floor(raw));
+        if (step > 0) {
+            m = Math.round(m / step) * step;
+            if (m <= afterMeters) {
+                m = afterMeters + step;
+            }
+        }
+        return Math.max(0, m);
+    }
+
+    /** Зазор до следующего порога (м): base + growth × k^exp (без потолка). */
+    private _computeMilestoneGap(gapIndex: number): number {
+        const base = Math.max(0, this.milestoneGapBase);
+        const growth = Math.max(0, this.milestoneGapGrowth);
+        const exp = Math.max(1, this.milestoneGapExponent);
+        const k = Math.max(0, gapIndex);
+        return base + growth * Math.pow(k, exp);
+    }
+
+    /**
+     * Прохождение столба-вехи (MilestoneSign). Возвращает true, если веха принята.
+     */
+    public onMilestoneSignPassed(meters: number): boolean {
+        if (!this.isPlaying) {
+            return false;
+        }
+        const m = Math.max(0, Math.floor(meters));
+        if (!this._activeMilestoneSigns.has(m)) {
+            return false;
+        }
+        this._activeMilestoneSigns.delete(m);
+        this._milestonesPassedCount++;
+        this._lastCompletedMilestoneMeters = m;
+        this._triggerMilestonePassBoost();
+        return true;
+    }
+
+    private _triggerMilestonePassBoost(): void {
+        if (!this.milestonePassBoostEnabled) {
+            return;
+        }
+        const peak = Math.max(1, this.milestonePassBoostMultiplier);
+        this._milestonePassBoostFactor = peak;
+        this._milestonePassBoostHoldRemain = Math.max(
+            0,
+            this.milestonePassBoostHoldSec,
+        );
+        this._milestonePassBoostSettleRemain = 0;
+    }
+
+    private _tickMilestonePassBoost(dt: number): void {
+        if (!this.milestonePassBoostEnabled || !this.isPlaying) {
+            this._resetMilestonePassBoost();
+            return;
+        }
+
+        const peak = Math.max(1, this.milestonePassBoostMultiplier);
+        const settleDur = Math.max(0, this.milestonePassBoostSettleSec);
+
+        if (this._milestonePassBoostHoldRemain > 0) {
+            this._milestonePassBoostHoldRemain = Math.max(
+                0,
+                this._milestonePassBoostHoldRemain - dt,
+            );
+            this._milestonePassBoostFactor = peak;
+            if (this._milestonePassBoostHoldRemain <= 0 && settleDur > 0) {
+                this._milestonePassBoostSettleRemain = settleDur;
+            } else if (this._milestonePassBoostHoldRemain <= 0) {
+                this._milestonePassBoostFactor = 1;
+            }
+            return;
+        }
+
+        if (this._milestonePassBoostSettleRemain > 0) {
+            this._milestonePassBoostSettleRemain = Math.max(
+                0,
+                this._milestonePassBoostSettleRemain - dt,
+            );
+            const t =
+                settleDur > 0
+                    ? 1 - this._milestonePassBoostSettleRemain / settleDur
+                    : 1;
+            const eased = t * t * (3 - 2 * t);
+            this._milestonePassBoostFactor = peak + (1 - peak) * eased;
+            if (this._milestonePassBoostSettleRemain <= 0) {
+                this._milestonePassBoostFactor = 1;
+            }
+            return;
+        }
+
+        this._milestonePassBoostFactor = 1;
+    }
+
+    private _resetMilestonePassBoost(): void {
+        this._milestonePassBoostFactor = 1;
+        this._milestonePassBoostHoldRemain = 0;
+        this._milestonePassBoostSettleRemain = 0;
+    }
+
+    private _resetMilestones(): void {
+        this._flightDistancePx = 0;
+        this._nextMilestoneMeters = this._snapMilestoneMeters(
+            this.firstMilestoneMeters,
+            0,
+        );
+        this._milestoneGapIndex = 0;
+        this._milestonesPassedCount = 0;
+        this._lastCompletedMilestoneMeters = 0;
+        this._activeMilestoneSigns.clear();
+        this._resetMilestonePassBoost();
+        this.getComponent(LevelGenerator)?.clearMilestoneQueue();
     }
 
     /**
@@ -472,13 +796,34 @@ export class GameManager extends Component {
         panel.active = true;
     }
 
+    /**
+     * Нельзя включать panel.active внутри BEGIN_CONTACT — у детей RigidBody2D падает b2World.
+     */
+    private _showOverlayPanelDeferred(panel: Node | null): void {
+        if (!panel?.isValid) {
+            return;
+        }
+        this.scheduleOnce(() => {
+            if (panel.isValid) {
+                this._showOverlayPanel(panel);
+            }
+        }, 0);
+    }
+
     private _showKtaPanel(): void {
         this._ktaPanelShown = true;
         if (this.gameOverPanel?.isValid) {
             this.gameOverPanel.active = false;
         }
-        this._showOverlayPanel(this.ktaPanel);
+        this._hideWorldChunksForKta();
+        this._showOverlayPanelDeferred(this.ktaPanel);
         SoundController.instance?.playMusicForKtaPanel(true);
+    }
+
+    /** Сразу скрыть мир (не через scheduleOnce — иначе кадр с чанками на KTA). */
+    private _hideWorldChunksForKta(): void {
+        const gen = this.getComponent(LevelGenerator);
+        gen?.setAllChunkLayersActive(false);
     }
 
     private _bindPlayAgainButton(): void {
@@ -570,6 +915,7 @@ export class GameManager extends Component {
     public resetScore(): void {
         this._score = 0;
         this._seedLifeBonusesGranted = 0;
+        this._resetMilestones();
         this._refreshScoreLabel();
     }
 
@@ -791,17 +1137,19 @@ export class GameManager extends Component {
         ) {
             return;
         }
-        for (const heart of this._heartNodes) {
-            if (heart?.isValid) {
-                heart.active = false;
-            }
-        }
         this._currentHp = 0;
         this._damageInvincibleRemain = 0;
         if (SoundController.instance?.library?.getClip(SoundId.InstantKill)) {
             SoundController.instance.play(SoundId.InstantKill);
         }
-        this.gameOver();
+        this.scheduleOnce(() => {
+            for (const heart of this._heartNodes) {
+                if (heart?.isValid) {
+                    heart.active = false;
+                }
+            }
+            this.gameOver();
+        }, 0);
     }
 
     /** Конец забега — наполните позже (UI, рестарт и т.д.). */
@@ -821,8 +1169,17 @@ export class GameManager extends Component {
         SoundController.instance?.playGameOverJingle();
         this._findPlayerAnimation(SceneNodeHub.instance?.player ?? null)
             ?.freezeIdleFlightPose();
-        this._showOverlayPanel(this.gameOverPanel);
-        this._playGameOverSeedCountRoll(this._score);
+        this._showOverlayPanelDeferred(this.gameOverPanel);
+        this.scheduleOnce(() => {
+            this._refreshGameOverMilestoneLabel();
+            this._playGameOverSeedCountRoll(this._score);
+        }, 0);
+    }
+
+    private _refreshGameOverMilestoneLabel(): void {
+        SceneNodeHub.instance?.gameOverMilestoneSign?.setMeters(
+            this._lastCompletedMilestoneMeters,
+        );
     }
 
     private _playGameOverSeedCountRoll(targetScore: number): void {
