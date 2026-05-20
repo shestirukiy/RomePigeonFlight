@@ -1,12 +1,13 @@
 import { _decorator, Component, Node, tween, Tween, Vec3 } from 'cc';
 
-const { ccclass, property } = _decorator;
+const { ccclass, property, executionOrder } = _decorator;
 
 /**
  * Случайное смещение узла камеры (обычно дочерний Camera на Canvas).
  * Вешать на узел, который нужно трясти; вызывать из GameManager при уроне.
  */
 @ccclass('CameraShake')
+@executionOrder(100)
 export class CameraShake extends Component {
     private static _inst: CameraShake | null = null;
 
@@ -89,6 +90,23 @@ export class CameraShake extends Component {
 
         this._activeTween = shakeTween;
         shakeTween.start();
+    }
+
+    /** Запомнить якорь тряски без сдвига узла (позиция уже выставлена снаружи). */
+    public setRestAnchor(pos: Vec3): void {
+        this._originalPosition.set(pos);
+        this._stopShakeTween();
+    }
+
+    /** Якорь тряски (после интро / смены позиции камеры). */
+    public setRestPosition(pos?: Vec3): void {
+        if (pos) {
+            this._originalPosition.set(pos);
+        } else {
+            this._captureRestPosition();
+        }
+        this._stopShakeTween();
+        this.node.setPosition(this._originalPosition);
     }
 
     private _captureRestPosition(): void {

@@ -225,11 +225,16 @@ export class LevelGenerator extends Component {
         this.rebuildChunks();
     }
 
-    /** Вкл/выкл все слои чанков (Obstacles / Town / Sky) и сегменты из генератора. */
+    /**
+     * Вкл/выкл контейнеры слоёв (ObstaclesContainer / TownContainer / SkyContainer).
+     * Чанки внутри не трогаем — при выключении родителя всё дерево скрыто.
+     */
     public setAllChunkLayersActive(active: boolean): void {
         this._chunkLayersActive = active;
-        this._applyStripSegmentsActive(active);
         this._applyChunkLayerVisibility();
+        if (active) {
+            this._applyStripSegmentsActive(true);
+        }
     }
 
     /** Поставить столб-веху при следующем спавне/ресайкле плана 1. */
@@ -657,12 +662,22 @@ export class LevelGenerator extends Component {
         this._strips = [];
     }
 
+    private static readonly OBSTACLES_CONTAINER = 'ObstaclesContainer';
+    private static readonly TOWN_CONTAINER = 'TownContainer';
+    private static readonly SKY_CONTAINER = 'SkyContainer';
+
     private _collectChunkLayerParents(): Node[] {
         const hub = SceneNodeHub.instance;
         const raw = [
-            this._resolveObstaclesParent(),
-            this.plane2ChunkParent,
-            this.plane3ChunkParent ?? hub?.player?.parent ?? null,
+            this._resolveObstaclesContainer(),
+            this._resolveLayerContainer(
+                this.plane2ChunkParent,
+                LevelGenerator.TOWN_CONTAINER,
+            ),
+            this._resolveLayerContainer(
+                this.plane3ChunkParent ?? hub?.player?.parent ?? null,
+                LevelGenerator.SKY_CONTAINER,
+            ),
         ];
         const out: Node[] = [];
         const seen = new Set<Node>();
@@ -674,6 +689,31 @@ export class LevelGenerator extends Component {
             out.push(n);
         }
         return out;
+    }
+
+    /** Корень препятствий в сцене (не дочерний узел внутри чанка). */
+    private _resolveObstaclesContainer(): Node | null {
+        return this._resolveLayerContainer(
+            this.plane1ChunkParent,
+            LevelGenerator.OBSTACLES_CONTAINER,
+        );
+    }
+
+    private _resolveLayerContainer(
+        assigned: Node | null,
+        containerName: string,
+    ): Node | null {
+        if (assigned?.isValid) {
+            let n: Node | null = assigned;
+            while (n?.isValid) {
+                if (n.name === containerName) {
+                    return n;
+                }
+                n = n.parent;
+            }
+        }
+        const root = SceneNodeHub.instance?.canvasRoot ?? this.node;
+        return root.getChildByName(containerName);
     }
 
     private _applyStripSegmentsActive(active: boolean): void {
@@ -688,28 +728,19 @@ export class LevelGenerator extends Component {
 
     private _applyChunkLayerVisibility(): void {
         const active = this._chunkLayersActive;
-        for (const parent of this._collectChunkLayerParents()) {
-            if (!parent?.isValid) {
-                continue;
-            }
-            parent.active = active;
-            if (!active) {
-                for (const ch of parent.children) {
-                    if (ch?.isValid) {
-                        ch.active = false;
-                    }
-                }
+        for (const container of this._collectChunkLayerParents()) {
+            if (container?.isValid) {
+                container.active = active;
             }
         }
     }
 
+    /** Родитель для спавна чанков плана 1 (может совпадать с ObstaclesContainer). */
     private _resolveObstaclesParent(): Node | null {
         if (this.plane1ChunkParent?.isValid) {
             return this.plane1ChunkParent;
         }
-        const hub = SceneNodeHub.instance;
-        const root = hub?.canvasRoot ?? this.node;
-        return root.getChildByName('ObstaclesContainer');
+        return this._resolveObstaclesContainer();
     }
 
     /**

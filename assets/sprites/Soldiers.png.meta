@@ -42,11 +42,11 @@
         "trimThreshold": 1,
         "rotated": false,
         "offsetX": 0,
-        "offsetY": 0,
+        "offsetY": -20,
         "trimX": 0,
-        "trimY": 0,
+        "trimY": 40,
         "width": 434,
-        "height": 644,
+        "height": 604,
         "rawWidth": 434,
         "rawHeight": 644,
         "borderTop": 0,
@@ -61,16 +61,16 @@
         "vertices": {
           "rawPosition": [
             -217,
-            -322,
+            -302,
             0,
             217,
-            -322,
+            -302,
             0,
             -217,
-            322,
+            302,
             0,
             217,
-            322,
+            302,
             0
           ],
           "indexes": [
@@ -83,9 +83,9 @@
           ],
           "uv": [
             0,
-            644,
+            604,
             434,
-            644,
+            604,
             0,
             0,
             434,
@@ -97,18 +97,18 @@
             1,
             0,
             0,
+            0.937888198757764,
             1,
-            1,
-            1
+            0.937888198757764
           ],
           "minPos": [
             -217,
-            -322,
+            -302,
             0
           ],
           "maxPos": [
             217,
-            322,
+            302,
             0
           ]
         },
@@ -128,7 +128,7 @@
   "userData": {
     "type": "sprite-frame",
     "fixAlphaTransparencyArtifacts": false,
-    "hasAlpha": false,
+    "hasAlpha": true,
     "redirect": "83701867-af91-415a-acc8-2afe08104921@6c48a"
   }
 }

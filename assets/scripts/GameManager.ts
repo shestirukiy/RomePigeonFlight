@@ -8,10 +8,13 @@ import {
     EventTouch,
     Label,
     Node,
+    Prefab,
     Tween,
     UITransform,
+    Vec3,
     instantiate,
     tween,
+    ParticleSystem2D,
 } from 'cc';
 import { LevelGenerator } from './LevelGenerator';
 import { PlayerFlight } from './PlayerFlight';
@@ -19,6 +22,7 @@ import { PlayerPathSensors } from './PlayerPathSensors';
 import { PlayerAnimationController } from './PlayerAnimationController';
 import { SceneNodeHub } from './SceneNodeHub';
 import { CameraShake } from './CameraShake';
+import { GameIntroController } from './GameIntroController';
 import { SoundController } from './SoundController';
 import { SoundId } from './SoundLibrary';
 
@@ -513,8 +517,26 @@ export class GameManager extends Component {
     })
     damageInvincibilitySec = 0.85;
 
+    @property({
+        group: G_COMBAT,
+        type: Prefab,
+        displayName: 'Damage Particle FX Prefab',
+        tooltip: 'Префаб DamageParticleFX — спавн при потере HP (рядом с игроком).',
+    })
+    damageParticleFxPrefab: Prefab | null = null;
+
+    @property({
+        group: G_COMBAT,
+        displayName: 'Damage FX Local Offset',
+        tooltip: 'Смещение всплеска перьев относительно корня Player (как на старом DamageParticle).',
+    })
+    damageParticleLocalOffset = new Vec3(24.684, -8.364, 0);
+
     onLoad() {
         GameManager._inst = this;
+        if (!this.getComponent(GameIntroController)) {
+            this.addComponent(GameIntroController);
+        }
         this._refreshScoreLabel();
         this.resetHp();
         this._hideOverlayPanels();
@@ -749,6 +771,8 @@ export class GameManager extends Component {
         this._playing = false;
         this._suppressTapToStart = true;
         this._hideOverlayPanels();
+        GameIntroController.skipIntroAfterRestart();
+        GameIntroController.instance?.snapToGameplayCamera();
         this._resetRunState();
         this.resetScore();
         this.resetHp();
@@ -815,13 +839,13 @@ export class GameManager extends Component {
         if (this.gameOverPanel?.isValid) {
             this.gameOverPanel.active = false;
         }
-        this._hideWorldChunksForKta();
+        this._hideWorldChunkContainers();
         this._showOverlayPanelDeferred(this.ktaPanel);
         SoundController.instance?.playMusicForKtaPanel(true);
     }
 
-    /** Сразу скрыть мир (не через scheduleOnce — иначе кадр с чанками на KTA). */
-    private _hideWorldChunksForKta(): void {
+    /** Сразу скрыть контейнеры мира (Obstacles / Town / Sky), не по одному чанку. */
+    private _hideWorldChunkContainers(): void {
         const gen = this.getComponent(LevelGenerator);
         gen?.setAllChunkLayersActive(false);
     }
@@ -857,6 +881,12 @@ export class GameManager extends Component {
     }
 
     private _onMenuTap(): void {
+        if (GameIntroController.instance?.tryConsumeIntroTap()) {
+            return;
+        }
+        if (GameIntroController.instance?.isBlockingInput) {
+            return;
+        }
         if (this._suppressTapToStart) {
             return;
         }
@@ -1052,6 +1082,7 @@ export class GameManager extends Component {
                 SoundController.instance?.play(SoundId.Damage);
             }
             CameraShake.instance?.shakeOnDamage();
+            this._playDamageParticleOnPlayer();
             if (this.damageInvincibilitySec > 0) {
                 this._damageInvincibleRemain = this.damageInvincibilitySec;
             }
@@ -1089,6 +1120,151 @@ export class GameManager extends Component {
         }
         this._awaitingDeathSequence = false;
         this.beginDeathSequence();
+    };
+
+    private static readonly DAMAGE_PARTICLE_CHILD = 'DamageParticle';
+
+    private _embeddedDamageParticleHideRemain = 0;
+
+    private _playDamageParticleOnPlayer(): void {
+        const player = this._resolvePlayerNode();
+        if (!player?.isValid) {
+            return;
+        }
+
+        const embedded = player.getChildByName(
+            GameManager.DAMAGE_PARTICLE_CHILD,
+        );
+        const psEmbedded = embedded?.getComponent(ParticleSystem2D);
+        if (embedded?.isValid && psEmbedded) {
+            this._burstDamageParticle(embedded, psEmbedded, true);
+            return;
+        }
+
+        const prefab = this.damageParticleFxPrefab;
+        if (!prefab) {
+            return;
+        }
+
+        const fx = instantiate(prefab);
+        if (!fx?.isValid) {
+            return;
+        }
+
+        fx.active = true;
+        fx.layer = player.layer;
+        player.addChild(fx);
+        const off = this.damageParticleLocalOffset;
+        fx.setPosition(off.x, off.y, off.z);
+
+        const ps =
+            fx.getComponent(ParticleSystem2D) ??
+            fx.getComponentInChildren(ParticleSystem2D);
+        if (ps) {
+            this._burstDamageParticle(fx, ps, false);
+        } else {
+            this.scheduleOnce(() => {
+                if (fx.isValid) {
+                    fx.destroy();
+                }
+            }, 1.5);
+        }
+    }
+
+    private _resolvePlayerNode(): Node | null {
+        const hubPlayer = SceneNodeHub.instance?.player;
+        if (hubPlayer?.isValid) {
+            return hubPlayer;
+        }
+        const hub = SceneNodeHub.instance;
+        const root = hub?.canvasRoot ?? hub?.node;
+        if (!root?.isValid) {
+            return null;
+        }
+        const stack = [...root.children];
+        while (stack.length > 0) {
+            const n = stack.pop()!;
+            if (n.getComponent(PlayerFlight)) {
+                return n;
+            }
+            stack.push(...n.children);
+        }
+        return null;
+    }
+
+    /** ParticleSystem2D: 0=FREE (остаётся в мире), 1=RELATIVE (едет с узлом). */
+    private _applyDamageParticleFollowMode(ps: ParticleSystem2D): void {
+        const p = ps as ParticleSystem2D & {
+            positionType?: number;
+            _positionType?: number;
+        };
+        p.positionType = 1;
+        if (p._positionType !== undefined) {
+            p._positionType = 1;
+        }
+    }
+
+    private _burstDamageParticle(
+        fxNode: Node,
+        ps: ParticleSystem2D,
+        reuseEmbedded: boolean,
+    ): void {
+        fxNode.active = true;
+        ps.enabled = true;
+        this._applyDamageParticleFollowMode(ps);
+        ps.stopSystem();
+        this.scheduleOnce(() => {
+            if (!ps.isValid || !fxNode.isValid) {
+                return;
+            }
+            this._applyDamageParticleFollowMode(ps);
+            ps.resetSystem();
+        }, 0);
+
+        const tail = this._damageParticleTailSec(ps);
+        if (reuseEmbedded) {
+            this._embeddedDamageParticleHideRemain = Math.max(
+                this._embeddedDamageParticleHideRemain,
+                tail,
+            );
+            this.unschedule(this._hideEmbeddedDamageParticle);
+            this.schedule(this._hideEmbeddedDamageParticle, 0.05);
+            return;
+        }
+
+        this.scheduleOnce(() => {
+            if (fxNode.isValid) {
+                ps.stopSystem();
+                fxNode.destroy();
+            }
+        }, tail);
+    }
+
+    private _damageParticleTailSec(ps: ParticleSystem2D): number {
+        return (
+            Math.max(0.15, ps.duration > 0 ? ps.duration : 0.25) +
+            ps.life +
+            ps.lifeVar +
+            0.35
+        );
+    }
+
+    private _hideEmbeddedDamageParticle = (): void => {
+        this._embeddedDamageParticleHideRemain -= 0.05;
+        if (this._embeddedDamageParticleHideRemain > 0) {
+            return;
+        }
+        this.unschedule(this._hideEmbeddedDamageParticle);
+        const player = this._resolvePlayerNode();
+        const embedded = player?.getChildByName(
+            GameManager.DAMAGE_PARTICLE_CHILD,
+        );
+        if (!embedded?.isValid) {
+            return;
+        }
+        const ps = embedded.getComponent(ParticleSystem2D);
+        ps?.stopSystem();
+        embedded.active = false;
     };
 
     private _cancelDeferredDeathSequence(): void {
@@ -1163,6 +1339,7 @@ export class GameManager extends Component {
         this._playing = false;
         this._ktaPanelShown = false;
         this._hideOverlayPanels();
+        this._hideWorldChunkContainers();
         SoundController.instance?.endKtaBgmPhase();
         SoundController.instance?.stopBgm();
         SoundController.instance?.play(SoundId.WallHit);
