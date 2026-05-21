@@ -99,17 +99,20 @@ export class TowerWallHazard extends Component {
             return;
         }
 
-        // Если отскок уже идёт и мы упёрлись во что-то ещё — обнуляем импульс отдачи.
-        if (gm.isWorldKickbackActive) {
-            gm.cancelWorldKickback();
-        }
-
         if (this._coolRemain > 0) {
             return;
         }
         const pc = PlayerController.findFromColliderNode(otherCollider.node);
         if (!pc) {
             return;
+        }
+        if (gm.isDamageInvincible) {
+            return;
+        }
+
+        // Если отскок уже идёт и мы упёрлись во что-то ещё — обнуляем импульс отдачи.
+        if (gm.isWorldKickbackActive) {
+            gm.cancelWorldKickback();
         }
         if (this.debugContactLog) {
             console.log('[TowerWallHazard] hit', otherCollider.node?.name);

@@ -12,6 +12,7 @@ import { MusicTrack, SoundId, SoundLibrary } from './SoundLibrary';
 const { ccclass, property } = _decorator;
 
 const G_VOL = { id: 'Volume', name: 'Volume' };
+const G_MUSIC_VOL = { id: 'MusicVolume', name: 'Music volume' };
 
 export { MusicTrack };
 
@@ -76,13 +77,47 @@ export class SoundController extends Component {
 
     @property({
         group: G_VOL,
-        displayName: 'Music Volume',
+        displayName: 'Milestone Passed Volume',
         slide: true,
         min: 0,
         max: 1,
         step: 0.01,
+        tooltip: 'Звук прохождения столба-вехи (× SFX Volume).',
     })
-    musicVolume = 0.65;
+    milestonePassedVolume = 1;
+
+    @property({
+        group: G_VOL,
+        displayName: 'Speed Boost Volume',
+        slide: true,
+        min: 0,
+        max: 1,
+        step: 0.01,
+        tooltip: 'Звук ускорения после вехи (× SFX Volume).',
+    })
+    speedBoostVolume = 1;
+
+    @property({
+        group: G_MUSIC_VOL,
+        displayName: 'Menu BGM Volume',
+        slide: true,
+        min: 0,
+        max: 1,
+        step: 0.01,
+        tooltip: 'BGM · Waiting (ожидание тапа) и BGM · KTA (панель после поражения).',
+    })
+    menuMusicVolume = 0.65;
+
+    @property({
+        group: G_MUSIC_VOL,
+        displayName: 'Gameplay BGM Volume',
+        slide: true,
+        min: 0,
+        max: 1,
+        step: 0.01,
+        tooltip: 'BGM · Gameplay во время активного забега.',
+    })
+    gameplayMusicVolume = 0.65;
 
     @property({
         group: G_VOL,
@@ -223,6 +258,16 @@ export class SoundController extends Component {
         this.play(SoundId.SeedCollect);
     }
 
+    /** Пролёт столба-вехи. */
+    public playMilestonePassed(): void {
+        this.play(SoundId.MilestonePassed);
+    }
+
+    /** Pass Boost после вехи. */
+    public playSpeedBoost(): void {
+        this.play(SoundId.SpeedBoost);
+    }
+
     /** Однократный джингл поражения (отдельно от BGM-канала). */
     public playGameOverJingle(): void {
         const clip = this.library?.getClip(SoundId.GameOver);
@@ -238,6 +283,10 @@ export class SoundController extends Component {
             category = this.seedCollectVolume;
         } else if (id === SoundId.WingFlap) {
             category = this.wingFlapVolume;
+        } else if (id === SoundId.MilestonePassed) {
+            category = this.milestonePassedVolume;
+        } else if (id === SoundId.SpeedBoost) {
+            category = this.speedBoostVolume;
         }
         return Math.max(0, this.sfxVolume * category * extraScale);
     }
@@ -347,6 +396,21 @@ export class SoundController extends Component {
         return this.library?.getMusicClip(track) ?? null;
     }
 
+    /** Громкость BGM по фазе (× Music Enabled). */
+    private _musicVolumeForTrack(track: MusicTrack): number {
+        if (!this.musicEnabled) {
+            return 0;
+        }
+        switch (track) {
+            case MusicTrack.Gameplay:
+                return Math.max(0, this.gameplayMusicVolume);
+            case MusicTrack.Waiting:
+            case MusicTrack.Kta:
+            default:
+                return Math.max(0, this.menuMusicVolume);
+        }
+    }
+
     private _resolveLibrary(): void {
         if (this.library?.isValid) {
             return;
@@ -401,7 +465,7 @@ export class SoundController extends Component {
         out.stop();
         out.clip = clip;
         out.loop = loop;
-        out.volume = this.musicVolume;
+        out.volume = this._musicVolumeForTrack(track);
         out.play();
         this._currentMusic = track;
         this._bindMusicEnded();
@@ -423,7 +487,8 @@ export class SoundController extends Component {
         inn.volume = 0;
         inn.play();
 
-        const targetVol = this.musicVolume;
+        const targetVol = this._musicVolumeForTrack(track);
+        const prevTrack = this._currentMusic;
         const startOutVol = out.playing ? out.volume : 0;
         const state = { t: 0 };
 
@@ -445,7 +510,10 @@ export class SoundController extends Component {
             .call(() => {
                 this._musicCrossfadeTween = null;
                 out.stop();
-                out.volume = targetVol;
+                out.volume =
+                    prevTrack != null
+                        ? this._musicVolumeForTrack(prevTrack)
+                        : targetVol;
                 inn.volume = targetVol;
                 this._musicSource = inn;
                 this._musicAltSource = out;

@@ -212,20 +212,37 @@ export class PlayerPathSensors extends Component {
             }
             return;
         }
+
+        const inv = gm.isDamageInvincible;
         this._pruneStaleWalls(true);
         this._pruneStaleWalls(false);
         this._pruneStaleBelow();
+        if (inv) {
+            this._resyncForwardWallScrollBlocks();
+        }
         gm.syncPathSensorBlockCounts(this._frontCount, this._backCount);
 
         this._tickHazardCooldowns(_dt);
-
-        const inv = gm.isDamageInvincible;
         if (this._wasDamageInvincible && !inv) {
             this._retickTouchingHazards();
         }
         this._wasDamageInvincible = inv;
 
         this._updateSurfaceRunAnimation(_dt);
+    }
+
+    /**
+     * Скролл мира (и «камера») должны ждать: лобовая стена впереди или касание стены в i-frames.
+     */
+    public shouldHoldForwardScroll(): boolean {
+        if (this._frontCount > 0) {
+            return true;
+        }
+        const gm = GameManager.game;
+        if (!gm?.isPlaying || !gm.isDamageInvincible) {
+            return false;
+        }
+        return this._hasOverlappingForwardWall();
     }
 
     private _tickHazardCooldowns(dt: number): void {
@@ -611,6 +628,10 @@ export class PlayerPathSensors extends Component {
     }
 
     private _pruneStaleWalls(isFront: boolean): void {
+        const gm = GameManager.game;
+        if (isFront && gm?.isDamageInvincible) {
+            return;
+        }
         const probe =
             this._resolvedPathCollider ??
             this.pathCollider ??
@@ -876,9 +897,6 @@ export class PlayerPathSensors extends Component {
 
     private _tryTowerWallHit(other: Collider2D): void {
         const gm = GameManager.game;
-        if (gm?.isWorldKickbackActive) {
-            gm.cancelWorldKickback();
-        }
         const pc = this._playerCtrl;
         const id = this._colliderId(other);
         if (!gm?.isPlaying || !pc || !id) {
@@ -886,6 +904,9 @@ export class PlayerPathSensors extends Component {
         }
         if (gm.isDamageInvincible) {
             return;
+        }
+        if (gm.isWorldKickbackActive) {
+            gm.cancelWorldKickback();
         }
         if ((this._wallHazardCoolById.get(id) ?? 0) > 0) {
             return;
@@ -902,6 +923,77 @@ export class PlayerPathSensors extends Component {
             pc.towerWallKnockbackDurationSec,
         );
         this._wallHazardCoolById.set(id, cd);
+    }
+
+    /** После отдачи мир сдвигается — prune мог сбросить front; в i-frames восстанавливаем блок. */
+    private _resyncForwardWallScrollBlocks(): void {
+        for (const col of this._activeWallContacts.values()) {
+            if (!col?.isValid) {
+                continue;
+            }
+            const v = this._verticalBand(col);
+            if (
+                v === 'above' ||
+                !this._shouldApplyHorizontalScrollBlock(v, col) ||
+                !this._wallBlocksForward(col)
+            ) {
+                continue;
+            }
+            const id = this._colliderId(col);
+            if (!id || this._frontWalls.has(id)) {
+                continue;
+            }
+            if (!this._hasAabbOverlapWithPlayer(col)) {
+                continue;
+            }
+            this._frontWalls.set(id, col);
+            this._frontCount++;
+        }
+    }
+
+    private _hasOverlappingForwardWall(): boolean {
+        for (const col of this._activeWallContacts.values()) {
+            if (!col?.isValid) {
+                continue;
+            }
+            const v = this._verticalBand(col);
+            if (
+                v === 'above' ||
+                !this._shouldApplyHorizontalScrollBlock(v, col) ||
+                !this._wallBlocksForward(col)
+            ) {
+                continue;
+            }
+            if (this._hasAabbOverlapWithPlayer(col)) {
+                return true;
+            }
+        }
+        for (const col of this._frontWalls.values()) {
+            if (col?.isValid && this._hasAabbOverlapWithPlayer(col)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private _hasAabbOverlapWithPlayer(other: Collider2D): boolean {
+        const probe =
+            this._resolvedPathCollider ??
+            this.pathCollider ??
+            this.node.getComponent(BoxCollider2D);
+        const saRaw = probe ? this._boxWorldAabb(probe) : null;
+        const wa = this._boxWorldAabb(other);
+        if (!saRaw || !wa) {
+            return false;
+        }
+        const eps = PlayerPathSensors._PRUNE_AABB_EPS;
+        const sa = {
+            xMin: saRaw.xMin - eps,
+            xMax: saRaw.xMax + eps,
+            yMin: saRaw.yMin - eps,
+            yMax: saRaw.yMax + eps,
+        };
+        return this._aabbOverlap(sa, wa);
     }
 
     private _isBlockingObstacle(other: Collider2D): boolean {

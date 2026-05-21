@@ -218,6 +218,9 @@ export class LevelGenerator extends Component {
     /** Следующий ресайкл/спавн плана 1 — бонус после только что поставленной вехи. */
     private _bonusChunkPending = false;
 
+    /** По очереди перебираем бонусные чанки (0 → 1 → 2 → 3 → 0 …). */
+    private _bonusChunkRotateIndex = 0;
+
     /** false — родители слоёв чанков скрыты (например, на KTA). */
     private _chunkLayersActive = true;
 
@@ -249,6 +252,38 @@ export class LevelGenerator extends Component {
     public clearMilestoneQueue(): void {
         this._milestoneQueue.length = 0;
         this._bonusChunkPending = false;
+        this._bonusChunkRotateIndex = 0;
+    }
+
+    /**
+     * Поставить столб-веху при следующем ресайкле плана 1, если порог уже пройден.
+     * Ресайклит только сегмент, который уже ушёл за левый край (как в update),
+     * чтобы не сносить чанк, который ещё виден на экране.
+     */
+    public flushMilestoneSpawnIfReady(): void {
+        if (this._milestoneQueue.length === 0) {
+            return;
+        }
+        const game = GameManager.game;
+        if (!game?.isPlaying || !this.milestoneSignPrefab) {
+            return;
+        }
+        const meters = this._milestoneQueue[0];
+        const ppm = game.pixelsPerMeter;
+        if (ppm <= 0 || game.flightDistancePx + 0.5 < meters * ppm) {
+            return;
+        }
+
+        const strip = this._strips.find((s) => s.plane1RecycleSwap);
+        if (!strip || strip.segments.length === 0) {
+            return;
+        }
+
+        const seg = this._findLeftmostSegmentPastRecycleBound(strip.segments);
+        if (!seg) {
+            return;
+        }
+        this.recyclePlane1Segment(strip, seg);
     }
 
     rebuildChunks() {
@@ -310,7 +345,7 @@ export class LevelGenerator extends Component {
             return;
         }
 
-        const leftBound = -this.getViewHalfWidth() - this.recycleMargin;
+        const leftBound = this.getRecycleLeftBound();
 
         for (const strip of this._strips) {
             const f = strip.parallaxFactor;
@@ -341,6 +376,18 @@ export class LevelGenerator extends Component {
         milestoneMeters: number | null;
         allowVerticalOffset: boolean;
     } {
+        if (this._bonusChunkPending) {
+            this._bonusChunkPending = false;
+            const bonus = this.pickPlane1BonusChunk();
+            if (bonus) {
+                return {
+                    prefab: bonus,
+                    milestoneMeters: null,
+                    allowVerticalOffset: false,
+                };
+            }
+        }
+
         const milestoneMeters = this._takeMilestoneIfDistanceReached();
         if (milestoneMeters != null && this.milestoneSignPrefab) {
             const prefab = this.milestoneSignPrefab;
@@ -352,18 +399,6 @@ export class LevelGenerator extends Component {
                 milestoneMeters,
                 allowVerticalOffset: false,
             };
-        }
-
-        if (this._bonusChunkPending) {
-            this._bonusChunkPending = false;
-            const bonus = this.pickWeightedPlane1Bonus();
-            if (bonus) {
-                return {
-                    prefab: bonus,
-                    milestoneMeters: null,
-                    allowVerticalOffset: false,
-                };
-            }
         }
 
         const index = this._plane1SpawnCounter;
@@ -516,8 +551,20 @@ export class LevelGenerator extends Component {
         return this._pickWeightedPrefab(this.plane1EndlessChunks);
     }
 
-    private pickWeightedPlane1Bonus(): Prefab | null {
-        return this._pickWeightedPrefab(this.plane1BonusChunks);
+    /** Бонус после вехи: по кругу все валидные элементы Bonus Weighted Chunks. */
+    private pickPlane1BonusChunk(): Prefab | null {
+        const valid = this.plane1BonusChunks.filter(
+            (e) => e && e.prefab && e.weight > 0,
+        );
+        if (valid.length === 0) {
+            console.warn(
+                '[LevelGenerator] Bonus Weighted Chunks: нет префабов с weight > 0.',
+            );
+            return null;
+        }
+        const idx = this._bonusChunkRotateIndex % valid.length;
+        this._bonusChunkRotateIndex++;
+        return valid[idx].prefab;
     }
 
     private _pickWeightedPrefab(pool: WeightedChunk[]): Prefab | null {
@@ -794,6 +841,29 @@ export class LevelGenerator extends Component {
 
     private getViewHalfWidth(): number {
         return this.getViewWidth() * 0.5;
+    }
+
+    /** Левая граница ресайкла (локальные координаты родителя чанков). */
+    private getRecycleLeftBound(): number {
+        return -this.getViewHalfWidth() - this.recycleMargin;
+    }
+
+    /** Самый левый сегмент, который уже полностью ушёл за экран (готов к ресайклу). */
+    private _findLeftmostSegmentPastRecycleBound(segments: Node[]): Node | null {
+        const leftBound = this.getRecycleLeftBound();
+        let best: Node | null = null;
+        let minX = Infinity;
+        for (const seg of segments) {
+            if (!seg.isValid || this.rightEdgeLocal(seg) >= leftBound) {
+                continue;
+            }
+            const x = seg.position.x;
+            if (x < minX) {
+                minX = x;
+                best = seg;
+            }
+        }
+        return best;
     }
 
     private measurePrefabWorldWidth(prefab: Prefab): number {

@@ -15,6 +15,10 @@ export enum SoundId {
     TapStart = 8,
     SessionFirstTap = 9,
     WingFlap = 10,
+    /** Прохождение столба-вехи (сенсор MilestoneSign). */
+    MilestonePassed = 11,
+    /** Pass Boost — ускорение после вехи. */
+    SpeedBoost = 12,
 }
 
 ccenum(SoundId);
@@ -32,6 +36,7 @@ const G_GAMEPLAY = { id: 'Gameplay', name: 'Gameplay' };
 const G_PLAYER = { id: 'Player', name: 'Player' };
 const G_UI = { id: 'UI', name: 'UI' };
 const G_MUSIC = { id: 'Music', name: 'Music' };
+const G_MILESTONE = { id: 'Milestone', name: 'Milestone & boost' };
 
 /**
  * Каталог AudioClip для инспектора. На сцене — рядом с SoundController (тот же узел или дочерний).
@@ -107,6 +112,22 @@ export class SoundLibrary extends Component {
         tooltip: 'Тап для рестарта после game over (не первый тап сессии).',
     })
     tapStart: AudioClip | null = null;
+
+    @property({
+        group: G_MILESTONE,
+        type: AudioClip,
+        displayName: 'Milestone Passed',
+        tooltip: 'Когда голубь пролетает столб-веху (MilestoneSign).',
+    })
+    milestonePassed: AudioClip | null = null;
+
+    @property({
+        group: G_MILESTONE,
+        type: AudioClip,
+        displayName: 'Speed Boost',
+        tooltip: 'Ускорение после прохождения вехи (Pass Boost).',
+    })
+    speedBoost: AudioClip | null = null;
 
     @property({
         group: G_MUSIC,
@@ -204,6 +225,10 @@ export class SoundLibrary extends Component {
                 return this.tapStart;
             case SoundId.SessionFirstTap:
                 return this.sessionFirstTap;
+            case SoundId.MilestonePassed:
+                return this.milestonePassed;
+            case SoundId.SpeedBoost:
+                return this.speedBoost;
             default:
                 return null;
         }

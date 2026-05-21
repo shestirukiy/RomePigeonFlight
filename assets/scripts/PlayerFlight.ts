@@ -26,7 +26,7 @@ const { ccclass, property } = _decorator;
 @ccclass('PlayerFlight')
 export class PlayerFlight extends Component {
     @property({ group: 'Flight', tooltip: 'Сила при удержании ввода.' })
-    liftForce = 10000;
+    liftForce = 4500;
 
     @property({ group: 'Flight', tooltip: 'Лимит скорости вверх.' })
     maxUpSpeed = 700;
@@ -58,14 +58,14 @@ export class PlayerFlight extends Component {
         tooltip:
             'Во сколько раз сильнее наклон при падении относительно подъёма (при падении |vy| обычно меньше). Типично 3–5.',
     })
-    pitchFallBoost = 3.5;
+    pitchFallBoost = 5;
 
     @property({
         group: 'Pitch',
         tooltip:
             'Плавность: 0 — резче и быстрее, 1 — мягче, меньше дрожания.',
     })
-    pitchSmoothness = 0.45;
+    pitchSmoothness = 0.33;
 
     @property({
         group: 'Pitch',
@@ -88,6 +88,39 @@ export class PlayerFlight extends Component {
             'Раннер-режим: игрок по X всегда стоит на месте, движется только мир. Убирает «уезд» игрока/камеры при ударах и вторых коллизиях.',
     })
     lockHorizontalX = true;
+
+    @property({
+        group: 'Flight',
+        displayName: 'Scale Flight With World Speed',
+        tooltip:
+            'После первой пройденной вехи: лимиты vy и слабее подъём под скорость Plane 1 (вехи × parallax). ' +
+            'До вехи — как без галочки. Pass Boost не учитывается.',
+    })
+    scaleFlightWithWorldSpeed = false;
+
+    @property({
+        group: 'Flight',
+        displayName: 'Flight Speed Match',
+        tooltip:
+            'Доля прироста видимой скорости Plane 1 в лимиты vy. 1 = как чанки. Ниже — голубь отстаёт по вертикали.',
+        min: 0,
+        max: 1,
+        step: 0.05,
+        slide: true,
+    })
+    flightWorldSpeedMatch = 1;
+
+    @property({
+        group: 'Flight',
+        displayName: 'Flight Gravity Match',
+        tooltip:
+            'Доля прироста в гравитацию (падение догоняет мир). 0 — только lift/лимиты. ~0.5 — баланс с креном.',
+        min: 0,
+        max: 1,
+        step: 0.05,
+        slide: true,
+    })
+    flightGravityMatch = 0.5;
 
     private _body: RigidBody2D | null = null;
     private _held = false;
@@ -212,7 +245,9 @@ export class PlayerFlight extends Component {
             return;
         }
 
-        body.gravityScale = this._savedGravityScale;
+        const phys = this._flightPhysicsMultipliers();
+
+        body.gravityScale = this._savedGravityScale * phys.gravity;
 
         if (this._electricLiftBlockRemain > 0) {
             this._electricLiftBlockRemain = Math.max(
@@ -223,15 +258,20 @@ export class PlayerFlight extends Component {
 
         const canLift = this._electricLiftBlockRemain <= 0;
         if (canLift && this._held) {
-            body.applyForceToCenter(new Vec2(0, this.liftForce), true);
+            body.applyForceToCenter(
+                new Vec2(0, this.liftForce * phys.lift),
+                true,
+            );
         }
 
+        const maxUp = this.maxUpSpeed * phys.maxUp;
+        const maxDown = this.maxDownSpeed * phys.maxDown;
         const v = body.linearVelocity;
         let vy = v.y;
-        if (vy > this.maxUpSpeed) {
-            vy = this.maxUpSpeed;
-        } else if (vy < -this.maxDownSpeed) {
-            vy = -this.maxDownSpeed;
+        if (vy > maxUp) {
+            vy = maxUp;
+        } else if (vy < -maxDown) {
+            vy = -maxDown;
         }
         // Раннер: по X всегда 0 (мир/чанки двигаются сами).
         // Это гарантирует, что при “отскоке” и упоре во вторую стену игрок не уедет относительно кадра.
@@ -253,6 +293,58 @@ export class PlayerFlight extends Component {
         return 6 + s * 12;
     }
 
+    /**
+     * Смягчённый множитель под видимый скролл Plane 1 (вехи × parallax), без Pass Boost.
+     */
+    private _worldSpeedFlightFactor(): number {
+        if (!this.scaleFlightWithWorldSpeed) {
+            return 1;
+        }
+        const gm = GameManager.game;
+        if (!gm?.isPlaying || gm.milestonesPassedCount <= 0) {
+            return 1;
+        }
+        const world = Math.max(1, gm.getFlightScrollSpeedFactor());
+        const match = Math.min(1, Math.max(0, this.flightWorldSpeedMatch));
+        return 1 + (world - 1) * match;
+    }
+
+    /** До первой вехи все 1; после — lift/лимиты = factor, гравитация мягче (flightGravityMatch). */
+    private _flightPhysicsMultipliers(): {
+        lift: number;
+        maxUp: number;
+        maxDown: number;
+        gravity: number;
+    } {
+        const one = { lift: 1, maxUp: 1, maxDown: 1, gravity: 1 };
+        const f = this._worldSpeedFlightFactor();
+        if (f <= 1.0001) {
+            return one;
+        }
+        const gMatch = Math.min(1, Math.max(0, this.flightGravityMatch));
+        const delta = f - 1;
+        return {
+            lift: f,
+            maxUp: f,
+            maxDown: f,
+            gravity: 1 + delta * gMatch,
+        };
+    }
+
+    /** Целевой крен: всегда vy × pitchStrength (падение × fall boost), лимиты Pitch Max Deg. */
+    private _pitchTargetDeg(vy: number, sign: number): number {
+        const upSens = this.pitchStrength;
+        const downSens = this.pitchStrength * this.pitchFallBoost;
+        if (vy >= 0) {
+            let target = vy * upSens * sign;
+            target = Math.min(target, this.pitchMaxDegUp);
+            return target;
+        }
+        let target = vy * downSens * sign;
+        target = Math.max(target, -this.pitchMaxDegDown);
+        return target;
+    }
+
     private _onBeforeDrawPitch() {
         const body = this._body;
         if (!body || GameManager.game?.isPlaying !== true) {
@@ -268,18 +360,8 @@ export class PlayerFlight extends Component {
         this._pitchVyFiltered += (vyRaw - this._pitchVyFiltered) * k;
         const vy = this._pitchVyFiltered;
 
-        const upSens = this.pitchStrength;
-        const downSens = this.pitchStrength * this.pitchFallBoost;
         const sign = this.pitchInvert ? -1 : 1;
-
-        let targetAngle: number;
-        if (vy >= 0) {
-            targetAngle = vy * upSens * sign;
-            targetAngle = Math.min(targetAngle, this.pitchMaxDegUp);
-        } else {
-            targetAngle = vy * downSens * sign;
-            targetAngle = Math.max(targetAngle, -this.pitchMaxDegDown);
-        }
+        const targetAngle = this._pitchTargetDeg(vy, sign);
 
         const pivot = this.pitchVisual ?? this.node;
         const cur = pivot.angle;

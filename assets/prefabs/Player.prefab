@@ -1386,14 +1386,14 @@
     "__prefab": {
       "__id__": 59
     },
-    "liftForce": 10000,
+    "liftForce": 4500,
     "maxUpSpeed": 700,
     "maxDownSpeed": 2000,
     "pitchMaxDegUp": 90,
     "pitchMaxDegDown": 300,
     "pitchStrength": 0.3,
-    "pitchFallBoost": 3.5,
-    "pitchSmoothness": 0.45,
+    "pitchFallBoost": 5,
+    "pitchSmoothness": 0.33,
     "pitchInvert": false,
     "pitchVisual": null,
     "lockHorizontalX": true,

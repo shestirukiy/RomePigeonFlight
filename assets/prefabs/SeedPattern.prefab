@@ -255,7 +255,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "9e090628-a8a2-4145-a1dd-3f621b091883@f9941",
+      "__uuid__": "e093c5f7-7727-4e10-8ab2-352b864c3c79@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -339,6 +339,7 @@
       "__uuid__": "91c6a2f0-3366-47c5-8c13-2b84e76e8df6",
       "__expectedType__": "cc.Prefab"
     },
+    "fillShape": 0,
     "fillDensity": 1,
     "alphaThreshold": 0.15,
     "fillRectWhenAlphaUnreadable": true,

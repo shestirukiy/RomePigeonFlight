@@ -1,7 +1,9 @@
 import {
     _decorator,
     assetManager,
+    ccenum,
     Component,
+    Enum,
     game,
     ImageAsset,
     instantiate,
@@ -21,6 +23,16 @@ const { ccclass, property } = _decorator;
 const G_MASK = { id: 'Mask', name: 'Mask sprites' };
 const G_FILL = { id: 'Fill', name: 'Fill' };
 const G_SPAWN = { id: 'Spawn', name: 'Spawned seeds' };
+
+/** Как задать форму заливки. */
+export enum SeedFillShape {
+    /** По альфе Sprite-маски (сердце, квадрат, произвольный PNG). */
+    SpriteMask = 0,
+    /** Круг/диск: радиус из Mask Sprite Nodes (размер UITransform), альфа маски не нужна. */
+    Circle = 1,
+}
+
+ccenum(SeedFillShape);
 
 type MaskAlphaGrid = {
     width: number;
@@ -53,6 +65,15 @@ export class SeedPattern extends Component {
 
     @property({
         group: G_FILL,
+        type: Enum(SeedFillShape),
+        displayName: 'Fill Shape',
+        tooltip:
+            'Sprite Mask — силуэт PNG (сердце, квадрат). Circle — диск по радиусу из Mask Sprite Nodes (для Chunk_SeedCircle).',
+    })
+    fillShape = SeedFillShape.SpriteMask;
+
+    @property({
+        group: G_FILL,
         displayName: 'Fill Density',
         tooltip:
             'Плотность: семечек на 10 000 px² видимой области силуэта (экранные пиксели). ' +
@@ -75,7 +96,8 @@ export class SeedPattern extends Component {
         group: G_FILL,
         displayName: 'Fill Rect If Alpha Unreadable',
         tooltip:
-            'Если силуэт прочитать нельзя — залить весь прямоугольник Sprite (временный fallback).',
+            'Fallback, если альфу PNG не прочитать. Для круга даёт ПРЯМОУГОЛЬНИК семечек — лучше Fill Shape = Circle. ' +
+            'Для Circle.png этот fallback игнорируется.',
     })
     fillRectWhenAlphaUnreadable = true;
 
@@ -204,7 +226,10 @@ export class SeedPattern extends Component {
         }
 
         const masks = this._collectMaskSprites();
-        if (masks.length === 0) {
+        if (
+            this.fillShape === SeedFillShape.SpriteMask &&
+            masks.length === 0
+        ) {
             if (this.seedsContainer === this.node) {
                 console.warn(
                     '[SeedPattern] Seeds Container не должен быть корнем — оставьте пустым.',
@@ -215,49 +240,88 @@ export class SeedPattern extends Component {
             return;
         }
 
+        const shapeRef = this._resolveShapeReference(masks);
+        if (!shapeRef) {
+            console.warn('[SeedPattern] Нужен UITransform на маске или на SeedPattern.');
+            return;
+        }
+
         this._restoreMasks();
         this.clear();
         this._maskGrids = new WeakMap();
 
         const container = this._ensureSeedsContainer();
 
-        const layerRef = masks[0]?.node ?? this.node;
+        const layerRef = shapeRef.node;
         let placed = 0;
         const cap =
             this.maxSeedsSafetyCap > 0
                 ? this.maxSeedsSafetyCap
                 : Number.MAX_SAFE_INTEGER;
 
-        for (const sprite of masks) {
-            if (placed >= cap) {
-                break;
-            }
-            const sf = sprite.spriteFrame;
-            if (!sf) {
-                continue;
-            }
-            const grid = SeedPattern._getOrBuildAlphaGrid(
-                sf,
-                this.fillRectWhenAlphaUnreadable,
-            );
-            this._maskGrids.set(sprite, grid);
-            if (!grid.readable) {
-                this._scheduleAlphaReloadFromImage(sf);
-            }
-            const maskUi = sprite.node.getComponent(UITransform);
-            if (!maskUi) {
-                continue;
-            }
-            const spacing = this._computeSpacingForMask(sprite, grid, maskUi);
-            placed += this._fillOneMask(
-                sprite,
-                grid,
-                maskUi,
+        if (this.fillShape === SeedFillShape.Circle) {
+            const spacing = this._computeSpacingForDisc(shapeRef.node, shapeRef.ui);
+            placed = this._fillDisc(
+                shapeRef.node,
+                shapeRef.ui,
                 container,
                 layerRef,
                 spacing,
-                cap - placed,
+                cap,
             );
+        } else {
+            for (const sprite of masks) {
+                if (placed >= cap) {
+                    break;
+                }
+                const sf = sprite.spriteFrame;
+                if (!sf) {
+                    continue;
+                }
+                const grid = SeedPattern._getOrBuildAlphaGrid(
+                    sf,
+                    this.fillRectWhenAlphaUnreadable,
+                );
+                this._maskGrids.set(sprite, grid);
+                if (!grid.readable) {
+                    this._scheduleAlphaReloadFromImage(sf);
+                }
+                const maskUi = sprite.node.getComponent(UITransform);
+                if (!maskUi) {
+                    continue;
+                }
+                const useDisc =
+                    this._shouldFillAsDisc(sprite, grid);
+                if (useDisc) {
+                    const spacing = this._computeSpacingForDisc(
+                        sprite.node,
+                        maskUi,
+                    );
+                    placed += this._fillDisc(
+                        sprite.node,
+                        maskUi,
+                        container,
+                        layerRef,
+                        spacing,
+                        cap - placed,
+                    );
+                } else {
+                    const spacing = this._computeSpacingForMask(
+                        sprite,
+                        grid,
+                        maskUi,
+                    );
+                    placed += this._fillOneMask(
+                        sprite,
+                        grid,
+                        maskUi,
+                        container,
+                        layerRef,
+                        spacing,
+                        cap - placed,
+                    );
+                }
+            }
         }
 
         if (placed === 0) {
@@ -289,6 +353,119 @@ export class SeedPattern extends Component {
                 this._hiddenMaskNodes.push(n);
             }
         }
+    }
+
+    private _shouldFillAsDisc(sprite: Sprite, grid: MaskAlphaGrid): boolean {
+        if (this.fillShape === SeedFillShape.Circle) {
+            return true;
+        }
+        if (grid.readable) {
+            return false;
+        }
+        return this._isCircleMaskSprite(sprite);
+    }
+
+    private _isCircleMaskSprite(sprite: Sprite): boolean {
+        const frameName = sprite.spriteFrame?.name?.toLowerCase() ?? '';
+        const nodeName = sprite.node.name.toLowerCase();
+        return frameName.includes('circle') || nodeName.includes('circle');
+    }
+
+    private _resolveShapeReference(
+        masks: Sprite[],
+    ): { node: Node; ui: UITransform } | null {
+        if (masks.length > 0) {
+            const ui = masks[0].node.getComponent(UITransform);
+            if (ui) {
+                return { node: masks[0].node, ui };
+            }
+        }
+        const ui = this.node.getComponent(UITransform);
+        if (ui) {
+            return { node: this.node, ui };
+        }
+        return null;
+    }
+
+    private _computeSpacingForDisc(maskNode: Node, maskUi: UITransform): number {
+        const w = maskUi.width;
+        const h = maskUi.height;
+        const ws = Math.max(0.001, Math.abs(maskNode.worldScale.x));
+        const hs = Math.max(0.001, Math.abs(maskNode.worldScale.y));
+        const radius = (Math.min(w, h) * 0.5 * Math.min(ws, hs));
+        const visibleArea = Math.PI * radius * radius;
+        const density = Math.max(0.1, this.fillDensity);
+        const targetSeeds = Math.max(1, (visibleArea * density) / 10000);
+        const spacing = Math.sqrt(visibleArea / targetSeeds);
+        return Math.max(8, Math.min(150, spacing));
+    }
+
+    /** Заполнение диска (круг) в локали маски → контейнер Seeds. */
+    private _fillDisc(
+        maskNode: Node,
+        maskUi: UITransform,
+        container: Node,
+        layerRef: Node,
+        spacing: number,
+        budget: number,
+    ): number {
+        const w = maskUi.width;
+        const h = maskUi.height;
+        if (w <= 0 || h <= 0) {
+            return 0;
+        }
+
+        const ws = Math.max(0.001, Math.abs(maskNode.worldScale.x));
+        const hs = Math.max(0.001, Math.abs(maskNode.worldScale.y));
+        const stepX = spacing / ws;
+        const stepY = spacing / hs;
+        const radius = Math.min(w, h) * 0.5;
+        const cx = w * (0.5 - maskUi.anchorX);
+        const cy = h * (0.5 - maskUi.anchorY);
+        const r2 = radius * radius;
+
+        const posInContainer = new Vec3();
+        let placed = 0;
+
+        for (let py = -radius; py <= radius && placed < budget; py += stepY) {
+            for (let px = -radius; px <= radius && placed < budget; px += stepX) {
+                if (px * px + py * py > r2) {
+                    continue;
+                }
+
+                const jx =
+                    this.positionJitter > 0
+                        ? (Math.random() * 2 - 1) * this.positionJitter
+                        : 0;
+                const jy =
+                    this.positionJitter > 0
+                        ? (Math.random() * 2 - 1) * this.positionJitter
+                        : 0;
+
+                const lx = cx + px + jx / ws;
+                const ly = cy + py + jy / hs;
+                this._maskLocalToContainer(
+                    maskNode,
+                    container,
+                    lx,
+                    ly,
+                    posInContainer,
+                );
+
+                const seed = instantiate(this.seedPrefab!);
+                seed.parent = container;
+                seed.setPosition(
+                    posInContainer.x,
+                    posInContainer.y,
+                    posInContainer.z,
+                );
+                seed.getComponent(FeatherFloat)?.recaptureAnchor();
+                SeedPattern._syncLayerWith(seed, layerRef);
+                placed++;
+            }
+        }
+
+        return placed;
     }
 
     /** В preview/GPU без CPU-пикселей — догружаем PNG по nativeUrl и перезаливаем силуэт. */
@@ -599,11 +776,19 @@ export class SeedPattern extends Component {
         if (cached) {
             return cached;
         }
-        const built = SeedPattern._buildAlphaGrid(sf, rectFallback);
+        const built = SeedPattern._buildAlphaGrid(
+            sf,
+            rectFallback && !SeedPattern._spriteFrameLooksLikeCircle(sf),
+        );
         if (built.readable || rectFallback) {
             SeedPattern._gridCache.set(key, built);
         }
         return built;
+    }
+
+    private static _spriteFrameLooksLikeCircle(sf: SpriteFrame): boolean {
+        const n = sf.name?.toLowerCase() ?? '';
+        return n.includes('circle');
     }
 
     private static _buildAlphaGrid(

@@ -114,6 +114,9 @@ export class GameManager extends Component {
     private _milestonePassBoostHoldRemain = 0;
     private _milestonePassBoostSettleRemain = 0;
 
+    /** Эмиттер Speed Lines (не active ноды — только enabled + stop/reset). */
+    private _speedLinesEmitterOn = false;
+
     /** Слева направо: [якорное сердечко, клоны справа]. */
     private readonly _heartNodes: Node[] = [];
     private readonly _spawnedHearts: Node[] = [];
@@ -279,15 +282,31 @@ export class GameManager extends Component {
 
     /** Сдвиг чанков «вперёд по забегу» (влево), без отдачи. Во время отдачи — 0. */
     public getForwardScrollDelta(_dt: number): number {
+        if (!this.isPlaying || this._worldKickbackRemain > 0) {
+            return 0;
+        }
         if (
-            !this.isPlaying ||
-            this._worldKickbackRemain > 0 ||
             this._forwardScrollBlockRef > 0 ||
             this._forwardScrollHoldRemain > 0
         ) {
             return 0;
         }
+        const pathSensors = this._playerPathSensors();
+        if (pathSensors?.shouldHoldForwardScroll()) {
+            return 0;
+        }
         return this.getEffectiveScrollSpeed() * _dt;
+    }
+
+    private _playerPathSensors(): PlayerPathSensors | null {
+        const player = SceneNodeHub.instance?.player;
+        if (!player?.isValid) {
+            return null;
+        }
+        return (
+            player.getComponent(PlayerPathSensors) ??
+            player.getComponentInChildren(PlayerPathSensors)
+        );
     }
 
     /** Скорость мира: scrollSpeed × вехи × кратковременный буст после столба. */
@@ -297,6 +316,51 @@ export class GameManager extends Component {
             base *
             this._getMilestoneSpeedMultiplier() *
             this._milestonePassBoostFactor
+        );
+    }
+
+    /**
+     * Множитель скорости мира относительно базового scrollSpeed (вехи × pass boost).
+     */
+    public getWorldScrollSpeedFactor(): number {
+        const base = Math.max(1e-6, this.scrollSpeed);
+        if (!this.isPlaying) {
+            return 1;
+        }
+        return this.getEffectiveScrollSpeed() / base;
+    }
+
+    /**
+     * Только постоянный прирост от пройденных вех (milestoneSpeedMultiplier^N), без Pass Boost.
+     */
+    public getMilestoneScrollSpeedFactor(): number {
+        if (!this.isPlaying) {
+            return 1;
+        }
+        return Math.max(1, this._getMilestoneSpeedMultiplier());
+    }
+
+    /**
+     * Видимая скорость слоя препятствий (Plane 1): вехи × plane1ParallaxFactor, без Pass Boost.
+     * Для сопоставления с PlayerFlight — тот же горизонт, что у чанков под игроком.
+     */
+    public getFlightScrollSpeedFactor(): number {
+        if (!this.isPlaying) {
+            return 1;
+        }
+        const levelGen = this.getComponent(LevelGenerator);
+        const parallax = Math.max(0, levelGen?.plane1ParallaxFactor ?? 1);
+        return Math.max(1, this._getMilestoneSpeedMultiplier() * parallax);
+    }
+
+    /** Pass Boost после столба (hold + плавный settle). */
+    public isMilestonePassBoostActive(): boolean {
+        if (!this._playing || !this.milestonePassBoostEnabled) {
+            return false;
+        }
+        return (
+            this._milestonePassBoostHoldRemain > 0 ||
+            this._milestonePassBoostSettleRemain > 0
         );
     }
 
@@ -351,7 +415,8 @@ export class GameManager extends Component {
         group: G_MILESTONE,
         displayName: 'Pixels Per Meter',
         tooltip:
-            'Сколько пикселей прокрутки мира = 1 «метр» на столбе (тюнинг отображения).',
+            'Сколько пикселей прокрутки слоя препятствий (Plane 1 × parallax) = 1 м на столбе. ' +
+            'Слишком большое значение — долго до первой вехи.',
     })
     pixelsPerMeter = 150;
 
@@ -537,6 +602,7 @@ export class GameManager extends Component {
         if (!this.getComponent(GameIntroController)) {
             this.addComponent(GameIntroController);
         }
+        this._setSpeedLinesEmitter(false);
         this._refreshScoreLabel();
         this.resetHp();
         this._hideOverlayPanels();
@@ -570,6 +636,7 @@ export class GameManager extends Component {
             this._kickbackBackBlockRef = 0;
             this._kickbackBackHoldRemain = 0;
             this._damageInvincibleRemain = 0;
+            this._syncSpeedLinesEmitter();
             return;
         }
 
@@ -612,6 +679,7 @@ export class GameManager extends Component {
         }
 
         this._tickMilestonePassBoost(dt);
+        this._syncSpeedLinesEmitter();
         this._tickFlightDistanceAndMilestones(dt);
     }
 
@@ -623,7 +691,9 @@ export class GameManager extends Component {
         if (delta <= 0) {
             return;
         }
-        this._flightDistancePx += delta;
+        const levelGen = this.getComponent(LevelGenerator);
+        const scrollFactor = Math.max(0, levelGen?.plane1ParallaxFactor ?? 1);
+        this._flightDistancePx += delta * scrollFactor;
 
         const first = this.firstMilestoneMeters;
         const ppm = this.pixelsPerMeter;
@@ -631,14 +701,18 @@ export class GameManager extends Component {
             return;
         }
 
-        const levelGen = this.getComponent(LevelGenerator);
+        let queuedAny = false;
         while (this._flightDistancePx >= this._nextMilestoneMeters * ppm) {
             const m = this._nextMilestoneMeters;
             this._activeMilestoneSigns.add(m);
             levelGen?.queueMilestoneChunk(m);
+            queuedAny = true;
             const gap = this._computeMilestoneGap(this._milestoneGapIndex);
             this._milestoneGapIndex++;
             this._nextMilestoneMeters = this._snapMilestoneMeters(m + gap, m);
+        }
+        if (queuedAny) {
+            levelGen?.flushMilestoneSpawnIfReady();
         }
     }
 
@@ -680,6 +754,8 @@ export class GameManager extends Component {
         this._activeMilestoneSigns.delete(m);
         this._milestonesPassedCount++;
         this._lastCompletedMilestoneMeters = m;
+        SoundController.instance?.playMilestonePassed();
+        SceneNodeHub.instance?.showMetersPassed(m);
         this._triggerMilestonePassBoost();
         return true;
     }
@@ -688,6 +764,7 @@ export class GameManager extends Component {
         if (!this.milestonePassBoostEnabled) {
             return;
         }
+        SoundController.instance?.playSpeedBoost();
         const peak = Math.max(1, this.milestonePassBoostMultiplier);
         this._milestonePassBoostFactor = peak;
         this._milestonePassBoostHoldRemain = Math.max(
@@ -744,6 +821,36 @@ export class GameManager extends Component {
         this._milestonePassBoostFactor = 1;
         this._milestonePassBoostHoldRemain = 0;
         this._milestonePassBoostSettleRemain = 0;
+        this._syncSpeedLinesEmitter();
+    }
+
+    private _syncSpeedLinesEmitter(): void {
+        const want = this.isMilestonePassBoostActive();
+        if (want === this._speedLinesEmitterOn) {
+            return;
+        }
+        this._speedLinesEmitterOn = want;
+        this._setSpeedLinesEmitter(want);
+    }
+
+    /**
+     * Эмиттер: вкл — resetSystem (новые частицы).
+     * Выкл — stopSystem (новые не рождаются, живые доигрывают life).
+     * Ноду и компонент не выключаем — иначе всё пропадает мгновенно.
+     */
+    private _setSpeedLinesEmitter(on: boolean): void {
+        const ps = SceneNodeHub.instance?.speedLinesEmitter;
+        if (!ps?.isValid) {
+            return;
+        }
+        if (!ps.enabled) {
+            ps.enabled = true;
+        }
+        if (on) {
+            ps.resetSystem();
+            return;
+        }
+        ps.stopSystem();
     }
 
     private _resetMilestones(): void {
@@ -968,7 +1075,9 @@ export class GameManager extends Component {
         const milestones = Math.floor(this._score / per);
         while (this._seedLifeBonusesGranted < milestones) {
             this._seedLifeBonusesGranted++;
-            this._tryGrantExtraLife();
+            if (this._tryGrantExtraLife()) {
+                SceneNodeHub.instance?.showLifeRestored();
+            }
         }
     }
 
