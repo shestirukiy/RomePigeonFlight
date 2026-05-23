@@ -224,6 +224,9 @@ export class PlayerPathSensors extends Component {
 
         this._tickHazardCooldowns(_dt);
         if (this._wasDamageInvincible && !inv) {
+            this._pruneStaleWalls(true);
+            this._pruneStaleWalls(false);
+            this._reconcileWallScrollBlocksAfterInvincibility();
             this._retickTouchingHazards();
         }
         this._wasDamageInvincible = inv;
@@ -242,7 +245,7 @@ export class PlayerPathSensors extends Component {
         if (!gm?.isPlaying || !gm.isDamageInvincible) {
             return false;
         }
-        return this._hasOverlappingForwardWall();
+        return this._hasOverlappingTowerWallHold();
     }
 
     private _tickHazardCooldowns(dt: number): void {
@@ -505,7 +508,15 @@ export class PlayerPathSensors extends Component {
         }
 
         if (this._shouldApplyHorizontalScrollBlock(v, other)) {
-            const forward = this._wallBlocksForward(other);
+            let forward = this._wallBlocksForward(other);
+            if (
+                !forward &&
+                hazard === 'wall' &&
+                gm.isDamageInvincible &&
+                this._hasAabbOverlapWithPlayer(other)
+            ) {
+                forward = true;
+            }
             if (forward) {
                 if (!this._frontWalls.has(id)) {
                     this._frontWalls.set(id, other);
@@ -534,9 +545,13 @@ export class PlayerPathSensors extends Component {
     }
 
     private _onEndContact(_self: Collider2D, other: Collider2D, _c: IPhysics2DContact | null) {
+        const gm = GameManager.game;
         const id = other?.isValid ? this._colliderId(other) : '';
-        if (id && other?.isValid) {
-            const hazard = this._hazardKind(other);
+        const hazard = other?.isValid ? this._hazardKind(other) : '';
+        const holdWallMapsDuringInv =
+            !!gm?.isDamageInvincible && hazard === 'wall';
+
+        if (id && other?.isValid && !holdWallMapsDuringInv) {
             if (hazard === 'cloud') {
                 this._activeCloudContacts.delete(id);
             } else if (hazard === 'wall') {
@@ -546,7 +561,7 @@ export class PlayerPathSensors extends Component {
         const ok = other?.isValid && this._isBlockingObstacle(other);
         let changed = false;
         /* Один коллайдер может быть и «впереди», и «снизу» — снимаем со всех карт, не else-if. */
-        if (id) {
+        if (id && !holdWallMapsDuringInv) {
             if (this._frontWalls.delete(id)) {
                 this._frontCount = Math.max(0, this._frontCount - 1);
                 changed = true;
@@ -934,8 +949,13 @@ export class PlayerPathSensors extends Component {
             const v = this._verticalBand(col);
             if (
                 v === 'above' ||
-                !this._shouldApplyHorizontalScrollBlock(v, col) ||
-                !this._wallBlocksForward(col)
+                !this._shouldApplyHorizontalScrollBlock(v, col)
+            ) {
+                continue;
+            }
+            if (
+                !this._wallBlocksForward(col) &&
+                !this._hasAabbOverlapWithPlayer(col)
             ) {
                 continue;
             }
@@ -951,25 +971,92 @@ export class PlayerPathSensors extends Component {
         }
     }
 
-    private _hasOverlappingForwardWall(): boolean {
-        for (const col of this._activeWallContacts.values()) {
-            if (!col?.isValid) {
+    /** Сброс ложных END во время i-frames: пересчёт front/back по фактическому перекрытию. */
+    private _reconcileWallScrollBlocksAfterInvincibility(): void {
+        const seenFront = new Set<string>();
+        const seenBack = new Set<string>();
+        const sources = [
+            ...this._activeWallContacts.values(),
+            ...this._frontWalls.values(),
+            ...this._backWalls.values(),
+        ];
+        for (const col of sources) {
+            if (!col?.isValid || !this._hasAabbOverlapWithPlayer(col)) {
                 continue;
             }
             const v = this._verticalBand(col);
             if (
                 v === 'above' ||
-                !this._shouldApplyHorizontalScrollBlock(v, col) ||
-                !this._wallBlocksForward(col)
+                !this._shouldApplyHorizontalScrollBlock(v, col)
+            ) {
+                continue;
+            }
+            const id = this._colliderId(col);
+            if (!id) {
+                continue;
+            }
+            if (this._wallBlocksForward(col)) {
+                seenFront.add(id);
+            } else {
+                seenBack.add(id);
+            }
+        }
+        this._frontWalls.clear();
+        this._backWalls.clear();
+        this._frontCount = 0;
+        this._backCount = 0;
+        for (const col of sources) {
+            if (!col?.isValid) {
+                continue;
+            }
+            const id = this._colliderId(col);
+            if (!id) {
+                continue;
+            }
+            if (seenFront.has(id)) {
+                this._frontWalls.set(id, col);
+            } else if (seenBack.has(id)) {
+                this._backWalls.set(id, col);
+            }
+        }
+        this._frontCount = this._frontWalls.size;
+        this._backCount = this._backWalls.size;
+        for (const id of seenFront) {
+            const col = this._frontWalls.get(id);
+            if (col?.isValid) {
+                this._activeWallContacts.set(id, col);
+            }
+        }
+    }
+
+    /** В i-frames: любое перекрытие башенной стены — стоп скролла (центр стены может быть «сзади» игрока). */
+    private _hasOverlappingTowerWallHold(): boolean {
+        const sources = [
+            ...this._activeWallContacts.values(),
+            ...this._frontWalls.values(),
+            ...this._backWalls.values(),
+        ];
+        const seen = new Set<string>();
+        for (const col of sources) {
+            if (!col?.isValid) {
+                continue;
+            }
+            const id = this._colliderId(col);
+            if (!id || seen.has(id)) {
+                continue;
+            }
+            seen.add(id);
+            if (this._hazardKind(col) !== 'wall') {
+                continue;
+            }
+            const v = this._verticalBand(col);
+            if (
+                v === 'above' ||
+                !this._shouldApplyHorizontalScrollBlock(v, col)
             ) {
                 continue;
             }
             if (this._hasAabbOverlapWithPlayer(col)) {
-                return true;
-            }
-        }
-        for (const col of this._frontWalls.values()) {
-            if (col?.isValid && this._hasAabbOverlapWithPlayer(col)) {
                 return true;
             }
         }
