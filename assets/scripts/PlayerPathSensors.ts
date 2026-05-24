@@ -23,19 +23,14 @@ const { ccclass, property, executionOrder } = _decorator;
 const PATH_SENSORS_EXEC_ORDER = -50;
 
 /**
- * Коллайдер игрока + контакты (не sensor): вертикаль (сверху / снизу / сбоку) и горизонталь для скролла.
- * Сверху — игнор. Снизу — учёт для анимации бега; стоп мира добавляется отдельно, если контакт ещё и «вперёд/назад»
- * (полоса «сбоку», или «снизу» и центр препятствия по X вне мёртвой зоны — см. _shouldApplyHorizontalScrollBlock).
+ * Контакты коллайдера игрока:
+ * - **Sensor** на препятствии (CloudBarrier / TowerBarrier…) → урон, отдача;
+ * - **не sensor**, группа препятствий → стоп камеры, бег по «полу» снизу.
+ * Hazard-скрипты на чанках не нужны — всё через префаб (sensor vs solid).
  */
 @ccclass('PlayerPathSensors')
 @executionOrder(PATH_SENSORS_EXEC_ORDER)
 export class PlayerPathSensors extends Component {
-    /**
-     * В билде колбэки на коллайдерах препятствий часто не приходят; удары обрабатываем здесь
-     * (коллайдер игрока). Скрипты на облаке/стене тогда не дублируют логику.
-     */
-    static hazardsViaPlayerContact = true;
-
     @property({
         type: Collider2D,
         displayName: 'Path Collider',
@@ -90,7 +85,7 @@ export class PlayerPathSensors extends Component {
     })
     debugLog = false;
 
-    private static readonly _PRUNE_AABB_EPS = 2;
+    private static readonly _PRUNE_AABB_EPS = 12;
 
     private _frontCount = 0;
     private _backCount = 0;
@@ -126,9 +121,9 @@ export class PlayerPathSensors extends Component {
         return this._backCount > 0;
     }
 
-    /** Есть контакт с поверхностью снизу (бег по земле/платформе). */
+    /** Есть опора под ногами (бег по земле/платформе), не боковая стена. */
     public get isOnSurfaceBelow(): boolean {
-        return this._belowCount > 0;
+        return this._hasActiveSurfaceSupportBelow();
     }
 
     /** Новый забег после game over: контакты, кулдауны, блокировки скролла. */
@@ -217,6 +212,10 @@ export class PlayerPathSensors extends Component {
         this._pruneStaleWalls(true);
         this._pruneStaleWalls(false);
         this._pruneStaleBelow();
+        this._pruneFrontFloorSupportBlocks();
+        this._pruneFrontCornerJams();
+        this._pruneStaleActiveHazardContacts();
+        this._resyncForwardBlocksFromOverlap();
         if (inv) {
             this._resyncForwardWallScrollBlocks();
         }
@@ -238,14 +237,20 @@ export class PlayerPathSensors extends Component {
      * Скролл мира (и «камера») должны ждать: лобовая стена впереди или касание стены в i-frames.
      */
     public shouldHoldForwardScroll(): boolean {
+        return this._hasActiveForwardScrollBlock();
+    }
+
+    /** Лобовой блок скролла: счётчик или реальное перекрытие AABB (без урона / не TowerWall). */
+    private _hasActiveForwardScrollBlock(): boolean {
         if (this._frontCount > 0) {
             return true;
         }
-        const gm = GameManager.game;
-        if (!gm?.isPlaying || !gm.isDamageInvincible) {
-            return false;
+        for (const col of this._frontWalls.values()) {
+            if (col?.isValid && this._hasAabbOverlapWithPlayer(col)) {
+                return true;
+            }
         }
-        return this._hasOverlappingTowerWallHold();
+        return false;
     }
 
     private _tickHazardCooldowns(dt: number): void {
@@ -264,9 +269,9 @@ export class PlayerPathSensors extends Component {
         }
     }
 
-    /** Бег по поверхности только после непрерывного контакта снизу (исключаем короткие касания). */
+    /** Бег только при опоре под ногами (не при касании вертикальной стены). */
     private _updateSurfaceRunAnimation(dt: number): void {
-        const hasBelow = this._belowCount > 0;
+        const hasBelow = this._hasActiveSurfaceSupportBelow();
         if (!hasBelow) {
             this._surfaceHoldAccumSec = 0;
             this._anim?.setRunningOnSurface(false);
@@ -416,16 +421,104 @@ export class PlayerPathSensors extends Component {
         if (v === 'side') {
             return true;
         }
-        const minOv = this.belowFloorSupportOverlapMin;
-        if (minOv > 0) {
-            const frac = this._playerOverlapFractionX(other);
-            if (frac >= minOv) {
-                return false;
-            }
+        /* Длинная платформа под ногами — только бег, камера не стопится. */
+        if (this._isWideFloorSupport(other)) {
+            return false;
         }
         const px = this.node.worldPosition.x;
         const wx = other.node.worldPosition.x;
         return Math.abs(wx - px) > this.pathSideDeadZonePx;
+    }
+
+    /**
+     * Опора под ногами: верх AABB препятствия у «ступней» игрока, есть перекрытие по X.
+     * Вертикальная стена (верх коллайдера выше ног) сюда не попадает.
+     */
+    private _hasActiveSurfaceSupportBelow(): boolean {
+        for (const col of this._belowWalls.values()) {
+            if (col?.isValid && this._isSurfaceSupportFromBelow(col)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private _isSurfaceSupportFromBelow(other: Collider2D): boolean {
+        const probe =
+            this._resolvedPathCollider ??
+            this.pathCollider ??
+            this.node.getComponent(BoxCollider2D);
+        const pa = probe ? this._boxWorldAabb(probe) : null;
+        const oa = this._boxWorldAabb(other);
+        if (!pa || !oa) {
+            return false;
+        }
+        const feetY = pa.yMin;
+        const supportTopY = oa.yMax;
+        const tol = this.pathVerticalDeadZonePx;
+        if (supportTopY > feetY + tol || supportTopY < feetY - tol * 2) {
+            return false;
+        }
+        const overlapX =
+            Math.min(pa.xMax, oa.xMax) - Math.max(pa.xMin, oa.xMin);
+        return overlapX > 0;
+    }
+
+    /** Широкий пол под ногами — бег без стопа камеры. */
+    private _isWideFloorSupport(other: Collider2D): boolean {
+        if (!this._isSurfaceSupportFromBelow(other)) {
+            return false;
+        }
+        const minOv = this.belowFloorSupportOverlapMin;
+        if (minOv <= 0) {
+            return false;
+        }
+        const frac = this._playerOverlapFractionX(other);
+        return frac >= minOv;
+    }
+
+    /** Общий корень препятствия (башня, земля…) — для угловых коллайдеров. */
+    private _obstacleRootKey(other: Collider2D): string {
+        let n: Node | null = other.node;
+        while (n) {
+            if (n === this.node) {
+                break;
+            }
+            const nm = n.name;
+            if (
+                nm === 'TowerBarrier' ||
+                nm.startsWith('TowerWall') ||
+                nm === 'CloudBarrier' ||
+                nm === 'Ground'
+            ) {
+                return `root:${n.uuid}`;
+            }
+            n = n.parent;
+        }
+        return `col:${this._colliderId(other)}`;
+    }
+
+    /**
+     * Угол: ноги на опоре того же препятствия — не держим лобовой стоп камеры
+     * (иначе «пол снизу + стена впереди» = застревание).
+     */
+    private _isForwardBlockSuppressedBySurfaceSupport(other: Collider2D): boolean {
+        if (this._isSurfaceSupportFromBelow(other)) {
+            return true;
+        }
+        const root = this._obstacleRootKey(other);
+        for (const col of this._belowWalls.values()) {
+            if (!col?.isValid) {
+                continue;
+            }
+            if (
+                this._obstacleRootKey(col) === root &&
+                this._isSurfaceSupportFromBelow(col)
+            ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private _onBeginContact(
@@ -456,13 +549,21 @@ export class PlayerPathSensors extends Component {
             return;
         }
 
-        const hazard = this._hazardKind(other);
-        if (hazard === 'cloud') {
-            const cloudId = this._colliderId(other);
-            if (cloudId) {
-                this._activeCloudContacts.set(cloudId, other);
+        if (this._isDamageSensor(other)) {
+            const hazard = this._hazardKindByName(other);
+            if (hazard === 'cloud') {
+                const cloudId = this._colliderId(other);
+                if (cloudId) {
+                    this._activeCloudContacts.set(cloudId, other);
+                }
+                this._tryElectricCloudHit(other);
+            } else if (hazard === 'wall') {
+                const wallId = this._colliderId(other);
+                if (wallId) {
+                    this._activeWallContacts.set(wallId, other);
+                }
+                this._tryTowerWallHit(other);
             }
-            this._tryElectricCloudHit(other);
             return;
         }
 
@@ -476,16 +577,6 @@ export class PlayerPathSensors extends Component {
 
         const v = this._verticalBand(other);
 
-        if (
-            hazard === 'wall' &&
-            (v === 'side' || this._shouldApplyHorizontalScrollBlock(v, other))
-        ) {
-            const wallId = this._colliderId(other);
-            if (wallId) {
-                this._activeWallContacts.set(wallId, other);
-            }
-            this._tryTowerWallHit(other);
-        }
         if (v === 'above') {
             if (this.debugLog) {
                 console.log(
@@ -495,27 +586,35 @@ export class PlayerPathSensors extends Component {
             return;
         }
 
-        if (v === 'below') {
+        if (this._isSurfaceSupportFromBelow(other)) {
             if (!this._belowWalls.has(id)) {
                 this._belowWalls.set(id, other);
                 this._belowCount++;
                 if (this.debugLog) {
                     console.log(
-                        `[PlayerPathSensors] BEGIN BELOW (surface) other="${other?.node?.name ?? '?'}" below=${this._belowCount}`,
+                        `[PlayerPathSensors] BEGIN SURFACE (feet) other="${other?.node?.name ?? '?'}" below=${this._belowCount}`,
                     );
                 }
             }
         }
 
-        if (this._shouldApplyHorizontalScrollBlock(v, other)) {
+        if (
+            !this._isWideFloorSupport(other) &&
+            this._shouldApplyHorizontalScrollBlock(v, other)
+        ) {
             let forward = this._wallBlocksForward(other);
             if (
                 !forward &&
-                hazard === 'wall' &&
                 gm.isDamageInvincible &&
                 this._hasAabbOverlapWithPlayer(other)
             ) {
                 forward = true;
+            }
+            if (
+                forward &&
+                this._isForwardBlockSuppressedBySurfaceSupport(other)
+            ) {
+                forward = false;
             }
             if (forward) {
                 if (!this._frontWalls.has(id)) {
@@ -547,11 +646,16 @@ export class PlayerPathSensors extends Component {
     private _onEndContact(_self: Collider2D, other: Collider2D, _c: IPhysics2DContact | null) {
         const gm = GameManager.game;
         const id = other?.isValid ? this._colliderId(other) : '';
-        const hazard = other?.isValid ? this._hazardKind(other) : '';
-        const holdWallMapsDuringInv =
-            !!gm?.isDamageInvincible && hazard === 'wall';
+        const isSensor = other?.isValid && this._isDamageSensor(other);
+        const hazard = isSensor ? this._hazardKindByName(other) : '';
+        /* Скролл: во время i-frames не снимаем front/back у твёрдых коллайдеров. */
+        const holdScrollWallMapsDuringInv =
+            !!gm?.isDamageInvincible &&
+            !isSensor &&
+            !!other?.isValid &&
+            this._isBlockingObstacle(other);
 
-        if (id && other?.isValid && !holdWallMapsDuringInv) {
+        if (id && other?.isValid && isSensor) {
             if (hazard === 'cloud') {
                 this._activeCloudContacts.delete(id);
             } else if (hazard === 'wall') {
@@ -561,7 +665,7 @@ export class PlayerPathSensors extends Component {
         const ok = other?.isValid && this._isBlockingObstacle(other);
         let changed = false;
         /* Один коллайдер может быть и «впереди», и «снизу» — снимаем со всех карт, не else-if. */
-        if (id && !holdWallMapsDuringInv) {
+        if (id && !holdScrollWallMapsDuringInv) {
             if (this._frontWalls.delete(id)) {
                 this._frontCount = Math.max(0, this._frontCount - 1);
                 changed = true;
@@ -708,6 +812,29 @@ export class PlayerPathSensors extends Component {
         }
     }
 
+    /** Пол под ногами не должен держать frontCount (баг: камера стоп при беге). */
+    private _pruneFrontFloorSupportBlocks(): void {
+        for (const [id, col] of this._frontWalls) {
+            if (!col?.isValid) {
+                continue;
+            }
+            if (this._isWideFloorSupport(col)) {
+                this._frontWalls.delete(id);
+            }
+        }
+        this._frontCount = this._frontWalls.size;
+    }
+
+    /** Угол препятствия: опора снизу + лобовой front на том же root. */
+    private _pruneFrontCornerJams(): void {
+        for (const [id, col] of this._frontWalls) {
+            if (this._isForwardBlockSuppressedBySurfaceSupport(col)) {
+                this._frontWalls.delete(id);
+            }
+        }
+        this._frontCount = this._frontWalls.size;
+    }
+
     private _pruneStaleBelow(): void {
         const probe =
             this._resolvedPathCollider ??
@@ -738,7 +865,10 @@ export class PlayerPathSensors extends Component {
             if (!wa) {
                 continue;
             }
-            if (!this._aabbOverlap(sa, wa)) {
+            if (
+                !this._aabbOverlap(sa, wa) ||
+                !this._isSurfaceSupportFromBelow(wall)
+            ) {
                 toRemove.push(id);
             }
         }
@@ -821,7 +951,13 @@ export class PlayerPathSensors extends Component {
         return null;
     }
 
-    private _hazardKind(other: Collider2D): 'cloud' | 'wall' | null {
+    /** Sensor-коллайдер на препятствии — зона урона (имя родителя задаёт cloud vs wall). */
+    private _isDamageSensor(other: Collider2D): boolean {
+        const otherAny = other as any;
+        return otherAny.sensor === true || otherAny._sensor === true;
+    }
+
+    private _hazardKindByName(other: Collider2D): 'cloud' | 'wall' | null {
         let n: Node | null = other.node;
         while (n) {
             if (n === this.node) {
@@ -841,7 +977,7 @@ export class PlayerPathSensors extends Component {
     private _retickTouchingHazards(): void {
         const cloudRoots = new Set<string>();
         for (const col of this._activeCloudContacts.values()) {
-            if (!col?.isValid) {
+            if (!col?.isValid || !this._hasAabbOverlapWithPlayer(col)) {
                 continue;
             }
             const rootKey = this._hazardRootKey(col, 'cloud');
@@ -854,7 +990,7 @@ export class PlayerPathSensors extends Component {
 
         const wallRoots = new Set<string>();
         for (const col of this._activeWallContacts.values()) {
-            if (!col?.isValid) {
+            if (!col?.isValid || !this._hasAabbOverlapWithPlayer(col)) {
                 continue;
             }
             const rootKey = this._hazardRootKey(col, 'wall');
@@ -863,6 +999,20 @@ export class PlayerPathSensors extends Component {
             }
             wallRoots.add(rootKey);
             this._tryTowerWallHit(col);
+        }
+    }
+
+    /** Урон только при реальном перекрытии; END во время i-frames мог не прийти. */
+    private _pruneStaleActiveHazardContacts(): void {
+        for (const [id, col] of this._activeWallContacts) {
+            if (!col?.isValid || !this._hasAabbOverlapWithPlayer(col)) {
+                this._activeWallContacts.delete(id);
+            }
+        }
+        for (const [id, col] of this._activeCloudContacts) {
+            if (!col?.isValid || !this._hasAabbOverlapWithPlayer(col)) {
+                this._activeCloudContacts.delete(id);
+            }
         }
     }
 
@@ -890,10 +1040,14 @@ export class PlayerPathSensors extends Component {
         if (!gm?.isPlaying || !pc || !id) {
             return;
         }
+        if (!this._hasAabbOverlapWithPlayer(other)) {
+            return;
+        }
         if (gm.isDamageInvincible) {
             return;
         }
-        if ((this._electricHazardCoolById.get(id) ?? 0) > 0) {
+        const rootKey = this._hazardRootKey(other, 'cloud');
+        if ((this._electricHazardCoolById.get(rootKey) ?? 0) > 0) {
             return;
         }
         if (this.debugLog) {
@@ -907,7 +1061,7 @@ export class PlayerPathSensors extends Component {
             pc.electricCloudCooldownSeconds,
             pc.electricDefaultLiftLockDuration,
         );
-        this._electricHazardCoolById.set(id, cd);
+        this._electricHazardCoolById.set(rootKey, cd);
     }
 
     private _tryTowerWallHit(other: Collider2D): void {
@@ -917,13 +1071,17 @@ export class PlayerPathSensors extends Component {
         if (!gm?.isPlaying || !pc || !id) {
             return;
         }
+        if (!this._hasAabbOverlapWithPlayer(other)) {
+            return;
+        }
         if (gm.isDamageInvincible) {
             return;
         }
         if (gm.isWorldKickbackActive) {
             gm.cancelWorldKickback();
         }
-        if ((this._wallHazardCoolById.get(id) ?? 0) > 0) {
+        const rootKey = this._hazardRootKey(other, 'wall');
+        if ((this._wallHazardCoolById.get(rootKey) ?? 0) > 0) {
             return;
         }
         if (this.debugLog) {
@@ -937,7 +1095,48 @@ export class PlayerPathSensors extends Component {
             pc.towerWallCooldownSeconds,
             pc.towerWallKnockbackDurationSec,
         );
-        this._wallHazardCoolById.set(id, cd);
+        this._wallHazardCoolById.set(rootKey, cd);
+    }
+
+    /**
+     * Контакт мог попасть в below/back или prune сбросил front, хотя AABB ещё перекрывается.
+     * Восстанавливаем лобовой блок для любого препятствия (не только TowerWall с уроном).
+     */
+    private _resyncForwardBlocksFromOverlap(): void {
+        const sources = [
+            ...this._frontWalls.values(),
+            ...this._backWalls.values(),
+            ...this._belowWalls.values(),
+        ];
+        const seen = new Set<string>();
+        for (const col of sources) {
+            if (!col?.isValid || !this._isBlockingObstacle(col)) {
+                continue;
+            }
+            if (!this._hasAabbOverlapWithPlayer(col)) {
+                continue;
+            }
+            const v = this._verticalBand(col);
+            if (
+                v === 'above' ||
+                this._isWideFloorSupport(col) ||
+                this._isForwardBlockSuppressedBySurfaceSupport(col) ||
+                !this._shouldApplyHorizontalScrollBlock(v, col) ||
+                !this._wallBlocksForward(col)
+            ) {
+                continue;
+            }
+            const id = this._colliderId(col);
+            if (!id || seen.has(id)) {
+                continue;
+            }
+            seen.add(id);
+            if (!this._frontWalls.has(id)) {
+                this._frontWalls.set(id, col);
+                this._frontCount++;
+            }
+        }
+        this._frontCount = this._frontWalls.size;
     }
 
     /** После отдачи мир сдвигается — prune мог сбросить front; в i-frames восстанавливаем блок. */
@@ -1029,40 +1228,6 @@ export class PlayerPathSensors extends Component {
         }
     }
 
-    /** В i-frames: любое перекрытие башенной стены — стоп скролла (центр стены может быть «сзади» игрока). */
-    private _hasOverlappingTowerWallHold(): boolean {
-        const sources = [
-            ...this._activeWallContacts.values(),
-            ...this._frontWalls.values(),
-            ...this._backWalls.values(),
-        ];
-        const seen = new Set<string>();
-        for (const col of sources) {
-            if (!col?.isValid) {
-                continue;
-            }
-            const id = this._colliderId(col);
-            if (!id || seen.has(id)) {
-                continue;
-            }
-            seen.add(id);
-            if (this._hazardKind(col) !== 'wall') {
-                continue;
-            }
-            const v = this._verticalBand(col);
-            if (
-                v === 'above' ||
-                !this._shouldApplyHorizontalScrollBlock(v, col)
-            ) {
-                continue;
-            }
-            if (this._hasAabbOverlapWithPlayer(col)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private _hasAabbOverlapWithPlayer(other: Collider2D): boolean {
         const probe =
             this._resolvedPathCollider ??
@@ -1083,13 +1248,9 @@ export class PlayerPathSensors extends Component {
         return this._aabbOverlap(sa, wa);
     }
 
+    /** Твёрдый коллайдер препятствия: стоп камеры / бег, без урона. */
     private _isBlockingObstacle(other: Collider2D): boolean {
-        if (!other?.isValid) {
-            return false;
-        }
-        const otherAny = other as any;
-        const isOtherSensor = otherAny.sensor === true || otherAny._sensor === true;
-        if (isOtherSensor) {
+        if (!other?.isValid || this._isDamageSensor(other)) {
             return false;
         }
         const otherNode = other.node;

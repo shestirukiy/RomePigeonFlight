@@ -115,6 +115,7 @@ export class PlayerController extends Component {
             return;
         }
         this._flight?.setElectricLiftBlockedFor(t);
+        this._flight?.allowHorizontalDriftFor(t);
         this._anim?.notifyElectricDamage(t);
     }
 
@@ -141,6 +142,9 @@ export class PlayerController extends Component {
                         ? this.towerWallHitAnimationDurationSec
                         : kd;
                 this._anim?.notifyWallHit(animDur);
+                this._flight?.allowHorizontalDriftFor(
+                    Math.max(kd, animDur, this.towerWallDefaultLiftLockDuration),
+                );
                 const lift = this.towerWallDefaultLiftLockDuration;
                 if (lift > 0) {
                     this._flight?.setElectricLiftBlockedFor(lift);
@@ -164,6 +168,9 @@ export class PlayerController extends Component {
                 ? this.towerWallHitAnimationDurationSec
                 : kd;
         this._anim?.notifyWallHit(animDur);
+        this._flight?.allowHorizontalDriftFor(
+            Math.max(kd, animDur, this.towerWallDefaultLiftLockDuration),
+        );
 
         const lift = this.towerWallDefaultLiftLockDuration;
         if (lift > 0) {

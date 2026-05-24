@@ -18,12 +18,16 @@ import { GameManager } from './GameManager';
 import { SoundController } from './SoundController';
 import { PlayerController } from './PlayerController';
 
-const { ccclass, property } = _decorator;
+const { ccclass, property, executionOrder } = _decorator;
+
+/** После физики и скролла — возврат X на дорожку. */
+const PLAYER_FLIGHT_EXEC_ORDER = 40;
 
 /**
  * Flight: RigidBody2D + lift; pitch from vertical velocity (inspector group Pitch).
  */
 @ccclass('PlayerFlight')
+@executionOrder(PLAYER_FLIGHT_EXEC_ORDER)
 export class PlayerFlight extends Component {
     @property({ group: 'Flight', tooltip: 'Сила при удержании ввода.' })
     liftForce = 4500;
@@ -91,6 +95,22 @@ export class PlayerFlight extends Component {
 
     @property({
         group: 'Flight',
+        displayName: 'Runway snap epsilon (px)',
+        tooltip:
+            'Если |X − якорь| больше — сброс на якорь (кроме окна «урон/отдача»).',
+    })
+    runwaySnapEpsilonPx = 0.35;
+
+    @property({
+        group: 'Flight',
+        displayName: 'Runway snap ease (s)',
+        tooltip:
+            'Плавный возврат локального X к 0 после урона / возобновления скролла. 0 — мгновенно.',
+    })
+    runwaySnapEaseSec = 0.28;
+
+    @property({
+        group: 'Flight',
         displayName: 'Scale Flight With World Speed',
         tooltip:
             'После первой пройденной вехи: лимиты vy и слабее подъём под скорость Plane 1 (вехи × parallax). ' +
@@ -122,10 +142,17 @@ export class PlayerFlight extends Component {
     })
     flightGravityMatch = 0.5;
 
+    /** Локальный X в PlayerContainer — всегда 0 (дорожка раннера). */
+    private static readonly RUNWAY_LOCAL_X = 0;
+
     private _body: RigidBody2D | null = null;
     private _held = false;
-    private _anchorLocalX = 0;
+    /** Y/Z при рестарте; X дорожки фиксирован (RUNWAY_LOCAL_X). */
     private readonly _spawnLocalPos = new Vec3();
+
+    /** Пока > 0 — разрешён сдвиг по X от коллизий (анимация урона / отдача). */
+    private _allowHorizontalDriftRemain = 0;
+    private _wasForwardScrollStopped = true;
 
     /** Seconds left: no lift force (electric stun, etc.). */
     private _electricLiftBlockRemain = 0;
@@ -167,8 +194,18 @@ export class PlayerFlight extends Component {
     }
 
     /**
-     * Удар о стену: мир «отъезжает назад» относительно птицы (чанки вправо), импульс вниз опционально.
+     * На время hazard-клипа / отдачи можно чуть сместиться по X; после — резинка на X=0.
      */
+    public allowHorizontalDriftFor(seconds: number): void {
+        if (seconds <= 0) {
+            return;
+        }
+        this._allowHorizontalDriftRemain = Math.max(
+            this._allowHorizontalDriftRemain,
+            seconds,
+        );
+    }
+
     public applyTowerKnockback(
         durationSec: number,
         horizontalPxPerSec: number,
@@ -177,6 +214,7 @@ export class PlayerFlight extends Component {
         if (durationSec <= 0) {
             return;
         }
+        this.allowHorizontalDriftFor(durationSec);
         GameManager.game?.applyWorldKickback(durationSec, horizontalPxPerSec);
 
         const body = this._body;
@@ -188,8 +226,8 @@ export class PlayerFlight extends Component {
     private _savedGravityScale = 1;
 
     onLoad() {
-        this._spawnLocalPos.set(this.node.position);
-        this._anchorLocalX = this._spawnLocalPos.x;
+        const p = this.node.position;
+        this._spawnLocalPos.set(PlayerFlight.RUNWAY_LOCAL_X, p.y, p.z);
         if (!this.getComponent(PlayerController)) {
             this.addComponent(PlayerController);
         }
@@ -277,6 +315,54 @@ export class PlayerFlight extends Component {
         // Это гарантирует, что при “отскоке” и упоре во вторую стену игрок не уедет относительно кадра.
         const clipped = vy !== v.y;
         if (this.lockHorizontalX || Math.abs(v.x) > 1e-4 || clipped) {
+            body.linearVelocity = new Vec2(0, vy);
+        }
+    }
+
+    lateUpdate(dt: number): void {
+        const gm = GameManager.game;
+        const playing = gm?.isPlaying === true;
+        if (!playing || !this.lockHorizontalX) {
+            this._wasForwardScrollStopped = true;
+            return;
+        }
+
+        if (this._allowHorizontalDriftRemain > 0) {
+            this._allowHorizontalDriftRemain = Math.max(
+                0,
+                this._allowHorizontalDriftRemain - dt,
+            );
+            if (this._allowHorizontalDriftRemain <= 0) {
+                this._snapRunwayHorizontal(true);
+            }
+            return;
+        }
+
+        const forward = gm.getForwardScrollDelta(dt);
+        const forwardActive = forward > 0;
+        if (this._wasForwardScrollStopped && forwardActive) {
+            this._snapRunwayHorizontal(true);
+        }
+        this._wasForwardScrollStopped = !forwardActive;
+
+        this._snapRunwayHorizontal(false);
+    }
+
+    private _snapRunwayHorizontal(force: boolean): void {
+        if (!this.lockHorizontalX) {
+            return;
+        }
+        if (!force && this._allowHorizontalDriftRemain > 0) {
+            return;
+        }
+        const p = this.node.position;
+        if (Math.abs(p.x - PlayerFlight.RUNWAY_LOCAL_X) <= this.runwaySnapEpsilonPx) {
+            return;
+        }
+        this.node.setPosition(PlayerFlight.RUNWAY_LOCAL_X, p.y, p.z);
+        const body = this._body;
+        if (body) {
+            const vy = body.linearVelocity.y;
             body.linearVelocity = new Vec2(0, vy);
         }
     }
@@ -381,6 +467,8 @@ export class PlayerFlight extends Component {
     public resetToSpawn(): void {
         this._held = false;
         this._electricLiftBlockRemain = 0;
+        this._allowHorizontalDriftRemain = 0;
+        this._wasForwardScrollStopped = true;
         this._pitchVyFiltered = 0;
         this.node.setPosition(this._spawnLocalPos);
         this._resetPitchAngle();

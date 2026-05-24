@@ -8,12 +8,11 @@ import {
 } from 'cc';
 import { GameManager } from './GameManager';
 import { PlayerController } from './PlayerController';
-import { PlayerPathSensors } from './PlayerPathSensors';
-
 const { ccclass, property } = _decorator;
 
 /**
- * Только коллизии: отдача, импульс, анимация — в PlayerController (группа «Tower wall»).
+ * @deprecated Урон/отдача — sensor-коллайдер на префабе + {@link PlayerPathSensors}.
+ * С префабов снимайте этот компонент; LevelGenerator его не добавляет.
  */
 @ccclass('TowerWallHazard')
 export class TowerWallHazard extends Component {
@@ -33,7 +32,7 @@ export class TowerWallHazard extends Component {
     }
 
     onLoad() {
-        this._bindColliders();
+        this.enabled = false;
     }
 
     start() {
@@ -91,9 +90,7 @@ export class TowerWallHazard extends Component {
         otherCollider: Collider2D,
         _contact: IPhysics2DContact | null,
     ) {
-        if (PlayerPathSensors.hazardsViaPlayerContact) {
-            return;
-        }
+        return;
         const gm = GameManager.game;
         if (!gm?.isPlaying) {
             return;

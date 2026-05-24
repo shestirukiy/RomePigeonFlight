@@ -9,12 +9,10 @@ import {
 } from 'cc';
 import { GameManager } from './GameManager';
 import { PlayerController } from './PlayerController';
-import { PlayerPathSensors } from './PlayerPathSensors';
-
 const { ccclass, property } = _decorator;
 
 /**
- * Только коллизии: тайминги и урон — в PlayerController (группа «Electric cloud»).
+ * @deprecated Урон — sensor на CloudBarrier + {@link PlayerPathSensors}.
  */
 @ccclass('ElectricCloudHazard')
 export class ElectricCloudHazard extends Component {
@@ -37,11 +35,7 @@ export class ElectricCloudHazard extends Component {
     }
 
     onLoad() {
-        if (!this._isUnderCloudBarrier()) {
-            this.enabled = false;
-            return;
-        }
-        this._bindColliders();
+        this.enabled = false;
     }
 
     start() {
@@ -125,9 +119,7 @@ export class ElectricCloudHazard extends Component {
         otherCollider: Collider2D,
         _contact: IPhysics2DContact | null,
     ) {
-        if (PlayerPathSensors.hazardsViaPlayerContact) {
-            return;
-        }
+        return;
         const otherName = otherCollider?.node?.name ?? '?';
         if (this.debugContactLog) {
             console.log(

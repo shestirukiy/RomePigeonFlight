@@ -64,6 +64,9 @@ export class GameManager extends Component {
      */
     private _forwardScrollHoldRemain = 0;
 
+    /** 0…1 — разгон скролла после стопа (smoothstep). */
+    private _forwardScrollEase01 = 0;
+
     /** Для отскока: контакт заднего сенсора с твёрдой стеной. */
     private _kickbackBackBlockRef = 0;
     private _kickbackBackHoldRemain = 0;
@@ -248,16 +251,13 @@ export class GameManager extends Component {
                 this._forwardScrollHoldRemain,
                 this.forwardContactMinHoldSec,
             );
-        } else {
-            this._forwardScrollHoldRemain = 0;
         }
+        /* ref=0: hold не обнуляем — в update() он плавно затухает, чтобы не дёргать камеру 1 кадр. */
         if (this._kickbackBackBlockRef > 0) {
             this._kickbackBackHoldRemain = Math.max(
                 this._kickbackBackHoldRemain,
                 this.backContactMinHoldSec,
             );
-        } else {
-            this._kickbackBackHoldRemain = 0;
         }
     }
 
@@ -280,22 +280,48 @@ export class GameManager extends Component {
         }
     }
 
-    /** Сдвиг чанков «вперёд по забегу» (влево), без отдачи. Во время отдачи — 0. */
-    public getForwardScrollDelta(_dt: number): number {
+    private static _smoothstep01(t: number): number {
+        const x = Math.min(1, Math.max(0, t));
+        return x * x * (3 - 2 * x);
+    }
+
+    private _isForwardScrollHalted(): boolean {
         if (!this.isPlaying || this._worldKickbackRemain > 0) {
-            return 0;
+            return true;
         }
         if (
             this._forwardScrollBlockRef > 0 ||
             this._forwardScrollHoldRemain > 0
         ) {
+            return true;
+        }
+        return this._playerPathSensors()?.shouldHoldForwardScroll() === true;
+    }
+
+    /** Разгон мира после старта / снятия блокировки (forwardScrollEaseInSec). */
+    private _tickForwardScrollEase(dt: number): void {
+        if (this._isForwardScrollHalted()) {
+            this._forwardScrollEase01 = 0;
+            return;
+        }
+        const dur = this.forwardScrollEaseInSec;
+        if (dur <= 0) {
+            this._forwardScrollEase01 = 1;
+            return;
+        }
+        this._forwardScrollEase01 = Math.min(
+            1,
+            this._forwardScrollEase01 + dt / dur,
+        );
+    }
+
+    /** Сдвиг чанков «вперёд по забегу» (влево), без отдачи. Во время отдачи — 0. */
+    public getForwardScrollDelta(_dt: number): number {
+        if (this._isForwardScrollHalted()) {
             return 0;
         }
-        const pathSensors = this._playerPathSensors();
-        if (pathSensors?.shouldHoldForwardScroll()) {
-            return 0;
-        }
-        return this.getEffectiveScrollSpeed() * _dt;
+        const ease = GameManager._smoothstep01(this._forwardScrollEase01);
+        return this.getEffectiveScrollSpeed() * _dt * ease;
     }
 
     private _playerPathSensors(): PlayerPathSensors | null {
@@ -410,6 +436,14 @@ export class GameManager extends Component {
         tooltip: 'То же для заднего сенсора во время отскока.',
     })
     backContactMinHoldSec = 0.05;
+
+    @property({
+        group: G_SCROLL,
+        displayName: 'Forward scroll ease-in (s)',
+        tooltip:
+            'Плавный разгон мира после старта забега и после каждой остановки (стена, отдача). 0 — без изинга.',
+    })
+    forwardScrollEaseInSec = 0.35;
 
     @property({
         group: G_MILESTONE,
@@ -633,6 +667,7 @@ export class GameManager extends Component {
             this._worldKickbackSpeed = 0;
             this._forwardScrollBlockRef = 0;
             this._forwardScrollHoldRemain = 0;
+            this._forwardScrollEase01 = 0;
             this._kickbackBackBlockRef = 0;
             this._kickbackBackHoldRemain = 0;
             this._damageInvincibleRemain = 0;
@@ -678,6 +713,7 @@ export class GameManager extends Component {
             this.cancelWorldKickback();
         }
 
+        this._tickForwardScrollEase(dt);
         this._tickMilestonePassBoost(dt);
         this._syncSpeedLinesEmitter();
         this._tickFlightDistanceAndMilestones(dt);
@@ -1017,6 +1053,7 @@ export class GameManager extends Component {
         this._worldKickbackSpeed = 0;
         this._forwardScrollBlockRef = 0;
         this._forwardScrollHoldRemain = 0;
+        this._forwardScrollEase01 = 0;
         this._kickbackBackBlockRef = 0;
         this._kickbackBackHoldRemain = 0;
         this._damageInvincibleRemain = 0;
