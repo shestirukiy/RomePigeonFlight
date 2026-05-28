@@ -27,12 +27,12 @@
     {
       "tintColor": {
         "__type__": "cc.Color",
-        "r": 82,
+        "r": 119,
         "g": 255,
         "b": 255,
         "a": 255
       },
-      "tintStrength": 0.49
+      "tintStrength": 0.32
     }
   ]
 }

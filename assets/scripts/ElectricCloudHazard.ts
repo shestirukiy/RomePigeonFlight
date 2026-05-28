@@ -12,7 +12,7 @@ import { PlayerController } from './PlayerController';
 const { ccclass, property } = _decorator;
 
 /**
- * @deprecated Урон — sensor на CloudBarrier + {@link PlayerPathSensors}.
+ * Маркер зоны урона облака. Урон — {@link PlayerPathSensors} по наличию компонента.
  */
 @ccclass('ElectricCloudHazard')
 export class ElectricCloudHazard extends Component {
@@ -35,16 +35,11 @@ export class ElectricCloudHazard extends Component {
     }
 
     onLoad() {
-        this.enabled = false;
+        // Маркер для PlayerPathSensors.
     }
 
     start() {
-        if (!this.enabled) {
-            return;
-        }
-        if (this._registeredColliders.length === 0) {
-            this._bindColliders();
-        }
+        return;
     }
 
     /** Не вешать на SkyGround / SkySensor — только префаб CloudBarrier. */

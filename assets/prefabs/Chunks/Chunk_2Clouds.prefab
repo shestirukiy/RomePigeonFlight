@@ -139,7 +139,7 @@
     ],
     "value": {
       "__type__": "cc.Vec3",
-      "x": 20.331,
+      "x": -93.914,
       "y": 614.223,
       "z": 0
     }
@@ -251,7 +251,7 @@
     ],
     "value": {
       "__type__": "cc.Vec3",
-      "x": 567.675,
+      "x": 453.43,
       "y": -241.568,
       "z": 0
     }
@@ -301,7 +301,7 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 1590,
+      "width": 1870.9,
       "height": 2368
     },
     "_anchorPoint": {
@@ -325,7 +325,6 @@
     },
     "fileId": "2bl5ZRMg5KrL5/R/85/rar",
     "instance": null,
-    "targetOverrides": null,
     "nestedPrefabInstanceRoots": [
       {
         "__id__": 10

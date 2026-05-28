@@ -7,15 +7,24 @@ import { SoundId } from './SoundLibrary';
 
 const { ccclass, property } = _decorator;
 
-const G_CLOUD = 'Obstacle · Electric cloud';
-const G_WALL = 'Obstacle · Tower wall';
+const G_DAMAGE = { id: 'Damage', name: 'Damage' };
+const G_CLOUD = { id: 'ElectricCloud', name: 'Electric cloud' };
+const G_WALL = { id: 'TowerWall', name: 'Tower wall' };
 
 /**
- * Реакции на препятствия: все числа и тайминги задаются здесь (две группы в инспекторе).
+ * Реакции игрока на урон и препятствия: все числа и тайминги задаются здесь.
  * Скрипты на препятствиях только ловят контакт и вызывают applyElectricCloudHit / applyTowerWallHit.
  */
 @ccclass('PlayerController')
 export class PlayerController extends Component {
+    @property({
+        group: G_DAMAGE,
+        displayName: 'Damage invincibility (s)',
+        tooltip:
+            'После потери HP игрок не получает урон повторно, пока не истечёт таймер.',
+    })
+    damageInvincibilitySec = 0.85;
+
     @property({
         group: G_CLOUD,
         displayName: 'Lift lock (s)',
@@ -98,7 +107,7 @@ export class PlayerController extends Component {
         if (!gm?.isPlaying) {
             return;
         }
-        const lethal = gm.takeDamage(1, false, true);
+        const lethal = gm.takeDamage(1, false, true, this.damageInvincibilitySec);
         SoundController.instance?.play(SoundId.ElectricHit);
         const t = this.electricDefaultLiftLockDuration;
         if (lethal) {
@@ -127,7 +136,7 @@ export class PlayerController extends Component {
         if (!gm?.isPlaying) {
             return;
         }
-        const lethal = gm.takeDamage(1, false, true);
+        const lethal = gm.takeDamage(1, false, true, this.damageInvincibilitySec);
         SoundController.instance?.play(SoundId.WallHit);
         const kd = this.towerWallKnockbackDurationSec;
         if (lethal) {

@@ -11,8 +11,9 @@ import { PlayerController } from './PlayerController';
 const { ccclass, property } = _decorator;
 
 /**
- * @deprecated Урон/отдача — sensor-коллайдер на префабе + {@link PlayerPathSensors}.
- * С префабов снимайте этот компонент; LevelGenerator его не добавляет.
+ * Маркер зоны урона башни: висит на sensor-ноде (например BoxSensor).
+ * Урон/отдача — {@link PlayerPathSensors} (по наличию этого компонента, не по имени ноды).
+ * Старые BEGIN_CONTACT здесь отключены.
  */
 @ccclass('TowerWallHazard')
 export class TowerWallHazard extends Component {
@@ -32,13 +33,11 @@ export class TowerWallHazard extends Component {
     }
 
     onLoad() {
-        this.enabled = false;
+        // Маркер для PlayerPathSensors; контакты не слушаем.
     }
 
     start() {
-        if (this._registeredColliders.length === 0) {
-            this._bindColliders();
-        }
+        return;
     }
 
     private _bindColliders(): void {

@@ -9,6 +9,7 @@ import {
     Label,
     Node,
     Prefab,
+    sys,
     Tween,
     UITransform,
     Vec3,
@@ -32,7 +33,6 @@ const G_SCROLL = { id: 'Scroll', name: 'Scrolling' };
 const G_MILESTONE = { id: 'Milestones', name: 'Milestone signs' };
 const G_UI = { id: 'UI', name: 'UI' };
 const G_HP = { id: 'Health', name: 'Health & seeds' };
-const G_COMBAT = { id: 'Combat', name: 'Combat' };
 
 /**
  * First tap starts the run; scrollSpeed drives LevelGenerator chunk movement.
@@ -83,8 +83,6 @@ export class GameManager extends Component {
 
     /** После game over пользователь уже тапнул — показана KTAPanel. */
     private _ktaPanelShown = false;
-
-    private _playAgainButton: Button | null = null;
 
     /** После Play Again — игнорировать тап, пока палец/кнопка мыши не отпущены. */
     private _suppressTapToStart = false;
@@ -563,9 +561,57 @@ export class GameManager extends Component {
         type: Node,
         displayName: 'KTA Panel',
         tooltip:
-            'Показывается после тапа по Game Over Panel; Play Again возвращает к ожиданию тапа.',
+            'Показывается по кнопке Continue на Game Over Panel; Play Again возвращает к ожиданию тапа.',
     })
     ktaPanel: Node | null = null;
+
+    @property({
+        group: G_UI,
+        type: Button,
+        displayName: 'Continue Button',
+        tooltip:
+            'ContinueBttn на GameOverPanel — открывает KTA (перетащите компонент Button с ноды).',
+    })
+    continueButton: Button | null = null;
+
+    @property({
+        group: G_UI,
+        type: Button,
+        displayName: 'Play Again Button',
+        tooltip:
+            'PlayAgainBttn на KTAPanel — новый забег после KTA (компонент Button).',
+    })
+    playAgainButton: Button | null = null;
+
+    @property({
+        group: G_UI,
+        type: Button,
+        displayName: 'Share Button',
+        tooltip: 'ShareBttn на KTAPanel (компонент Button).',
+    })
+    shareButton: Button | null = null;
+
+    @property({
+        group: G_UI,
+        displayName: 'Share URL',
+        tooltip: 'Ссылка, которую откроет кнопка Share (sys.openURL).',
+    })
+    shareUrl = '';
+
+    @property({
+        group: G_UI,
+        type: Button,
+        displayName: 'Watch Button',
+        tooltip: 'WatchBttn на KTAPanel (компонент Button).',
+    })
+    watchButton: Button | null = null;
+
+    @property({
+        group: G_UI,
+        displayName: 'Watch URL',
+        tooltip: 'Ссылка, которую откроет кнопка Watch (sys.openURL).',
+    })
+    watchUrl = '';
 
     @property({
         group: G_UI,
@@ -609,15 +655,7 @@ export class GameManager extends Component {
     seedsPerExtraLife = 100;
 
     @property({
-        group: G_COMBAT,
-        displayName: 'Damage invincibility (s)',
-        tooltip:
-            'После потери HP игрок не получает урон повторно, пока не истечёт таймер (одно препятствие / несколько контактов).',
-    })
-    damageInvincibilitySec = 0.85;
-
-    @property({
-        group: G_COMBAT,
+        group: G_HP,
         type: Prefab,
         displayName: 'Damage Particle FX Prefab',
         tooltip: 'Префаб DamageParticleFX — спавн при потере HP (рядом с игроком).',
@@ -625,7 +663,7 @@ export class GameManager extends Component {
     damageParticleFxPrefab: Prefab | null = null;
 
     @property({
-        group: G_COMBAT,
+        group: G_HP,
         displayName: 'Damage FX Local Offset',
         tooltip: 'Смещение всплеска перьев относительно корня Player (как на старом DamageParticle).',
     })
@@ -640,7 +678,6 @@ export class GameManager extends Component {
         this._refreshScoreLabel();
         this.resetHp();
         this._hideOverlayPanels();
-        this._bindPlayAgainButton();
         input.on(Input.EventType.TOUCH_START, this._onTouchStart, this);
         input.on(Input.EventType.TOUCH_END, this._onTouchEnd, this);
         input.on(Input.EventType.TOUCH_CANCEL, this._onTouchEnd, this);
@@ -648,9 +685,13 @@ export class GameManager extends Component {
         input.on(Input.EventType.MOUSE_UP, this._onMouseUp, this);
     }
 
+    start() {
+        this._bindUiButtons();
+    }
+
     onDestroy() {
         this._stopGameOverSeedCountRoll();
-        this._unbindPlayAgainButton();
+        this._unbindUiButtons();
         input.off(Input.EventType.TOUCH_START, this._onTouchStart, this);
         input.off(Input.EventType.TOUCH_END, this._onTouchEnd, this);
         input.off(Input.EventType.TOUCH_CANCEL, this._onTouchEnd, this);
@@ -993,27 +1034,99 @@ export class GameManager extends Component {
         gen?.setAllChunkLayersActive(false);
     }
 
-    private _bindPlayAgainButton(): void {
-        const btnNode = this.ktaPanel?.getChildByName('PlayAgainBttn');
-        const button = btnNode?.getComponent(Button) ?? null;
-        if (!button) {
-            return;
+    private _bindUiButtons(): void {
+        this._unbindUiButtons();
+        const cont = this._resolveContinueButton();
+        if (cont) {
+            cont.node.on(Button.EventType.CLICK, this._onContinueClick, this);
         }
-        this._playAgainButton = button;
-        button.node.on(Button.EventType.CLICK, this._onPlayAgainClick, this);
+        const again = this._resolvePlayAgainButton();
+        if (again) {
+            again.node.on(Button.EventType.CLICK, this._onPlayAgainClick, this);
+        }
+        const share = this._resolveShareButton();
+        if (share) {
+            share.node.on(Button.EventType.CLICK, this._onShareClick, this);
+        }
+        const watch = this._resolveWatchButton();
+        if (watch) {
+            watch.node.on(Button.EventType.CLICK, this._onWatchClick, this);
+        }
     }
 
-    private _unbindPlayAgainButton(): void {
-        if (!this._playAgainButton?.node?.isValid) {
-            this._playAgainButton = null;
+    private _unbindUiButtons(): void {
+        const cont = this._resolveContinueButton();
+        if (cont?.node?.isValid) {
+            cont.node.off(Button.EventType.CLICK, this._onContinueClick, this);
+        }
+        const again = this._resolvePlayAgainButton();
+        if (again?.node?.isValid) {
+            again.node.off(Button.EventType.CLICK, this._onPlayAgainClick, this);
+        }
+        const share = this._resolveShareButton();
+        if (share?.node?.isValid) {
+            share.node.off(Button.EventType.CLICK, this._onShareClick, this);
+        }
+        const watch = this._resolveWatchButton();
+        if (watch?.node?.isValid) {
+            watch.node.off(Button.EventType.CLICK, this._onWatchClick, this);
+        }
+    }
+
+    private _resolveContinueButton(): Button | null {
+        if (this.continueButton?.isValid) {
+            return this.continueButton;
+        }
+        const panel = this.gameOverPanel;
+        if (!panel?.isValid) {
+            return null;
+        }
+        const node =
+            panel.getChildByName('ContinueBttn') ??
+            panel.getChildByName('ContinueBtn');
+        return node?.getComponent(Button) ?? null;
+    }
+
+    private _resolvePlayAgainButton(): Button | null {
+        if (this.playAgainButton?.isValid) {
+            return this.playAgainButton;
+        }
+        const panel = this.ktaPanel;
+        if (!panel?.isValid) {
+            return null;
+        }
+        return (
+            panel.getChildByName('PlayAgainBttn')?.getComponent(Button) ?? null
+        );
+    }
+
+    private _resolveShareButton(): Button | null {
+        if (this.shareButton?.isValid) {
+            return this.shareButton;
+        }
+        const panel = this.ktaPanel;
+        if (!panel?.isValid) {
+            return null;
+        }
+        return panel.getChildByName('ShareBttn')?.getComponent(Button) ?? null;
+    }
+
+    private _resolveWatchButton(): Button | null {
+        if (this.watchButton?.isValid) {
+            return this.watchButton;
+        }
+        const panel = this.ktaPanel;
+        if (!panel?.isValid) {
+            return null;
+        }
+        return panel.getChildByName('WatchBttn')?.getComponent(Button) ?? null;
+    }
+
+    private _onContinueClick(): void {
+        if (this._dying || !this._gameOver || this._ktaPanelShown) {
             return;
         }
-        this._playAgainButton.node.off(
-            Button.EventType.CLICK,
-            this._onPlayAgainClick,
-            this,
-        );
-        this._playAgainButton = null;
+        this._showKtaPanel();
     }
 
     private _onPlayAgainClick(): void {
@@ -1021,6 +1134,26 @@ export class GameManager extends Component {
             return;
         }
         this.returnToTapToStart();
+    }
+
+    private _onShareClick(): void {
+        if (this._dying || !this._gameOver || !this._ktaPanelShown) {
+            return;
+        }
+        const url = this.shareUrl.trim();
+        if (url) {
+            sys.openURL(url);
+        }
+    }
+
+    private _onWatchClick(): void {
+        if (this._dying || !this._gameOver || !this._ktaPanelShown) {
+            return;
+        }
+        const url = this.watchUrl.trim();
+        if (url) {
+            sys.openURL(url);
+        }
     }
 
     private _onMenuTap(): void {
@@ -1040,9 +1173,7 @@ export class GameManager extends Component {
             return;
         }
         if (this._gameOver) {
-            if (!this._ktaPanelShown) {
-                this._showKtaPanel();
-            }
+            // GameOver → KTAPanel только через кнопку Continue.
             return;
         }
         this.startNewRun();
@@ -1190,12 +1321,14 @@ export class GameManager extends Component {
      * Урон: пропадает самое правое сердечко (включая клоны, затем якорь).
      * При 0 HP — {@link beginDeathSequence} (клип смерти), кроме {@link instantKill}.
      * @param deferDeathSequence true — 0 HP, но {@link beginDeathSequence} вызовет вызывающий после hazard-клипа.
+     * @param invincibilitySec длительность i-frames после успешной потери HP.
      * @returns true, если HP стало 0.
      */
     public takeDamage(
         amount = 1,
         playDamageSound = true,
         deferDeathSequence = false,
+        invincibilitySec = 0,
     ): boolean {
         if (
             !this.isPlaying ||
@@ -1229,8 +1362,8 @@ export class GameManager extends Component {
             }
             CameraShake.instance?.shakeOnDamage();
             this._playDamageParticleOnPlayer();
-            if (this.damageInvincibilitySec > 0) {
-                this._damageInvincibleRemain = this.damageInvincibilitySec;
+            if (invincibilitySec > 0) {
+                this._damageInvincibleRemain = invincibilitySec;
             }
         }
 
@@ -1493,6 +1626,7 @@ export class GameManager extends Component {
         this._findPlayerAnimation(SceneNodeHub.instance?.player ?? null)
             ?.freezeIdleFlightPose();
         this._showOverlayPanelDeferred(this.gameOverPanel);
+        this._bindUiButtons();
         this.scheduleOnce(() => {
             this._refreshGameOverMilestoneLabel();
             this._playGameOverSeedCountRoll(this._score);

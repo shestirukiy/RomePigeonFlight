@@ -1484,6 +1484,7 @@
     },
     "_enabled": true,
     "__prefab": null,
+    "damageInvincibilitySec": 3,
     "electricDefaultLiftLockDuration": 0.5,
     "electricCloudCooldownSeconds": 4,
     "towerWallKnockbackDurationSec": 0.7,
@@ -7375,6 +7376,14 @@
     "ktaPanel": {
       "__id__": 214
     },
+    "continueButton": null,
+    "playAgainButton": {
+      "__id__": 249
+    },
+    "shareButton": null,
+    "shareUrl": "",
+    "watchButton": null,
+    "watchUrl": "",
     "gameOverSeedCountRollDurationSec": 1.2,
     "hpHeartAnchor": {
       "__id__": 146
@@ -7382,7 +7391,6 @@
     "startingHpCount": 3,
     "heartSpacingX": 4,
     "seedsPerExtraLife": 100,
-    "damageInvincibilitySec": 3,
     "damageParticleFxPrefab": {
       "__uuid__": "e8f3a1b2-c4d5-4678-9abc-def012345678",
       "__expectedType__": "cc.Prefab"

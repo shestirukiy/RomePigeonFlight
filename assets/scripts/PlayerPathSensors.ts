@@ -16,6 +16,8 @@ import { PlayerController } from './PlayerController';
 import { PickupBase } from './PickupBase';
 import { MilestoneSign } from './MilestoneSign';
 import { MilestoneDistanceLabel } from './MilestoneDistanceLabel';
+import { TowerWallHazard } from './TowerWallHazard';
+import { ElectricCloudHazard } from './ElectricCloudHazard';
 
 const { ccclass, property, executionOrder } = _decorator;
 
@@ -24,9 +26,9 @@ const PATH_SENSORS_EXEC_ORDER = -50;
 
 /**
  * Контакты коллайдера игрока:
- * - **Sensor** на препятствии (CloudBarrier / TowerBarrier…) → урон, отдача;
+ * - **Sensor** на препятствии + маркер hazard (`TowerWallHazard` / `ElectricCloudHazard`) → урон, отдача;
  * - **не sensor**, группа препятствий → стоп камеры, бег по «полу» снизу.
- * Hazard-скрипты на чанках не нужны — всё через префаб (sensor vs solid).
+ * Имена нод не важны — тип hazard только по компоненту на сенсоре или его родителях.
  */
 @ccclass('PlayerPathSensors')
 @executionOrder(PATH_SENSORS_EXEC_ORDER)
@@ -477,25 +479,42 @@ export class PlayerPathSensors extends Component {
         return frac >= minOv;
     }
 
-    /** Общий корень препятствия (башня, земля…) — для угловых коллайдеров. */
+    /** Общий корень препятствия — для угловых коллайдеров (по hazard-маркеру, не по имени). */
     private _obstacleRootKey(other: Collider2D): string {
+        const root = this._findObstacleRootNode(other);
+        if (root) {
+            return `root:${root.uuid}`;
+        }
         let n: Node | null = other.node;
-        while (n) {
-            if (n === this.node) {
-                break;
-            }
-            const nm = n.name;
-            if (
-                nm === 'TowerBarrier' ||
-                nm.startsWith('TowerWall') ||
-                nm === 'CloudBarrier' ||
-                nm === 'Ground'
-            ) {
+        while (n && n !== this.node) {
+            if (n.name === 'Ground') {
                 return `root:${n.uuid}`;
             }
             n = n.parent;
         }
         return `col:${this._colliderId(other)}`;
+    }
+
+    /** Узел-префаб башни/облака: на нём или в детях есть hazard-маркер. */
+    private _findObstacleRootNode(other: Collider2D): Node | null {
+        let n: Node | null = other?.node ?? null;
+        let lastWithHazard: Node | null = null;
+        while (n && n !== this.node) {
+            if (this._nodeHasHazardMarker(n)) {
+                lastWithHazard = n;
+            }
+            n = n.parent;
+        }
+        return lastWithHazard;
+    }
+
+    private _nodeHasHazardMarker(n: Node): boolean {
+        return !!(
+            n.getComponent(TowerWallHazard) ||
+            n.getComponent(ElectricCloudHazard) ||
+            n.getComponentInChildren(TowerWallHazard) ||
+            n.getComponentInChildren(ElectricCloudHazard)
+        );
     }
 
     /**
@@ -550,7 +569,7 @@ export class PlayerPathSensors extends Component {
         }
 
         if (this._isDamageSensor(other)) {
-            const hazard = this._hazardKindByName(other);
+            const hazard = this._hazardKindByComponent(other);
             if (hazard === 'cloud') {
                 const cloudId = this._colliderId(other);
                 if (cloudId) {
@@ -647,7 +666,7 @@ export class PlayerPathSensors extends Component {
         const gm = GameManager.game;
         const id = other?.isValid ? this._colliderId(other) : '';
         const isSensor = other?.isValid && this._isDamageSensor(other);
-        const hazard = isSensor ? this._hazardKindByName(other) : '';
+        const hazard = isSensor ? this._hazardKindByComponent(other) : '';
         /* Скролл: во время i-frames не снимаем front/back у твёрдых коллайдеров. */
         const holdScrollWallMapsDuringInv =
             !!gm?.isDamageInvincible &&
@@ -951,25 +970,54 @@ export class PlayerPathSensors extends Component {
         return null;
     }
 
-    /** Sensor-коллайдер на препятствии — зона урона (имя родителя задаёт cloud vs wall). */
+    /** Sensor-коллайдер на препятствии — зона урона (тип опасности — по компонентам hazard). */
     private _isDamageSensor(other: Collider2D): boolean {
         const otherAny = other as any;
         return otherAny.sensor === true || otherAny._sensor === true;
     }
 
-    private _hazardKindByName(other: Collider2D): 'cloud' | 'wall' | null {
-        let n: Node | null = other.node;
+    private _hazardKindByComponent(other: Collider2D): 'cloud' | 'wall' | null {
+        if (this._findHazardNode(other, 'wall')) {
+            return 'wall';
+        }
+        if (this._findHazardNode(other, 'cloud')) {
+            return 'cloud';
+        }
+        return null;
+    }
+
+    private _findHazardNode(
+        other: Collider2D,
+        kind: 'cloud' | 'wall',
+    ): Node | null {
+        let n: Node | null = other?.node ?? null;
         while (n) {
             if (n === this.node) {
                 return null;
             }
-            if (n.name === 'CloudBarrier') {
-                return 'cloud';
-            }
-            if (n.name === 'TowerBarrier' || n.name.startsWith('TowerWall')) {
-                return 'wall';
+            const hit =
+                kind === 'wall'
+                    ? this._findWallHazardOnNode(n)
+                    : this._findCloudHazardOnNode(n);
+            if (hit) {
+                return hit;
             }
             n = n.parent;
+        }
+        return null;
+    }
+
+    /** Нода с маркером (на себе или у прямого потомка-сенсора). */
+    private _findWallHazardOnNode(n: Node): Node | null {
+        if (n.getComponent(TowerWallHazard)) {
+            return n;
+        }
+        return null;
+    }
+
+    private _findCloudHazardOnNode(n: Node): Node | null {
+        if (n.getComponent(ElectricCloudHazard)) {
+            return n;
         }
         return null;
     }
@@ -1017,18 +1065,13 @@ export class PlayerPathSensors extends Component {
     }
 
     private _hazardRootKey(other: Collider2D, kind: 'cloud' | 'wall'): string {
-        let n: Node | null = other.node;
-        while (n) {
-            if (kind === 'cloud' && n.name === 'CloudBarrier') {
-                return `cloud:${n.uuid}`;
-            }
-            if (
-                kind === 'wall' &&
-                (n.name === 'TowerBarrier' || n.name.startsWith('TowerWall'))
-            ) {
-                return `wall:${n.uuid}`;
-            }
-            n = n.parent;
+        const obstacleRoot = this._findObstacleRootNode(other);
+        if (obstacleRoot) {
+            return `${kind}:${obstacleRoot.uuid}`;
+        }
+        const hazardNode = this._findHazardNode(other, kind);
+        if (hazardNode) {
+            return `${kind}:${hazardNode.uuid}`;
         }
         return `${kind}:${this._colliderId(other)}`;
     }
@@ -1057,7 +1100,7 @@ export class PlayerPathSensors extends Component {
         }
         pc.applyElectricCloudHit();
         const cd = Math.max(
-            gm.damageInvincibilitySec,
+            pc.damageInvincibilitySec,
             pc.electricCloudCooldownSeconds,
             pc.electricDefaultLiftLockDuration,
         );
@@ -1091,7 +1134,7 @@ export class PlayerPathSensors extends Component {
         }
         pc.applyTowerWallHit();
         const cd = Math.max(
-            gm.damageInvincibilitySec,
+            pc.damageInvincibilitySec,
             pc.towerWallCooldownSeconds,
             pc.towerWallKnockbackDurationSec,
         );
