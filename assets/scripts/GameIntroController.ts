@@ -3,6 +3,8 @@ import {
     Animation,
     Canvas,
     Component,
+    director,
+    Label,
     Node,
     tween,
     Tween,
@@ -92,10 +94,30 @@ export class GameIntroController extends Component {
     })
     introWaitSec = 0.5;
 
+    @property({
+        group: G_INTRO,
+        displayName: 'Label Board Name',
+        tooltip: 'Имя ноды с Label в Chunk_Start (по умолчанию LabelBoard).',
+    })
+    labelBoardNodeName = 'LabelBoard';
+
+    @property({
+        group: G_INTRO,
+        displayName: 'Typewriter Char Interval (s)',
+        tooltip: 'Пауза между символами на заставке.',
+    })
+    typewriterCharIntervalSec = 0.045;
+
     private _blockingInput = false;
-    /** Ждём первый клик перед клипом / панорамой камеры. */
+    /** Ждём клик для панорамы камеры (после допечатки текста). */
     private _awaitingUserTap = false;
     private _running = false;
+    private _label: Label | null = null;
+    private _fullLabelText = '';
+    private _typewriterCharIndex = 0;
+    private _typewriterDone = false;
+    /** Один физический клик = touch + mouse в одном кадре — не пускать сразу на камеру. */
+    private _introTapFrame = -1;
     private _panTween: Tween<Node> | null = null;
     private readonly _gameplayRest = new Vec3();
 
@@ -108,9 +130,26 @@ export class GameIntroController extends Component {
      * Первый клик по экрану запускает заставку (панораму). Возвращает true, если клик принят.
      */
     public tryConsumeIntroTap(): boolean {
-        if (!this._awaitingUserTap || !this._shouldPlayIntro()) {
+        if (!this._shouldPlayIntro() || this._running) {
             return false;
         }
+
+        const frame = director.getTotalFrames();
+        if (frame === this._introTapFrame) {
+            return true;
+        }
+
+        if (this._label && !this._typewriterDone) {
+            this._completeTypewriterInstant();
+            this._introTapFrame = frame;
+            return true;
+        }
+
+        if (!this._awaitingUserTap) {
+            return false;
+        }
+
+        this._introTapFrame = frame;
         this._awaitingUserTap = false;
         this._runIntroSequence();
         return true;
@@ -138,7 +177,7 @@ export class GameIntroController extends Component {
             this._awaitingUserTap = true;
             this._applyIntroCamera(cam);
             console.log(
-                '[GameIntroController] Заставка: камера на introPosition. Клик — начало панорамы.',
+                '[GameIntroController] Заставка: печать текста LabelBoard, затем панорама камеры.',
             );
             this.scheduleOnce(() => this._applyIntroCamera(this._resolveCamera()), 0);
         } else {
@@ -151,9 +190,11 @@ export class GameIntroController extends Component {
             return;
         }
         this._applyIntroCamera(this._resolveCamera());
+        this._tryStartLabelTypewriter(0);
     }
 
     onDestroy() {
+        this._stopTypewriter();
         this._stopPanTween();
         if (GameIntroController._inst === this) {
             GameIntroController._inst = null;
@@ -173,6 +214,87 @@ export class GameIntroController extends Component {
 
     private _shouldPlayIntro(): boolean {
         return !this._skipIntroAfterRestart;
+    }
+
+    private _tryStartLabelTypewriter(attempt: number): void {
+        if (!this._shouldPlayIntro() || this._running) {
+            return;
+        }
+
+        const label = this._findLabelBoard();
+        if (label) {
+            this._label = label;
+            this._fullLabelText = label.string;
+            this._typewriterCharIndex = 0;
+            this._typewriterDone = false;
+            label.string = '';
+            const interval = Math.max(0.01, this.typewriterCharIntervalSec);
+            this.schedule(this._tickTypewriter, interval);
+            return;
+        }
+
+        if (attempt < 60) {
+            this.scheduleOnce(() => this._tryStartLabelTypewriter(attempt + 1), 0.1);
+            return;
+        }
+
+        console.warn(
+            `[GameIntroController] Label "${this.labelBoardNodeName}" не найден — клик сразу запускает панораму.`,
+        );
+        this._typewriterDone = true;
+    }
+
+    private _findLabelBoard(): Label | null {
+        const scene = this.node.scene;
+        if (!scene?.isValid) {
+            return null;
+        }
+        const targetName = this.labelBoardNodeName.trim() || 'LabelBoard';
+        const stack: Node[] = [scene];
+        while (stack.length > 0) {
+            const node = stack.pop()!;
+            if (node.name === targetName) {
+                const label = node.getComponent(Label);
+                if (label) {
+                    return label;
+                }
+            }
+            for (let i = node.children.length - 1; i >= 0; i--) {
+                stack.push(node.children[i]);
+            }
+        }
+        return null;
+    }
+
+    private _tickTypewriter(): void {
+        if (!this._label?.isValid) {
+            this._stopTypewriter();
+            return;
+        }
+
+        this._typewriterCharIndex += 1;
+        this._label.string = this._fullLabelText.slice(0, this._typewriterCharIndex);
+
+        if (this._typewriterCharIndex >= this._fullLabelText.length) {
+            this._stopTypewriter();
+            this._typewriterDone = true;
+        }
+    }
+
+    private _completeTypewriterInstant(): void {
+        if (!this._label?.isValid) {
+            this._typewriterDone = true;
+            return;
+        }
+
+        this._stopTypewriter();
+        this._label.string = this._fullLabelText;
+        this._typewriterCharIndex = this._fullLabelText.length;
+        this._typewriterDone = true;
+    }
+
+    private _stopTypewriter(): void {
+        this.unschedule(this._tickTypewriter);
     }
 
     private _applyIntroCamera(cam: Node | null): void {

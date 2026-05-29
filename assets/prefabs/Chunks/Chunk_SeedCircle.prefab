@@ -25,11 +25,11 @@
     "_active": true,
     "_components": [
       {
-        "__id__": 23
+        "__id__": 24
       }
     ],
     "_prefab": {
-      "__id__": 25
+      "__id__": 26
     },
     "_lpos": {
       "__type__": "cc.Vec3",
@@ -124,6 +124,9 @@
       },
       {
         "__id__": 22
+      },
+      {
+        "__id__": 23
       }
     ],
     "removedComponents": []
@@ -310,6 +313,16 @@
     }
   },
   {
+    "__type__": "CCPropertyOverrideInfo",
+    "targetInfo": {
+      "__id__": 18
+    },
+    "propertyPath": [
+      "maxSeedsSafetyCap"
+    ],
+    "value": 400
+  },
+  {
     "__type__": "cc.UITransform",
     "_name": "",
     "_objFlags": 0,
@@ -319,7 +332,7 @@
     },
     "_enabled": true,
     "__prefab": {
-      "__id__": 24
+      "__id__": 25
     },
     "_contentSize": {
       "__type__": "cc.Size",
@@ -349,10 +362,10 @@
     "instance": null,
     "targetOverrides": [
       {
-        "__id__": 26
+        "__id__": 27
       },
       {
-        "__id__": 29
+        "__id__": 30
       }
     ],
     "nestedPrefabInstanceRoots": [
@@ -367,7 +380,7 @@
       "__id__": 2
     },
     "sourceInfo": {
-      "__id__": 27
+      "__id__": 28
     },
     "propertyPath": [
       "maskSpriteNodes",
@@ -377,7 +390,7 @@
       "__id__": 2
     },
     "targetInfo": {
-      "__id__": 28
+      "__id__": 29
     }
   },
   {
@@ -398,7 +411,7 @@
       "__id__": 2
     },
     "sourceInfo": {
-      "__id__": 30
+      "__id__": 31
     },
     "propertyPath": [
       "seedsContainer"
@@ -407,7 +420,7 @@
       "__id__": 2
     },
     "targetInfo": {
-      "__id__": 31
+      "__id__": 32
     }
   },
   {

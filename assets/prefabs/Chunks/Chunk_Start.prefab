@@ -2450,7 +2450,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "Label",
+    "_name": "LabelBoard",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
