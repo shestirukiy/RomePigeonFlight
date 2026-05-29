@@ -1,6 +1,7 @@
 import {
     _decorator,
     Animation,
+    AnimationClip,
     Button,
     Component,
     input,
@@ -125,6 +126,10 @@ export class GameManager extends Component {
     /** Слева направо: [якорное сердечко, клоны справа]. */
     private readonly _heartNodes: Node[] = [];
     private readonly _spawnedHearts: Node[] = [];
+    private readonly _heartRestPos = new Map<Node, Vec3>();
+    private readonly _heartRestEuler = new Map<Node, Vec3>();
+    /** HpFall в клипе абсолютный — в lateUpdate добавляем rest + delta из клипа. */
+    private readonly _heartsFalling = new Set<Node>();
 
     public get score(): number {
         return this._score;
@@ -673,6 +678,17 @@ export class GameManager extends Component {
     })
     damageParticleLocalOffset = new Vec3(24.684, -8.364, 0);
 
+    @property({
+        group: G_HP,
+        type: AnimationClip,
+        displayName: 'HP Fall Clip',
+        tooltip:
+            'HpFall: смещение из клипа добавляется к позиции сердечка (относительное падение).',
+    })
+    hpFallClip: AnimationClip | null = null;
+
+    private static readonly HP_FALL_CLIP_NAME = 'HpFall';
+
     onLoad() {
         GameManager._inst = this;
         if (!this.getComponent(GameIntroController)) {
@@ -681,6 +697,11 @@ export class GameManager extends Component {
         this._setSpeedLinesEmitter(false);
         this._refreshScoreLabel();
         this.resetHp();
+        if (this.hpHeartAnchor?.isValid && !this._resolveHpFallClip()) {
+            console.warn(
+                '[GameManager] HP Fall Clip не назначен — при уроне сердечко скроется без анимации.',
+            );
+        }
         this._hideOverlayPanels();
         input.on(Input.EventType.TOUCH_START, this._onTouchStart, this);
         input.on(Input.EventType.TOUCH_END, this._onTouchEnd, this);
@@ -762,6 +783,16 @@ export class GameManager extends Component {
         this._tickMilestonePassBoost(dt);
         this._syncSpeedLinesEmitter();
         this._tickFlightDistanceAndMilestones(dt);
+    }
+
+    lateUpdate(): void {
+        for (const heart of this._heartsFalling) {
+            if (!heart?.isValid) {
+                this._heartsFalling.delete(heart);
+                continue;
+            }
+            this._applyHeartFallRelativePose(heart);
+        }
     }
 
     private _tickFlightDistanceAndMilestones(dt: number): void {
@@ -1369,6 +1400,7 @@ export class GameManager extends Component {
         if (this._currentHp < this._heartNodes.length) {
             const heart = this._heartNodes[this._currentHp];
             if (heart?.isValid) {
+                this._restoreHeartRestPose(heart);
                 heart.active = true;
             }
             this._currentHp++;
@@ -1391,6 +1423,7 @@ export class GameManager extends Component {
         heart.parent = parent;
         heart.setPosition(p.x + step, p.y, p.z);
         heart.active = true;
+        this._registerHeartNode(heart);
         this._spawnedHearts.push(heart);
         this._heartNodes.push(heart);
         this._currentHp++;
@@ -1417,6 +1450,7 @@ export class GameManager extends Component {
         const base = anchor.position.clone();
         const step = this._heartStepX();
         anchor.active = true;
+        this._registerHeartNode(anchor);
         this._heartNodes.push(anchor);
 
         for (let i = 1; i < startHp; i++) {
@@ -1424,6 +1458,7 @@ export class GameManager extends Component {
             heart.parent = parent;
             heart.setPosition(base.x + step * i, base.y, base.z);
             heart.active = true;
+            this._registerHeartNode(heart);
             this._spawnedHearts.push(heart);
             this._heartNodes.push(heart);
         }
@@ -1465,7 +1500,7 @@ export class GameManager extends Component {
             const idx = this._currentHp - 1;
             const heart = this._heartNodes[idx];
             if (heart?.isValid) {
-                heart.active = false;
+                this._playHpFallOnHeart(heart);
             }
             this._currentHp--;
             lost++;
@@ -1801,10 +1836,142 @@ export class GameManager extends Component {
     private _clearSpawnedHearts(): void {
         for (const n of this._spawnedHearts) {
             if (n?.isValid) {
+                this._heartRestPos.delete(n);
+                this._heartRestEuler.delete(n);
                 n.destroy();
             }
         }
         this._spawnedHearts.length = 0;
+    }
+
+    private _registerHeartNode(heart: Node): void {
+        if (!heart?.isValid) {
+            return;
+        }
+        this._heartRestPos.set(heart, heart.position.clone());
+        this._heartRestEuler.set(heart, heart.eulerAngles.clone());
+        this._ensureHeartFallAnimation(heart);
+    }
+
+    private _restoreHeartRestPose(heart: Node): void {
+        if (!heart?.isValid) {
+            return;
+        }
+        const pos = this._heartRestPos.get(heart);
+        if (pos) {
+            heart.setPosition(pos);
+        }
+        const euler = this._heartRestEuler.get(heart);
+        if (euler) {
+            heart.setRotationFromEuler(euler.x, euler.y, euler.z);
+        }
+        const anim = heart.getComponent(Animation);
+        anim?.stop();
+    }
+
+    private _resolveHpFallClip(): AnimationClip | null {
+        if (this.hpFallClip?.name) {
+            return this.hpFallClip;
+        }
+
+        const anchor = this.hpHeartAnchor;
+        const anchorAnim = anchor?.getComponent(Animation);
+        if (anchorAnim) {
+            for (const c of anchorAnim.clips) {
+                if (c?.name === GameManager.HP_FALL_CLIP_NAME) {
+                    return c;
+                }
+            }
+            if (anchorAnim.defaultClip?.name === GameManager.HP_FALL_CLIP_NAME) {
+                return anchorAnim.defaultClip;
+            }
+        }
+
+        return null;
+    }
+
+    private _ensureHeartFallAnimation(heart: Node): Animation | null {
+        const clip = this._resolveHpFallClip();
+        if (!clip) {
+            return heart.getComponent(Animation);
+        }
+
+        let anim = heart.getComponent(Animation);
+        if (!anim) {
+            anim = heart.addComponent(Animation);
+        }
+        if (anim.clips.indexOf(clip) < 0) {
+            anim.addClip(clip);
+        }
+        anim.defaultClip = clip;
+        return anim;
+    }
+
+    private _playHpFallOnHeart(heart: Node): void {
+        if (!heart?.isValid) {
+            return;
+        }
+
+        const clip = this._resolveHpFallClip();
+        const anim = this._ensureHeartFallAnimation(heart);
+        if (!clip || !anim) {
+            heart.active = false;
+            return;
+        }
+
+        const clipName = clip.name;
+        this._restoreHeartRestPose(heart);
+        heart.active = true;
+
+        const finish = () => {
+            anim.off(Animation.EventType.FINISHED, onFinished, this);
+            this.unschedule(fallbackFinish);
+            this._heartsFalling.delete(heart);
+            if (!heart.isValid) {
+                return;
+            }
+            this._restoreHeartRestPose(heart);
+            heart.active = false;
+        };
+
+        const onFinished = (_type?: string, st?: { name?: string }) => {
+            if (st?.name && st.name !== clipName) {
+                return;
+            }
+            finish();
+        };
+
+        const fallbackFinish = () => finish();
+
+        this._heartsFalling.add(heart);
+        anim.on(Animation.EventType.FINISHED, onFinished, this);
+        anim.play(clipName);
+        this._applyHeartFallRelativePose(heart);
+        this.scheduleOnce(
+            fallbackFinish,
+            Math.max(0.05, clip.duration + 0.05),
+        );
+    }
+
+    /** Клип HpFall задаёт local (0,0) → (0,−Y); прибавляем к сохранённой позиции слота. */
+    private _applyHeartFallRelativePose(heart: Node): void {
+        const rest = this._heartRestPos.get(heart);
+        if (!rest) {
+            return;
+        }
+        const delta = heart.position;
+        heart.setPosition(rest.x + delta.x, rest.y + delta.y, rest.z + delta.z);
+
+        const restEuler = this._heartRestEuler.get(heart);
+        if (!restEuler) {
+            return;
+        }
+        const deltaEuler = heart.eulerAngles;
+        heart.setRotationFromEuler(
+            restEuler.x + deltaEuler.x,
+            restEuler.y + deltaEuler.y,
+            restEuler.z + deltaEuler.z,
+        );
     }
 
     private _heartStepX(): number {

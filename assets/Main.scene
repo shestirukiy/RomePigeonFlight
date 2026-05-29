@@ -7395,6 +7395,10 @@
       "__uuid__": "e8f3a1b2-c4d5-4678-9abc-def012345678",
       "__expectedType__": "cc.Prefab"
     },
+    "hpFallClip": {
+      "__uuid__": "e39557bd-d15c-4c61-90a3-336cbd9d9489",
+      "__expectedType__": "cc.AnimationClip"
+    },
     "damageParticleLocalOffset": {
       "__type__": "cc.Vec3",
       "x": 24.684,
