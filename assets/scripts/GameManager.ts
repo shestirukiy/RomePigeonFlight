@@ -1389,14 +1389,101 @@ export class GameManager extends Component {
         const milestones = Math.floor(this._score / per);
         while (this._seedLifeBonusesGranted < milestones) {
             this._seedLifeBonusesGranted++;
-            if (this._tryGrantExtraLife()) {
+            if (this.grantExtraLifeWithHarvest()) {
                 SceneNodeHub.instance?.showLifeRestored();
             }
         }
     }
 
-    /** +1 HP: восстанавливает скрытое сердечко или добавляет новое справа. */
-    private _tryGrantExtraLife(): boolean {
+    /** +1 HP: сначала HpHarvest на игроке, UI-сердечко — по прилёту. */
+    public grantExtraLifeWithHarvest(): boolean {
+        if (!this._canGrantExtraLife()) {
+            return false;
+        }
+
+        const slotIndex = this._currentHp;
+        this._hideHeartSlotUntilHarvest(slotIndex);
+
+        const target = new Vec3();
+        if (!this._getHeartSlotWorldPosition(slotIndex, target)) {
+            return this._commitGrantExtraLife();
+        }
+
+        const playerAnim = this._findPlayerAnimation(
+            SceneNodeHub.instance?.player ?? null,
+        );
+        if (
+            playerAnim?.playHpHarvest(target, () => {
+                this._commitGrantExtraLife();
+            })
+        ) {
+            return true;
+        }
+
+        console.warn(
+            '[GameManager] HpHarvest не запустился — сердечко в UI сразу.',
+        );
+        return this._commitGrantExtraLife();
+    }
+
+    private _hideHeartSlotUntilHarvest(slotIndex: number): void {
+        if (slotIndex < 0 || slotIndex >= this._heartNodes.length) {
+            return;
+        }
+        const heart = this._heartNodes[slotIndex];
+        if (heart?.isValid) {
+            heart.active = false;
+        }
+    }
+
+    private _canGrantExtraLife(): boolean {
+        if (this._currentHp < this._heartNodes.length) {
+            return true;
+        }
+        const anchor = this.hpHeartAnchor;
+        return !!(anchor?.isValid && anchor.parent);
+    }
+
+    private _getHeartSlotWorldPosition(index: number, out: Vec3): boolean {
+        const anchor = this.hpHeartAnchor;
+        if (!anchor?.isValid) {
+            return false;
+        }
+
+        if (index >= 0 && index < this._heartNodes.length) {
+            const heart = this._heartNodes[index];
+            if (!heart?.isValid) {
+                return false;
+            }
+            heart.getWorldPosition(out);
+            return true;
+        }
+
+        if (index !== this._heartNodes.length) {
+            return false;
+        }
+
+        const last = this._heartNodes[this._heartNodes.length - 1] ?? anchor;
+        const parent = last.parent ?? anchor.parent;
+        if (!parent?.isValid) {
+            return false;
+        }
+
+        const local = last.position.clone();
+        local.x += this._heartStepX();
+        const ui = parent.getComponent(UITransform);
+        if (ui) {
+            ui.convertToWorldSpaceAR(local, out);
+            return true;
+        }
+
+        parent.updateWorldTransform();
+        Vec3.transformMat4(out, local, parent.worldMatrix);
+        return true;
+    }
+
+    /** Показать сердечко в UI (после HpHarvest или сразу, если VFX нет). */
+    private _commitGrantExtraLife(): boolean {
         if (this._currentHp < this._heartNodes.length) {
             const heart = this._heartNodes[this._currentHp];
             if (heart?.isValid) {
