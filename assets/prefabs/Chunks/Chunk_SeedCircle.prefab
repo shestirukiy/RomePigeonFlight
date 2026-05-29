@@ -25,11 +25,11 @@
     "_active": true,
     "_components": [
       {
-        "__id__": 22
+        "__id__": 23
       }
     ],
     "_prefab": {
-      "__id__": 24
+      "__id__": 25
     },
     "_lpos": {
       "__type__": "cc.Vec3",
@@ -121,6 +121,9 @@
       },
       {
         "__id__": 21
+      },
+      {
+        "__id__": 22
       }
     ],
     "removedComponents": []
@@ -151,7 +154,7 @@
     ],
     "value": {
       "__type__": "cc.Vec3",
-      "x": 0,
+      "x": 425.493,
       "y": 0,
       "z": 0
     }
@@ -270,9 +273,9 @@
     ],
     "value": {
       "__type__": "cc.Vec3",
-      "x": 9.251,
-      "y": 9.851,
-      "z": 11.851
+      "x": 12.457,
+      "y": 13.266,
+      "z": 15.959
     }
   },
   {
@@ -292,6 +295,21 @@
     "value": 0.8
   },
   {
+    "__type__": "CCPropertyOverrideInfo",
+    "targetInfo": {
+      "__id__": 12
+    },
+    "propertyPath": [
+      "_lscale"
+    ],
+    "value": {
+      "__type__": "cc.Vec3",
+      "x": 1,
+      "y": 1,
+      "z": 1.296
+    }
+  },
+  {
     "__type__": "cc.UITransform",
     "_name": "",
     "_objFlags": 0,
@@ -301,7 +319,7 @@
     },
     "_enabled": true,
     "__prefab": {
-      "__id__": 23
+      "__id__": 24
     },
     "_contentSize": {
       "__type__": "cc.Size",
@@ -331,10 +349,10 @@
     "instance": null,
     "targetOverrides": [
       {
-        "__id__": 25
+        "__id__": 26
       },
       {
-        "__id__": 28
+        "__id__": 29
       }
     ],
     "nestedPrefabInstanceRoots": [
@@ -349,7 +367,7 @@
       "__id__": 2
     },
     "sourceInfo": {
-      "__id__": 26
+      "__id__": 27
     },
     "propertyPath": [
       "maskSpriteNodes",
@@ -359,7 +377,7 @@
       "__id__": 2
     },
     "targetInfo": {
-      "__id__": 27
+      "__id__": 28
     }
   },
   {
@@ -380,7 +398,7 @@
       "__id__": 2
     },
     "sourceInfo": {
-      "__id__": 29
+      "__id__": 30
     },
     "propertyPath": [
       "seedsContainer"
@@ -389,7 +407,7 @@
       "__id__": 2
     },
     "targetInfo": {
-      "__id__": 30
+      "__id__": 31
     }
   },
   {

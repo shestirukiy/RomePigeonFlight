@@ -1,5 +1,6 @@
 import {
     _decorator,
+    Animation,
     Button,
     Component,
     input,
@@ -26,6 +27,7 @@ import { CameraShake } from './CameraShake';
 import { GameIntroController } from './GameIntroController';
 import { SoundController } from './SoundController';
 import { SoundId } from './SoundLibrary';
+import { AnimatedPrefabSpawner } from './AnimatedPrefabSpawner';
 
 const { ccclass, property, executionOrder } = _decorator;
 
@@ -42,6 +44,8 @@ const G_HP = { id: 'Health', name: 'Health & seeds' };
 @ccclass('GameManager')
 @executionOrder(-95)
 export class GameManager extends Component {
+    private static readonly GAME_OVER_PANEL_ANIM = 'GameOverPanelAnim';
+
     private static _inst: GameManager | null = null;
 
     public static get game(): GameManager | null {
@@ -962,6 +966,7 @@ export class GameManager extends Component {
         this.resetHp();
         SoundController.instance?.resetVariantRotation();
         SoundController.instance?.continueKtaMusicAfterPlayAgain();
+        this._prewarmAnimatedPrefabSpawners();
 
         const player = SceneNodeHub.instance?.player;
         this._findPlayerAnimation(player)?.playWaitingStay();
@@ -978,7 +983,9 @@ export class GameManager extends Component {
         this._cancelDeferredDeathSequence();
         this._ktaPanelShown = false;
         this._hideOverlayPanels();
-        this._resetRunState();
+        // Чанки уже созданы (LevelGenerator.start / returnToTapToStart) — не rebuild,
+        // иначе Chunk_Start пересоздаётся и циклическая анимация с Play On Load с нуля.
+        this._resetRunState(false);
         this._playing = true;
         this.resetScore();
         this.resetHp();
@@ -986,9 +993,26 @@ export class GameManager extends Component {
         SoundController.instance?.playMusicForNewRun();
     }
 
+    private _prewarmAnimatedPrefabSpawners(): void {
+        const scene = this.node.scene;
+        if (!scene?.isValid) {
+            return;
+        }
+        const spawners = scene.getComponentsInChildren(AnimatedPrefabSpawner);
+        if (!spawners?.length) {
+            return;
+        }
+        for (const s of spawners) {
+            if (s?.isValid) {
+                s.prewarmNow();
+            }
+        }
+    }
+
     private _hideOverlayPanels(): void {
         this._stopGameOverSeedCountRoll();
         if (this.gameOverPanel?.isValid) {
+            this._stopGameOverPanelIntro();
             this.gameOverPanel.active = false;
         }
         if (this.ktaPanel?.isValid) {
@@ -1002,6 +1026,88 @@ export class GameManager extends Component {
         }
         panel.setPosition(0, 0, 0);
         panel.active = true;
+        if (panel === this.gameOverPanel) {
+            this._replayGameOverPanelIntro();
+        }
+    }
+
+    private _stopGameOverPanelIntro(): void {
+        const panel = this.gameOverPanel;
+        if (!panel?.isValid) {
+            return;
+        }
+        this._stopPanelIntroAnim(panel, GameManager.GAME_OVER_PANEL_ANIM);
+        this._stopPanelParticles(panel);
+    }
+
+    private _replayGameOverPanelIntro(): void {
+        const panel = this.gameOverPanel;
+        if (!panel?.isValid) {
+            return;
+        }
+        this._replayPanelIntroAnim(panel, GameManager.GAME_OVER_PANEL_ANIM);
+        this._replayPanelParticles(panel);
+    }
+
+    /** playOnLoad срабатывает только при первом enable — при повторном game over нужен play(). */
+    private _replayPanelIntroAnim(panel: Node, clipName: string): void {
+        const anim =
+            panel.getComponent(Animation) ??
+            panel.getComponentInChildren(Animation);
+        if (!anim?.isValid) {
+            return;
+        }
+        const state = anim.getState(clipName);
+        if (state) {
+            state.stop();
+            state.time = 0;
+        } else {
+            anim.stop();
+        }
+        anim.play(clipName);
+    }
+
+    private _stopPanelIntroAnim(panel: Node, clipName: string): void {
+        const anim =
+            panel.getComponent(Animation) ??
+            panel.getComponentInChildren(Animation);
+        if (!anim?.isValid) {
+            return;
+        }
+        const state = anim.getState(clipName);
+        if (state) {
+            state.stop();
+            state.time = 0;
+            return;
+        }
+        anim.stop();
+    }
+
+    /** ParticleSystem2D с playOnLoad на GameOverPanel (DamageParticleGO и т.п.). */
+    private _replayPanelParticles(panel: Node): void {
+        for (const ps of panel.getComponentsInChildren(ParticleSystem2D)) {
+            if (!ps?.isValid) {
+                continue;
+            }
+            const fxNode = ps.node;
+            fxNode.active = true;
+            ps.enabled = true;
+            ps.stopSystem();
+            this.scheduleOnce(() => {
+                if (!ps.isValid || !fxNode.isValid) {
+                    return;
+                }
+                ps.resetSystem();
+            }, 0);
+        }
+    }
+
+    private _stopPanelParticles(panel: Node): void {
+        for (const ps of panel.getComponentsInChildren(ParticleSystem2D)) {
+            if (ps?.isValid) {
+                ps.stopSystem();
+            }
+        }
     }
 
     /**
@@ -1021,6 +1127,7 @@ export class GameManager extends Component {
     private _showKtaPanel(): void {
         this._ktaPanelShown = true;
         if (this.gameOverPanel?.isValid) {
+            this._stopGameOverPanelIntro();
             this.gameOverPanel.active = false;
         }
         this._hideWorldChunkContainers();
@@ -1190,11 +1297,19 @@ export class GameManager extends Component {
         this._damageInvincibleRemain = 0;
     }
 
-    /** Позиция игрока, чанки, контакты — как в начале сцены. */
-    private _resetRunState(): void {
+    /**
+     * @param rebuildChunks true — уничтожить и заново создать чанки (Play Again).
+     * false — оставить текущие сегменты (первый тап / старт забега).
+     */
+    private _resetRunState(rebuildChunks = true): void {
         this._resetScrollAndKickback();
 
-        this.getComponent(LevelGenerator)?.rebuildChunks();
+        const levelGen = this.getComponent(LevelGenerator);
+        if (rebuildChunks) {
+            levelGen?.rebuildChunks();
+        } else {
+            levelGen?.setAllChunkLayersActive(true);
+        }
 
         const player = SceneNodeHub.instance?.player;
         if (player) {
