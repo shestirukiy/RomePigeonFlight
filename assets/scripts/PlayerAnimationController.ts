@@ -5,6 +5,7 @@ import {
     AnimationState,
     Canvas,
     Component,
+    instantiate,
     Node,
     Tween,
     tween,
@@ -14,6 +15,22 @@ import { GameManager } from './GameManager';
 import { PlayerFlight } from './PlayerFlight';
 
 const { ccclass, property } = _decorator;
+
+type HpHarvestRun = {
+    node: Node;
+    slotIndex: number;
+    phase: 'clip' | 'fly';
+    clipName: string;
+    clipDuration: number;
+    clipElapsed: number;
+    flyDuration: number;
+    flyElapsed: number;
+    startWorld: Vec3;
+    targetWorld: Vec3;
+    workPos: Vec3;
+    onComplete: () => void;
+    onClipFinished: (type?: string, state?: { name?: string }) => void;
+};
 
 /**
  * Анимации игрока на узле Player. Настройки расширяем по мере необходимости.
@@ -115,9 +132,9 @@ export class PlayerAnimationController extends Component {
 
     @property({
         type: Node,
-        displayName: 'HP Harvest Node',
+        displayName: 'HP Harvest Template',
         tooltip:
-            'Сердечко на игроке (hp_Icon). Пусто — ищется дочерний узел hp_Icon.',
+            'Шаблон hp_Icon на Player (скрыт). Для каждого +HP создаётся копия.',
     })
     hpHarvestNode: Node | null = null;
 
@@ -173,25 +190,11 @@ export class PlayerAnimationController extends Component {
 
     private _deathWingWasActive = true;
 
-    private _hpHarvestActive = false;
-    private _hpHarvestComplete: (() => void) | null = null;
-    private _hpHarvestClipName = '';
-    private readonly _hpHarvestStartWorld = new Vec3();
-    private readonly _hpHarvestTargetWorld = new Vec3();
-    private readonly _hpHarvestRestLocal = new Vec3();
-    private readonly _hpHarvestRestEuler = new Vec3();
-    private readonly _hpHarvestWorkPos = new Vec3();
-    private _hpHarvestOrigParent: Node | null = null;
-    private _hpHarvestOrigSiblingIndex = 0;
-    /** Сначала клип HpHarvest на игроке, затем полёт к UI. */
-    private _hpHarvestPhase: 'clip' | 'fly' = 'clip';
-    private _hpHarvestClipDuration = 0;
-    private _hpHarvestClipElapsed = 0;
-    private _hpHarvestFlyDuration = 0;
-    private _hpHarvestFlyElapsed = 0;
+    private readonly _hpHarvestRuns: HpHarvestRun[] = [];
+    private _hpHarvestSpawnSerial = 0;
 
     public get isHpHarvestActive(): boolean {
-        return this._hpHarvestActive;
+        return this._hpHarvestRuns.length > 0;
     }
 
     onLoad() {
@@ -209,7 +212,7 @@ export class PlayerAnimationController extends Component {
         if (fallNode) {
             this._deathFallSpawnLocal.set(fallNode.position);
         }
-        this._hideHpHarvestNode();
+        this._hideHpHarvestTemplate();
     }
 
     start() {
@@ -491,122 +494,135 @@ export class PlayerAnimationController extends Component {
 
     /** Рестарт забега: сброс стана / удара и снова клип полёта. */
     /**
-     * 1) HpHarvest на игроке; 2) полёт к слоту HP; 3) onComplete — показать сердечко в UI.
+     * Копия hp_Icon: клип HpHarvest → полёт к UI → onComplete (можно несколько параллельно).
      */
     public playHpHarvest(
         targetWorldPos: Vec3,
+        slotIndex: number,
         onComplete: () => void,
     ): boolean {
-        if (this._hpHarvestActive || this._deathSequenceActive) {
+        if (this._deathSequenceActive) {
             return false;
         }
 
-        const node = this._resolveHpHarvestNode();
-        const anim = node?.getComponent(Animation) ?? null;
-        const clip = this._resolveHpHarvestClip(anim);
-        if (!node?.isValid || !anim || !clip?.name) {
+        const template = this._resolveHpHarvestTemplate();
+        if (!template?.isValid) {
             console.warn(
-                '[PlayerAnimationController] HpHarvest: нет hp_Icon / Animation / клипа.',
+                '[PlayerAnimationController] HpHarvest: нет шаблона hp_Icon.',
             );
             return false;
         }
 
-        this._hpHarvestActive = true;
-        this._hpHarvestComplete = onComplete;
-        this._hpHarvestClipName = clip.name || 'HpHarvest';
+        const copy = this._spawnHpHarvestCopy(template);
+        if (!copy?.isValid) {
+            return false;
+        }
+
+        const anim = copy.getComponent(Animation);
+        const clip = this._resolveHpHarvestClip(anim);
+        if (!anim || !clip?.name) {
+            copy.destroy();
+            return false;
+        }
+
+        const clipName = clip.name || 'HpHarvest';
         const clipDur = clip.duration > 0 ? clip.duration : 0;
-        this._hpHarvestTargetWorld.set(targetWorldPos);
-        this._hpHarvestRestLocal.set(node.position);
-        this._hpHarvestRestEuler.set(node.eulerAngles);
-
-        this._hpHarvestOrigParent = node.parent;
-        this._hpHarvestOrigSiblingIndex = node.getSiblingIndex();
-        this._hpHarvestPhase = 'clip';
-        this._hpHarvestClipDuration =
+        const clipDuration =
             clipDur > 0.05 ? clipDur : this.hpHarvestClipMinSec;
-        this._hpHarvestClipElapsed = 0;
-        this._hpHarvestFlyElapsed = 0;
-        this._hpHarvestFlyDuration = 0;
 
-        node.active = true;
-        node.getWorldPosition(this._hpHarvestStartWorld);
+        const run: HpHarvestRun = {
+            node: copy,
+            slotIndex,
+            phase: 'clip',
+            clipName,
+            clipDuration,
+            clipElapsed: 0,
+            flyDuration: 0,
+            flyElapsed: 0,
+            startWorld: new Vec3(),
+            targetWorld: targetWorldPos.clone(),
+            workPos: new Vec3(),
+            onComplete,
+            onClipFinished: () => {},
+        };
+        copy.getWorldPosition(run.startWorld);
+
+        run.onClipFinished = (_type?: string, st?: { name?: string }) => {
+            if (st?.name && st.name !== run.clipName) {
+                return;
+            }
+            this._beginHpHarvestFlyPhase(run);
+        };
 
         anim.stop();
-        const st = anim.getState(this._hpHarvestClipName);
+        const st = anim.getState(clipName);
         if (st) {
             st.wrapMode = AnimationClip.WrapMode.Normal;
             st.speed = 1;
         }
-        anim.play(this._hpHarvestClipName);
-        anim.on(
-            Animation.EventType.FINISHED,
-            this._onHpHarvestClipFinished,
-            this,
-        );
+        anim.play(clipName);
+        anim.on(Animation.EventType.FINISHED, run.onClipFinished, this);
 
-        const flyDist = Vec3.distance(
-            this._hpHarvestStartWorld,
-            this._hpHarvestTargetWorld,
-        );
+        this._hpHarvestRuns.push(run);
+
+        const flyDist = Vec3.distance(run.startWorld, run.targetWorld);
         const flyDur =
             flyDist / Math.max(80, this.hpHarvestFlySpeedPxPerSec);
-        this._scheduleHpHarvestFallback(
-            this._hpHarvestClipDuration + flyDur + 0.35,
-        );
+        this.scheduleOnce(() => {
+            if (this._hpHarvestRuns.indexOf(run) >= 0) {
+                this._finishHpHarvestRun(run, false);
+            }
+        }, clipDuration + flyDur + 0.4);
 
         return true;
     }
 
-    private _onHpHarvestClipFinished = (
-        _type?: string,
-        st?: { name?: string },
-    ): void => {
-        if (st?.name && st.name !== this._hpHarvestClipName) {
-            return;
-        }
-        this._beginHpHarvestFlyPhase();
-    };
-
-    private _beginHpHarvestFlyPhase(): void {
-        if (!this._hpHarvestActive || this._hpHarvestPhase !== 'clip') {
-            return;
+    private _spawnHpHarvestCopy(template: Node): Node | null {
+        const copy = instantiate(template);
+        if (!copy?.isValid) {
+            return null;
         }
 
-        const node = this._resolveHpHarvestNode();
-        if (!node?.isValid) {
-            this._finishHpHarvest();
-            return;
+        this._hpHarvestSpawnSerial += 1;
+        copy.name = `hp_Harvest_${this._hpHarvestSpawnSerial}`;
+
+        const parent = template.parent;
+        if (!parent?.isValid) {
+            copy.destroy();
+            return null;
         }
 
-        const anim = node.getComponent(Animation);
-        anim?.off(
-            Animation.EventType.FINISHED,
-            this._onHpHarvestClipFinished,
-            this,
-        );
-        anim?.stop();
-
-        this._hpHarvestPhase = 'fly';
-        this._hpHarvestFlyElapsed = 0;
-        node.getWorldPosition(this._hpHarvestStartWorld);
-        this._attachHarvestNodeForFlight(node);
-
-        const flyDist = Vec3.distance(
-            this._hpHarvestStartWorld,
-            this._hpHarvestTargetWorld,
-        );
-        const speed = Math.max(80, this.hpHarvestFlySpeedPxPerSec);
-        this._hpHarvestFlyDuration = Math.max(0.15, flyDist / speed);
-
-        this._scheduleHpHarvestFallback(this._hpHarvestFlyDuration + 0.3);
+        copy.setParent(parent, false);
+        copy.setPosition(template.position);
+        copy.setRotation(template.rotation);
+        copy.setScale(template.scale);
+        copy.active = true;
+        return copy;
     }
 
-    private _scheduleHpHarvestFallback(totalSec: number): void {
-        this.unschedule(this._finishHpHarvest);
-        this.scheduleOnce(
-            this._finishHpHarvest,
-            Math.max(0.2, totalSec),
-        );
+    private _beginHpHarvestFlyPhase(run: HpHarvestRun): void {
+        if (run.phase !== 'clip' || !run.node?.isValid) {
+            return;
+        }
+
+        const anim = run.node.getComponent(Animation);
+        anim?.off(Animation.EventType.FINISHED, run.onClipFinished, this);
+        anim?.stop();
+
+        run.phase = 'fly';
+        run.flyElapsed = 0;
+        run.node.getWorldPosition(run.startWorld);
+        if (run.slotIndex >= 0) {
+            GameManager.game?.getHeartSlotWorldPosition(
+                run.slotIndex,
+                run.targetWorld,
+            );
+        }
+        this._attachHarvestNodeForFlight(run.node);
+
+        const flyDist = Vec3.distance(run.startWorld, run.targetWorld);
+        const speed = Math.max(80, this.hpHarvestFlySpeedPxPerSec);
+        run.flyDuration = Math.max(0.15, flyDist / speed);
     }
 
     public resetForNewRun(): void {
@@ -687,6 +703,8 @@ export class PlayerAnimationController extends Component {
     }
 
     update(dt: number) {
+        this._tickHpHarvestRuns(dt);
+
         if (this._deathSequenceActive) {
             return;
         }
@@ -799,54 +817,47 @@ export class PlayerAnimationController extends Component {
 
         this._wasHeld = held;
         this._applyFlapSpeed(this._flapSpeed);
+    }
 
-        if (!this._hpHarvestActive) {
-            return;
-        }
-        if (this._hpHarvestPhase === 'clip') {
-            this._hpHarvestClipElapsed += dt;
-            if (
-                this._hpHarvestClipElapsed >=
-                this._hpHarvestClipDuration
-            ) {
-                this._beginHpHarvestFlyPhase();
+    /** Не зависит от ранних return в update (стан, удар, surface run). */
+    private _tickHpHarvestRuns(dt: number): void {
+        for (let i = this._hpHarvestRuns.length - 1; i >= 0; i--) {
+            const run = this._hpHarvestRuns[i];
+            if (!run.node?.isValid) {
+                this._finishHpHarvestRun(run, true);
+                continue;
             }
-            return;
-        }
-        this._hpHarvestFlyElapsed += dt;
-    }
+            if (run.phase === 'clip') {
+                run.clipElapsed += dt;
+                if (run.clipElapsed >= run.clipDuration) {
+                    this._beginHpHarvestFlyPhase(run);
+                }
+                continue;
+            }
 
-    lateUpdate(): void {
-        if (!this._hpHarvestActive || this._hpHarvestPhase !== 'fly') {
-            return;
-        }
-        const node = this._resolveHpHarvestNode();
-        if (!node?.isValid) {
-            this._finishHpHarvest();
-            return;
-        }
+            run.flyElapsed += dt;
+            const duration = run.flyDuration;
+            const t =
+                duration > 0
+                    ? Math.min(1, run.flyElapsed / duration)
+                    : 1;
 
-        const duration = this._hpHarvestFlyDuration;
-        const t =
-            duration > 0
-                ? Math.min(1, this._hpHarvestFlyElapsed / duration)
-                : 1;
+            Vec3.lerp(
+                run.workPos,
+                run.startWorld,
+                run.targetWorld,
+                t,
+            );
+            run.node.setWorldPosition(run.workPos);
 
-        Vec3.lerp(
-            this._hpHarvestWorkPos,
-            this._hpHarvestStartWorld,
-            this._hpHarvestTargetWorld,
-            t,
-        );
-        node.setWorldPosition(this._hpHarvestWorkPos);
-
-        if (t >= 1) {
-            node.setWorldPosition(this._hpHarvestTargetWorld);
-            this._finishHpHarvest();
+            if (t >= 1) {
+                run.node.setWorldPosition(run.targetWorld);
+                this._finishHpHarvestRun(run, false);
+            }
         }
     }
 
-    private _resolveHpHarvestNode(): Node | null {
+    private _resolveHpHarvestTemplate(): Node | null {
         if (this.hpHarvestNode?.isValid) {
             return this.hpHarvestNode;
         }
@@ -862,35 +873,26 @@ export class PlayerAnimationController extends Component {
         return null;
     }
 
-    /** Во время полёта — под Canvas, чтобы было поверх UI и в world-space. */
+    /** Во время полёта — в тот же UI-контейнер, что и полоска HP. */
     private _attachHarvestNodeForFlight(node: Node): void {
-        const canvas =
-            this.node.scene?.getComponentInChildren(Canvas)?.node ?? null;
-        if (!canvas?.isValid || node.parent === canvas) {
+        const flyParent = this._resolveHpHarvestFlyParent();
+        if (!flyParent?.isValid || node.parent === flyParent) {
             return;
         }
         const world = node.worldPosition.clone();
-        node.setParent(canvas, true);
+        node.setParent(flyParent, true);
         node.setWorldPosition(world);
-        node.setSiblingIndex(canvas.children.length - 1);
+        node.setSiblingIndex(flyParent.children.length - 1);
     }
 
-    private _restoreHarvestNodeParent(node: Node): void {
-        const parent = this._hpHarvestOrigParent;
-        if (!node?.isValid || !parent?.isValid) {
-            return;
+    private _resolveHpHarvestFlyParent(): Node | null {
+        const anchor = GameManager.game?.hpHeartAnchor;
+        if (anchor?.parent?.isValid) {
+            return anchor.parent;
         }
-        const world = node.worldPosition.clone();
-        node.setParent(parent, true);
-        node.setSiblingIndex(this._hpHarvestOrigSiblingIndex);
-        node.setWorldPosition(world);
-        node.setPosition(this._hpHarvestRestLocal);
-        node.setRotationFromEuler(
-            this._hpHarvestRestEuler.x,
-            this._hpHarvestRestEuler.y,
-            this._hpHarvestRestEuler.z,
-        );
-        this._hpHarvestOrigParent = null;
+        const canvas =
+            this.node.scene?.getComponentInChildren(Canvas)?.node ?? null;
+        return canvas?.isValid ? canvas : null;
     }
 
     private _resolveHpHarvestClip(anim: Animation | null): AnimationClip | null {
@@ -908,55 +910,41 @@ export class PlayerAnimationController extends Component {
         return anim.defaultClip;
     }
 
-    private _hideHpHarvestNode(): void {
-        const node = this._resolveHpHarvestNode();
-        if (!node?.isValid) {
+    private _hideHpHarvestTemplate(): void {
+        const template = this._resolveHpHarvestTemplate();
+        if (!template?.isValid) {
             return;
         }
-        node.getComponent(Animation)?.stop();
-        node.active = false;
+        template.getComponent(Animation)?.stop();
+        template.active = false;
     }
 
     private _cancelHpHarvest(): void {
-        if (!this._hpHarvestActive) {
-            this._hideHpHarvestNode();
-            return;
+        const runs = this._hpHarvestRuns.slice();
+        for (const run of runs) {
+            this._finishHpHarvestRun(run, true);
         }
-        this._finishHpHarvest(true);
+        this._hideHpHarvestTemplate();
     }
 
-    private _finishHpHarvest(cancelled = false): void {
-        if (!this._hpHarvestActive) {
+    private _finishHpHarvestRun(run: HpHarvestRun, cancelled: boolean): void {
+        const idx = this._hpHarvestRuns.indexOf(run);
+        if (idx < 0) {
             return;
         }
-        this._hpHarvestActive = false;
+        this._hpHarvestRuns.splice(idx, 1);
 
-        const node = this._resolveHpHarvestNode();
+        const node = run.node;
         const anim = node?.getComponent(Animation);
-        anim?.off(
-            Animation.EventType.FINISHED,
-            this._onHpHarvestClipFinished,
-            this,
-        );
+        anim?.off(Animation.EventType.FINISHED, run.onClipFinished, this);
         anim?.stop();
-        this.unschedule(this._finishHpHarvest);
 
         if (node?.isValid) {
-            node.setWorldPosition(this._hpHarvestTargetWorld);
-            this._restoreHarvestNodeParent(node);
-            node.active = false;
+            node.destroy();
         }
 
-        this._hpHarvestPhase = 'clip';
-        this._hpHarvestClipElapsed = 0;
-        this._hpHarvestFlyElapsed = 0;
-
-        const done = this._hpHarvestComplete;
-        this._hpHarvestComplete = null;
-        this._hpHarvestClipName = '';
-
         if (!cancelled) {
-            done?.();
+            run.onComplete();
         }
     }
 

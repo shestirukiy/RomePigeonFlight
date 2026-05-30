@@ -3,6 +3,7 @@ import {
     Animation,
     AnimationClip,
     Component,
+    Node,
     Prefab,
     Sprite,
     Vec3,

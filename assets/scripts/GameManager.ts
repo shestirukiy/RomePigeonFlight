@@ -3,21 +3,25 @@ import {
     Animation,
     AnimationClip,
     Button,
+    Color,
     Component,
     input,
     Input,
     EventMouse,
     EventTouch,
     Label,
+    Material,
     Node,
     Prefab,
     sys,
     Tween,
     UITransform,
     Vec3,
+    Vec4,
     instantiate,
     tween,
     ParticleSystem2D,
+    SpriteFrame,
 } from 'cc';
 import { LevelGenerator } from './LevelGenerator';
 import { PlayerFlight } from './PlayerFlight';
@@ -46,6 +50,7 @@ const G_HP = { id: 'Health', name: 'Health & seeds' };
 @executionOrder(-95)
 export class GameManager extends Component {
     private static readonly GAME_OVER_PANEL_ANIM = 'GameOverPanelAnim';
+    private static readonly KTA_PANEL_ANIM = 'KTAPanel';
 
     private static _inst: GameManager | null = null;
 
@@ -99,6 +104,15 @@ export class GameManager extends Component {
     /** Сколько порогов seedsPerExtraLife уже выдали за этот забег. */
     private _seedLifeBonusesGranted = 0;
 
+    /** +HP в полёте (ещё не в UI) — резерв слота под параллельные HpHarvest. */
+    private _hpHarvestPending = 0;
+
+    /** Повторные контакты Ground — один вызов gameOver. */
+    private _instantKillPending = false;
+
+    /** Сколько сердечек всплескнут на Game Over (Ground / instantKill). */
+    private _gameOverHeartBurstCount = 0;
+
     /** Пройденная дистанция забега (пиксели сдвига мира вперёд). */
     private _flightDistancePx = 0;
 
@@ -130,6 +144,11 @@ export class GameManager extends Component {
     private readonly _heartRestEuler = new Map<Node, Vec3>();
     /** HpFall в клипе абсолютный — в lateUpdate добавляем rest + delta из клипа. */
     private readonly _heartsFalling = new Set<Node>();
+    private readonly _heartFallOnFinished = new Map<
+        Node,
+        (_type?: string, st?: { name?: string }) => void
+    >();
+    private readonly _heartFallScheduledFinish = new Map<Node, () => void>();
 
     public get score(): number {
         return this._score;
@@ -568,6 +587,15 @@ export class GameManager extends Component {
     @property({
         group: G_UI,
         type: Node,
+        displayName: 'Game Over Heart Particle',
+        tooltip:
+            'HeartParticle на GameOverPanel. Число частиц = оставшиеся HP при смерти от Ground (0, если HP уже не было).',
+    })
+    gameOverHeartParticle: Node | null = null;
+
+    @property({
+        group: G_UI,
+        type: Node,
         displayName: 'KTA Panel',
         tooltip:
             'Показывается по кнопке Continue на Game Over Panel; Play Again возвращает к ожиданию тапа.',
@@ -677,6 +705,21 @@ export class GameManager extends Component {
         tooltip: 'Смещение всплеска перьев относительно корня Player (как на старом DamageParticle).',
     })
     damageParticleLocalOffset = new Vec3(24.684, -8.364, 0);
+
+    @property({
+        group: G_HP,
+        type: Material,
+        displayName: 'Particle Alpha Blend Material',
+        tooltip:
+            'Только assets/materials/ParticleAlphaBlend.mtl (builtin-particle, alpha-blend). ' +
+            'Пусто — остаётся Custom Material с эмиттера (default-sprite / ui-sprite). ' +
+            'Не назначайте сюда ui-sprite-material или default-sprite-renderer.',
+    })
+    particleAlphaBlendMaterial: Material | null = null;
+
+    /** builtin-particle — единственный эффект, где есть mainTexture / tintColor. */
+    private static readonly BUILTIN_PARTICLE_EFFECT_UUID =
+        'd1346436-ac96-4271-b863-1f4fdead95b0';
 
     @property({
         group: G_HP,
@@ -985,6 +1028,7 @@ export class GameManager extends Component {
     public returnToTapToStart(): void {
         this._gameOver = false;
         this._dying = false;
+        this._instantKillPending = false;
         this._cancelDeferredDeathSequence();
         this._ktaPanelShown = false;
         this._playing = false;
@@ -1011,6 +1055,7 @@ export class GameManager extends Component {
         SoundController.instance?.playRunStartTap();
         this._gameOver = false;
         this._dying = false;
+        this._instantKillPending = false;
         this._cancelDeferredDeathSequence();
         this._ktaPanelShown = false;
         this._hideOverlayPanels();
@@ -1047,6 +1092,7 @@ export class GameManager extends Component {
             this.gameOverPanel.active = false;
         }
         if (this.ktaPanel?.isValid) {
+            this._stopKtaPanelIntro();
             this.ktaPanel.active = false;
         }
     }
@@ -1059,6 +1105,8 @@ export class GameManager extends Component {
         panel.active = true;
         if (panel === this.gameOverPanel) {
             this._replayGameOverPanelIntro();
+        } else if (panel === this.ktaPanel) {
+            this._replayKtaPanelIntro();
         }
     }
 
@@ -1078,6 +1126,23 @@ export class GameManager extends Component {
         }
         this._replayPanelIntroAnim(panel, GameManager.GAME_OVER_PANEL_ANIM);
         this._replayPanelParticles(panel);
+    }
+
+    /** playOnLoad только при первом enable — при каждом открытии KTA сбрасываем клип. */
+    private _replayKtaPanelIntro(): void {
+        const panel = this.ktaPanel;
+        if (!panel?.isValid) {
+            return;
+        }
+        this._replayPanelIntroAnim(panel, GameManager.KTA_PANEL_ANIM);
+    }
+
+    private _stopKtaPanelIntro(): void {
+        const panel = this.ktaPanel;
+        if (!panel?.isValid) {
+            return;
+        }
+        this._stopPanelIntroAnim(panel, GameManager.KTA_PANEL_ANIM);
     }
 
     /** playOnLoad срабатывает только при первом enable — при повторном game over нужен play(). */
@@ -1114,23 +1179,103 @@ export class GameManager extends Component {
         anim.stop();
     }
 
-    /** ParticleSystem2D с playOnLoad на GameOverPanel (DamageParticleGO и т.п.). */
+    /** ParticleSystem2D на GameOverPanel: перья всегда; сердечки — по {@link _gameOverHeartBurstCount}. */
     private _replayPanelParticles(panel: Node): void {
+        const heartNode = this.gameOverHeartParticle;
+        const heartCount = this._gameOverHeartBurstCount;
+
         for (const ps of panel.getComponentsInChildren(ParticleSystem2D)) {
             if (!ps?.isValid) {
                 continue;
             }
-            const fxNode = ps.node;
-            fxNode.active = true;
-            ps.enabled = true;
-            ps.stopSystem();
-            this.scheduleOnce(() => {
-                if (!ps.isValid || !fxNode.isValid) {
-                    return;
-                }
-                ps.resetSystem();
-            }, 0);
+            if (heartNode?.isValid && ps.node === heartNode) {
+                continue;
+            }
+            this._burstPanelParticle(ps, ps.node);
         }
+
+        if (!heartNode?.isValid || heartCount <= 0) {
+            return;
+        }
+        const heartPs = heartNode.getComponent(ParticleSystem2D);
+        if (!heartPs?.isValid) {
+            return;
+        }
+        this._setParticleTotalCount(heartPs, heartCount);
+        this._burstPanelParticle(heartPs, heartNode);
+    }
+
+    private _setParticleTotalCount(ps: ParticleSystem2D, count: number): void {
+        const n = Math.max(0, Math.floor(count));
+        const p = ps as ParticleSystem2D & {
+            totalParticles?: number;
+            _totalParticles?: number;
+        };
+        p.totalParticles = n;
+        if (p._totalParticles !== undefined) {
+            p._totalParticles = n;
+        }
+    }
+
+    /**
+     * Опционально: ParticleAlphaBlend.mtl + текстура из Sprite Frame.
+     * Если поле пусто или назначен не тот материал — Custom Material эмиттера не трогаем.
+     */
+    private _prepareParticleSpriteForRuntime(ps: ParticleSystem2D): void {
+        const template = this.particleAlphaBlendMaterial;
+        if (!template?.isValid || !this._isBuiltinParticleMaterial(template)) {
+            return;
+        }
+
+        const sf = this._getParticleSpriteFrame(ps);
+        if (!sf?.texture) {
+            return;
+        }
+
+        let inst = this._particleMaterialBySystem.get(ps);
+        if (!inst?.isValid) {
+            inst = new Material();
+            inst.copy(template);
+            this._particleMaterialBySystem.set(ps, inst);
+        }
+
+        if (!inst.passes?.length) {
+            return;
+        }
+
+        const passIdx = 0;
+        const tex = sf.texture;
+        inst.setProperty('mainTexture', tex, passIdx);
+        inst.setProperty('tintColor', new Vec4(1, 1, 1, 1), passIdx);
+
+        const bound = ps as ParticleSystem2D & { customMaterial?: Material };
+        bound.customMaterial = inst;
+    }
+
+    private _isBuiltinParticleMaterial(mat: Material): boolean {
+        const effect = mat.effectAsset as { uuid?: string } | null;
+        return effect?.uuid === GameManager.BUILTIN_PARTICLE_EFFECT_UUID;
+    }
+
+    private _getParticleSpriteFrame(ps: ParticleSystem2D): SpriteFrame | null {
+        const p = ps as ParticleSystem2D & {
+            spriteFrame?: SpriteFrame | null;
+            _spriteFrame?: SpriteFrame | null;
+        };
+        return p.spriteFrame ?? p._spriteFrame ?? null;
+    }
+
+    private _burstPanelParticle(ps: ParticleSystem2D, fxNode: Node): void {
+        fxNode.active = true;
+        ps.enabled = true;
+        this._prepareParticleSpriteForRuntime(ps);
+        ps.stopSystem();
+        this.scheduleOnce(() => {
+            if (!ps.isValid || !fxNode.isValid) {
+                return;
+            }
+            ps.resetSystem();
+        }, 0);
     }
 
     private _stopPanelParticles(panel: Node): void {
@@ -1397,33 +1542,51 @@ export class GameManager extends Component {
 
     /** +1 HP: сначала HpHarvest на игроке, UI-сердечко — по прилёту. */
     public grantExtraLifeWithHarvest(): boolean {
-        if (!this._canGrantExtraLife()) {
+        const slotIndex = this._currentHp + this._hpHarvestPending;
+        if (!this._canGrantHeartSlot(slotIndex)) {
             return false;
         }
 
-        const slotIndex = this._currentHp;
+        this._hpHarvestPending++;
         this._hideHeartSlotUntilHarvest(slotIndex);
 
         const target = new Vec3();
         if (!this._getHeartSlotWorldPosition(slotIndex, target)) {
-            return this._commitGrantExtraLife();
+            this._hpHarvestPending--;
+            return this._commitGrantExtraLifeAtSlot(slotIndex);
         }
 
         const playerAnim = this._findPlayerAnimation(
             SceneNodeHub.instance?.player ?? null,
         );
         if (
-            playerAnim?.playHpHarvest(target, () => {
-                this._commitGrantExtraLife();
+            playerAnim?.playHpHarvest(target, slotIndex, () => {
+                this._commitGrantExtraLifeAtSlot(slotIndex);
+                this._hpHarvestPending = Math.max(
+                    0,
+                    this._hpHarvestPending - 1,
+                );
             })
         ) {
             return true;
         }
 
+        this._hpHarvestPending--;
         console.warn(
             '[GameManager] HpHarvest не запустился — сердечко в UI сразу.',
         );
-        return this._commitGrantExtraLife();
+        return this._commitGrantExtraLifeAtSlot(slotIndex);
+    }
+
+    private _canGrantHeartSlot(slotIndex: number): boolean {
+        if (slotIndex < this._heartNodes.length) {
+            return true;
+        }
+        if (slotIndex !== this._heartNodes.length) {
+            return false;
+        }
+        const anchor = this.hpHeartAnchor;
+        return !!(anchor?.isValid && anchor.parent);
     }
 
     private _hideHeartSlotUntilHarvest(slotIndex: number): void {
@@ -1432,16 +1595,14 @@ export class GameManager extends Component {
         }
         const heart = this._heartNodes[slotIndex];
         if (heart?.isValid) {
+            this._cancelHeartFall(heart);
             heart.active = false;
         }
     }
 
-    private _canGrantExtraLife(): boolean {
-        if (this._currentHp < this._heartNodes.length) {
-            return true;
-        }
-        const anchor = this.hpHeartAnchor;
-        return !!(anchor?.isValid && anchor.parent);
+    /** Мировая позиция слота HP (для HpHarvest, в т.ч. скрытые сердечки). */
+    public getHeartSlotWorldPosition(index: number, out: Vec3): boolean {
+        return this._getHeartSlotWorldPosition(index, out);
     }
 
     private _getHeartSlotWorldPosition(index: number, out: Vec3): boolean {
@@ -1455,8 +1616,7 @@ export class GameManager extends Component {
             if (!heart?.isValid) {
                 return false;
             }
-            heart.getWorldPosition(out);
-            return true;
+            return this._heartSlotRestToWorld(heart, out);
         }
 
         if (index !== this._heartNodes.length) {
@@ -1469,7 +1629,8 @@ export class GameManager extends Component {
             return false;
         }
 
-        const local = last.position.clone();
+        const lastRest = this._heartRestPos.get(last) ?? last.position;
+        const local = lastRest.clone();
         local.x += this._heartStepX();
         const ui = parent.getComponent(UITransform);
         if (ui) {
@@ -1482,16 +1643,25 @@ export class GameManager extends Component {
         return true;
     }
 
-    /** Показать сердечко в UI (после HpHarvest или сразу, если VFX нет). */
-    private _commitGrantExtraLife(): boolean {
-        if (this._currentHp < this._heartNodes.length) {
-            const heart = this._heartNodes[this._currentHp];
+    /** Показать сердечко в UI в зарезервированном слоте. */
+    private _commitGrantExtraLifeAtSlot(slotIndex: number): boolean {
+        if (slotIndex < 0) {
+            return false;
+        }
+
+        if (slotIndex < this._heartNodes.length) {
+            const heart = this._heartNodes[slotIndex];
             if (heart?.isValid) {
+                this._cancelHeartFall(heart);
                 this._restoreHeartRestPose(heart);
                 heart.active = true;
             }
-            this._currentHp++;
+            this._currentHp = Math.max(this._currentHp, slotIndex + 1);
             return true;
+        }
+
+        if (slotIndex !== this._heartNodes.length) {
+            return false;
         }
 
         const anchor = this.hpHeartAnchor;
@@ -1513,7 +1683,7 @@ export class GameManager extends Component {
         this._registerHeartNode(heart);
         this._spawnedHearts.push(heart);
         this._heartNodes.push(heart);
-        this._currentHp++;
+        this._currentHp = Math.max(this._currentHp, slotIndex + 1);
         return true;
     }
 
@@ -1522,6 +1692,9 @@ export class GameManager extends Component {
         this._clearSpawnedHearts();
         this._heartNodes.length = 0;
         this._currentHp = 0;
+        this._hpHarvestPending = 0;
+        this._instantKillPending = false;
+        this._gameOverHeartBurstCount = 0;
 
         const anchor = this.hpHeartAnchor;
         const startHp = Math.max(0, Math.floor(this.startingHpCount));
@@ -1642,6 +1815,11 @@ export class GameManager extends Component {
 
     private _embeddedDamageParticleHideRemain = 0;
 
+    private readonly _particleMaterialBySystem = new WeakMap<
+        ParticleSystem2D,
+        Material
+    >();
+
     private _playDamageParticleOnPlayer(): void {
         const player = this._resolvePlayerNode();
         if (!player?.isValid) {
@@ -1727,12 +1905,14 @@ export class GameManager extends Component {
     ): void {
         fxNode.active = true;
         ps.enabled = true;
+        this._prepareParticleSpriteForRuntime(ps);
         this._applyDamageParticleFollowMode(ps);
         ps.stopSystem();
         this.scheduleOnce(() => {
             if (!ps.isValid || !fxNode.isValid) {
                 return;
             }
+            this._prepareParticleSpriteForRuntime(ps);
             this._applyDamageParticleFollowMode(ps);
             ps.resetSystem();
         }, 0);
@@ -1795,6 +1975,7 @@ export class GameManager extends Component {
         if (this._dying || this._gameOver || !this._playing) {
             return;
         }
+        this._gameOverHeartBurstCount = 0;
         this._cancelDeferredDeathSequence();
         this._dying = true;
         this._damageInvincibleRemain = 0;
@@ -1829,8 +2010,16 @@ export class GameManager extends Component {
         ) {
             return;
         }
+
+        if (this._instantKillPending) {
+            return;
+        }
+
+        this._gameOverHeartBurstCount = Math.max(0, this._currentHp);
+        this._instantKillPending = true;
         this._currentHp = 0;
         this._damageInvincibleRemain = 0;
+
         if (SoundController.instance?.library?.getClip(SoundId.InstantKill)) {
             SoundController.instance.play(SoundId.InstantKill);
         }
@@ -1849,6 +2038,7 @@ export class GameManager extends Component {
         if (this._gameOver) {
             return;
         }
+        this._instantKillPending = false;
         this._cancelDeferredDeathSequence();
         this._dying = false;
         this._gameOver = true;
@@ -1862,7 +2052,9 @@ export class GameManager extends Component {
         SoundController.instance?.playGameOverJingle();
         this._findPlayerAnimation(SceneNodeHub.instance?.player ?? null)
             ?.freezeIdleFlightPose();
+
         this._showOverlayPanelDeferred(this.gameOverPanel);
+
         this._bindUiButtons();
         this.scheduleOnce(() => {
             this._refreshGameOverMilestoneLabel();
@@ -1921,6 +2113,11 @@ export class GameManager extends Component {
     }
 
     private _clearSpawnedHearts(): void {
+        for (const heart of this._heartNodes) {
+            if (heart?.isValid) {
+                this._cancelHeartFall(heart);
+            }
+        }
         for (const n of this._spawnedHearts) {
             if (n?.isValid) {
                 this._heartRestPos.delete(n);
@@ -1929,6 +2126,7 @@ export class GameManager extends Component {
             }
         }
         this._spawnedHearts.length = 0;
+        this._heartsFalling.clear();
     }
 
     private _registerHeartNode(heart: Node): void {
@@ -1999,6 +2197,8 @@ export class GameManager extends Component {
             return;
         }
 
+        this._cancelHeartFall(heart);
+
         const clip = this._resolveHpFallClip();
         const anim = this._ensureHeartFallAnimation(heart);
         if (!clip || !anim) {
@@ -2011,8 +2211,16 @@ export class GameManager extends Component {
         heart.active = true;
 
         const finish = () => {
-            anim.off(Animation.EventType.FINISHED, onFinished, this);
-            this.unschedule(fallbackFinish);
+            const onFinished = this._heartFallOnFinished.get(heart);
+            if (onFinished) {
+                anim.off(Animation.EventType.FINISHED, onFinished, this);
+                this._heartFallOnFinished.delete(heart);
+            }
+            const fallbackFinish = this._heartFallScheduledFinish.get(heart);
+            if (fallbackFinish) {
+                this.unschedule(fallbackFinish);
+                this._heartFallScheduledFinish.delete(heart);
+            }
             this._heartsFalling.delete(heart);
             if (!heart.isValid) {
                 return;
@@ -2031,6 +2239,8 @@ export class GameManager extends Component {
         const fallbackFinish = () => finish();
 
         this._heartsFalling.add(heart);
+        this._heartFallOnFinished.set(heart, onFinished);
+        this._heartFallScheduledFinish.set(heart, fallbackFinish);
         anim.on(Animation.EventType.FINISHED, onFinished, this);
         anim.play(clipName);
         this._applyHeartFallRelativePose(heart);
@@ -2038,6 +2248,44 @@ export class GameManager extends Component {
             fallbackFinish,
             Math.max(0.05, clip.duration + 0.05),
         );
+    }
+
+    /** Слот UI всегда в «домашней» позиции, не по траектории HpFall. */
+    private _heartSlotRestToWorld(heart: Node, out: Vec3): boolean {
+        const parent = heart.parent;
+        if (!parent?.isValid) {
+            return false;
+        }
+        const local = this._heartRestPos.get(heart)?.clone() ?? heart.position.clone();
+        const ui = parent.getComponent(UITransform);
+        if (ui) {
+            ui.convertToWorldSpaceAR(local, out);
+            return true;
+        }
+        parent.updateWorldTransform();
+        Vec3.transformMat4(out, local, parent.worldMatrix);
+        return true;
+    }
+
+    private _cancelHeartFall(heart: Node): void {
+        if (!heart?.isValid) {
+            return;
+        }
+
+        const onFinished = this._heartFallOnFinished.get(heart);
+        const fallbackFinish = this._heartFallScheduledFinish.get(heart);
+        const anim = heart.getComponent(Animation);
+        if (onFinished && anim) {
+            anim.off(Animation.EventType.FINISHED, onFinished, this);
+        }
+        if (fallbackFinish) {
+            this.unschedule(fallbackFinish);
+        }
+        this._heartFallOnFinished.delete(heart);
+        this._heartFallScheduledFinish.delete(heart);
+        this._heartsFalling.delete(heart);
+        anim?.stop();
+        this._restoreHeartRestPose(heart);
     }
 
     /** Клип HpFall задаёт local (0,0) → (0,−Y); прибавляем к сохранённой позиции слота. */

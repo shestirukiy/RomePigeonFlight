@@ -1041,7 +1041,7 @@
       "__uuid__": "98312d98-d214-452d-add9-e2cc18b14359",
       "__expectedType__": "cc.AnimationClip"
     },
-    "hpHarvestDurationSec": 1,
+    "hpHarvestClipMinSec": 0.5,
     "hpHarvestFlySpeedPxPerSec": 1020,
     "_id": ""
   },
