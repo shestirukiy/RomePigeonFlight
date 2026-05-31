@@ -14,9 +14,8 @@ import {
     game,
     input,
 } from 'cc';
-import { GameManager } from './GameManager';
+import { GameSession, PLAYER_CONTROLLER_CCLASS } from './GameSession';
 import { SoundController } from './SoundController';
-import { PlayerController } from './PlayerController';
 
 const { ccclass, property, executionOrder } = _decorator;
 
@@ -190,7 +189,7 @@ export class PlayerFlight extends Component {
 
     /** Горизонтально птица по X не ездит — отдача задаётся GameManager (мир смещается вправо). */
     public get isTowerKnockbackActive(): boolean {
-        return GameManager.game?.isWorldKickbackActive === true;
+        return GameSession.game?.isWorldKickbackActive === true;
     }
 
     /**
@@ -215,7 +214,7 @@ export class PlayerFlight extends Component {
             return;
         }
         this.allowHorizontalDriftFor(durationSec);
-        GameManager.game?.applyWorldKickback(durationSec, horizontalPxPerSec);
+        GameSession.game?.applyWorldKickback(durationSec, horizontalPxPerSec);
 
         const body = this._body;
         if (body && downwardImpulse !== 0) {
@@ -228,8 +227,8 @@ export class PlayerFlight extends Component {
     onLoad() {
         const p = this.node.position;
         this._spawnLocalPos.set(PlayerFlight.RUNWAY_LOCAL_X, p.y, p.z);
-        if (!this.getComponent(PlayerController)) {
-            this.addComponent(PlayerController);
+        if (!this.getComponent(PLAYER_CONTROLLER_CCLASS)) {
+            this.addComponent(PLAYER_CONTROLLER_CCLASS);
         }
         this._body = this.getComponent(RigidBody2D);
         if (this._body) {
@@ -272,7 +271,7 @@ export class PlayerFlight extends Component {
             return;
         }
 
-        const playing = GameManager.game?.isPlaying === true;
+        const playing = GameSession.game?.isPlaying === true;
         if (!playing) {
             body.gravityScale = 0;
             body.linearVelocity = new Vec2(0, 0);
@@ -320,7 +319,7 @@ export class PlayerFlight extends Component {
     }
 
     lateUpdate(dt: number): void {
-        const gm = GameManager.game;
+        const gm = GameSession.game;
         const playing = gm?.isPlaying === true;
         if (!playing || !this.lockHorizontalX) {
             this._wasForwardScrollStopped = true;
@@ -386,7 +385,7 @@ export class PlayerFlight extends Component {
         if (!this.scaleFlightWithWorldSpeed) {
             return 1;
         }
-        const gm = GameManager.game;
+        const gm = GameSession.game;
         if (!gm?.isPlaying || gm.milestonesPassedCount <= 0) {
             return 1;
         }
@@ -433,7 +432,7 @@ export class PlayerFlight extends Component {
 
     private _onBeforeDrawPitch() {
         const body = this._body;
-        if (!body || GameManager.game?.isPlaying !== true) {
+        if (!body || GameSession.game?.isPlaying !== true) {
             return;
         }
 
@@ -499,7 +498,7 @@ export class PlayerFlight extends Component {
         if (wasHeld) {
             return;
         }
-        if (GameManager.game?.isPlaying !== true) {
+        if (GameSession.game?.isPlaying !== true) {
             return;
         }
         if (this._electricLiftBlockRemain > 0) {

@@ -1793,13 +1793,13 @@
     "__prefab": null,
     "damageInvincibilitySec": 1,
     "electricDefaultLiftLockDuration": 0.5,
-    "electricCloudCooldownSeconds": 1,
+    "electricCloudCooldownSeconds": 2,
     "towerWallKnockbackDurationSec": 0.7,
     "towerWallKnockbackHorizontalPxPerSec": 1300,
     "towerWallDownwardImpulse": 0,
     "towerWallHitAnimationDurationSec": 0.7,
     "towerWallDefaultLiftLockDuration": 0.4,
-    "towerWallCooldownSeconds": 0.5,
+    "towerWallCooldownSeconds": 2,
     "_id": "7c4vpcMFZEX7NfDl+srzHt"
   },
   {
@@ -11123,9 +11123,7 @@
     "milestonePassBoostMultiplier": 2,
     "milestonePassBoostHoldSec": 1.5,
     "milestonePassBoostSettleSec": 1.55,
-    "gameplayUiRoot": {
-      "__id__": 157
-    },
+    "gameplayUiRoot": null,
     "scoreLabel": {
       "__id__": 169
     },
@@ -11141,6 +11139,7 @@
     "continueButton": {
       "__id__": 266
     },
+    "introContinueButton": null,
     "playAgainButton": {
       "__id__": 336
     },

@@ -1,6 +1,6 @@
 import { _decorator, Component, Node } from 'cc';
-import { GameManager } from './GameManager';
-import { PlayerFlight } from './PlayerFlight';
+import type { PlayerFlight } from './PlayerFlight';
+import { GameSession, PLAYER_FLIGHT_CCLASS } from './GameSession';
 import { PlayerAnimationController } from './PlayerAnimationController';
 import { SoundController } from './SoundController';
 import { SoundId } from './SoundLibrary';
@@ -91,8 +91,10 @@ export class PlayerController extends Component {
 
     onLoad() {
         this._flight =
-            this.getComponent(PlayerFlight) ??
-            this.node.parent?.getComponent(PlayerFlight) ??
+            (this.getComponent(PLAYER_FLIGHT_CCLASS) as PlayerFlight | null) ??
+            (this.node.parent?.getComponent(
+                PLAYER_FLIGHT_CCLASS,
+            ) as PlayerFlight | null) ??
             null;
         this._anim =
             this.getComponent(PlayerAnimationController) ??
@@ -103,7 +105,7 @@ export class PlayerController extends Component {
      * Электрооблако: блок подъёма и анимация — параметры из группы «Electric cloud».
      */
     applyElectricCloudHit(): void {
-        const gm = GameManager.game;
+        const gm = GameSession.game;
         if (!gm?.isPlaying) {
             return;
         }
@@ -132,7 +134,7 @@ export class PlayerController extends Component {
      * Стена башни: отдача мира, импульс вниз, клип Wall Hit, блок подъёма — из группы «Tower wall».
      */
     applyTowerWallHit(): void {
-        const gm = GameManager.game;
+        const gm = GameSession.game;
         if (!gm?.isPlaying) {
             return;
         }

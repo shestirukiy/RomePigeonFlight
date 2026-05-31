@@ -24,12 +24,12 @@ import {
     SpriteFrame,
 } from 'cc';
 import { LevelGenerator } from './LevelGenerator';
-import { PlayerFlight } from './PlayerFlight';
 import { PlayerPathSensors } from './PlayerPathSensors';
 import { PlayerAnimationController } from './PlayerAnimationController';
 import { SceneNodeHub } from './SceneNodeHub';
 import { CameraShake } from './CameraShake';
 import { GameIntroController } from './GameIntroController';
+import { GameSession, PLAYER_FLIGHT_CCLASS } from './GameSession';
 import { SoundController } from './SoundController';
 import { SoundId } from './SoundLibrary';
 import { AnimatedPrefabSpawner } from './AnimatedPrefabSpawner';
@@ -55,7 +55,7 @@ export class GameManager extends Component {
     private static _inst: GameManager | null = null;
 
     public static get game(): GameManager | null {
-        return GameManager._inst;
+        return GameSession.game;
     }
 
     private _playing = false;
@@ -96,6 +96,9 @@ export class GameManager extends Component {
 
     /** После Play Again — игнорировать тап, пока палец/кнопка мыши не отпущены. */
     private _suppressTapToStart = false;
+
+    /** ContinueBttn на Chunk_Start (не Game Over). */
+    private _introContinueButtonBound: Button | null = null;
 
     private _gameOverSeedRollCounter = { value: 0 };
     private _gameOverSeedRollTween: Tween<{ value: number }> | null = null;
@@ -624,6 +627,15 @@ export class GameManager extends Component {
     @property({
         group: G_UI,
         type: Button,
+        displayName: 'Intro Continue Button',
+        tooltip:
+            'ContinueBttn на Chunk_Start — тот же эффект, что тап по экрану. Пусто — ищется автоматически (не Game Over / KTA).',
+    })
+    introContinueButton: Button | null = null;
+
+    @property({
+        group: G_UI,
+        type: Button,
         displayName: 'Play Again Button',
         tooltip:
             'PlayAgainBttn на KTAPanel — новый забег после KTA (компонент Button).',
@@ -762,6 +774,7 @@ export class GameManager extends Component {
 
     onLoad() {
         GameManager._inst = this;
+        GameSession.bind(this);
         if (!this.getComponent(GameIntroController)) {
             this.addComponent(GameIntroController);
         }
@@ -784,6 +797,7 @@ export class GameManager extends Component {
 
     start() {
         this._bindUiButtons();
+        this._tryBindIntroContinueButton(0);
         this._syncGameplayUiVisible();
     }
 
@@ -791,6 +805,7 @@ export class GameManager extends Component {
         this._stopGameOverSeedCountRoll();
         this._stopGameOverMilestoneMetersRoll();
         this._unbindUiButtons();
+        this._unbindIntroContinueButton();
         input.off(Input.EventType.TOUCH_START, this._onTouchStart, this);
         input.off(Input.EventType.TOUCH_END, this._onTouchEnd, this);
         input.off(Input.EventType.TOUCH_CANCEL, this._onTouchEnd, this);
@@ -798,6 +813,9 @@ export class GameManager extends Component {
         input.off(Input.EventType.MOUSE_UP, this._onMouseUp, this);
         if (GameManager._inst === this) {
             GameManager._inst = null;
+        }
+        if (GameSession.game === this) {
+            GameSession.bind(null);
         }
     }
 
@@ -1077,6 +1095,7 @@ export class GameManager extends Component {
 
         const player = SceneNodeHub.instance?.player;
         this._findPlayerAnimation(player)?.playWaitingStay();
+        this._tryBindIntroContinueButton(0);
     }
 
     /** Новый забег по тапу (первый вход или после returnToTapToStart). */
@@ -1415,6 +1434,78 @@ export class GameManager extends Component {
         }
     }
 
+    private _tryBindIntroContinueButton(attempt: number): void {
+        const btn = this._resolveIntroContinueButton();
+        if (btn) {
+            this._unbindIntroContinueButton();
+            this._introContinueButtonBound = btn;
+            btn.node.on(Button.EventType.CLICK, this._onIntroContinueClick, this);
+            return;
+        }
+        if (attempt < 80) {
+            this.scheduleOnce(
+                () => this._tryBindIntroContinueButton(attempt + 1),
+                0.1,
+            );
+        }
+    }
+
+    private _unbindIntroContinueButton(): void {
+        if (!this._introContinueButtonBound?.node?.isValid) {
+            this._introContinueButtonBound = null;
+            return;
+        }
+        this._introContinueButtonBound.node.off(
+            Button.EventType.CLICK,
+            this._onIntroContinueClick,
+            this,
+        );
+        this._introContinueButtonBound = null;
+    }
+
+    private _resolveIntroContinueButton(): Button | null {
+        if (this.introContinueButton?.isValid) {
+            return this.introContinueButton;
+        }
+        const scene = this.node.scene;
+        if (!scene?.isValid) {
+            return null;
+        }
+        const stack: Node[] = [scene];
+        while (stack.length > 0) {
+            const node = stack.pop()!;
+            if (
+                (node.name === 'ContinueBttn' || node.name === 'ContinueBtn') &&
+                !this._isUnderOverlayPanel(node)
+            ) {
+                const button = node.getComponent(Button);
+                if (button) {
+                    return button;
+                }
+            }
+            for (let i = node.children.length - 1; i >= 0; i--) {
+                stack.push(node.children[i]);
+            }
+        }
+        return null;
+    }
+
+    private _isUnderOverlayPanel(node: Node): boolean {
+        let cur: Node | null = node;
+        while (cur) {
+            if (cur === this.gameOverPanel || cur === this.ktaPanel) {
+                return true;
+            }
+            cur = cur.parent;
+        }
+        return false;
+    }
+
+    private _onIntroContinueClick(): void {
+        this._suppressTapToStart = false;
+        this._onMenuTap();
+    }
+
     private _resolveContinueButton(): Button | null {
         if (this.continueButton?.isValid) {
             return this.continueButton;
@@ -1548,10 +1639,24 @@ export class GameManager extends Component {
 
         const player = SceneNodeHub.instance?.player;
         if (player) {
-            player.getComponent(PlayerFlight)?.resetToSpawn();
+            this._playerFlightOf(player)?.resetToSpawn();
             player.getComponent(PlayerPathSensors)?.resetForNewRun();
             this._findPlayerAnimation(player)?.resetForNewRun();
         }
+    }
+
+    /** Без import PlayerFlight — разрыв цикла GameManager ↔ PlayerFlight. */
+    private _playerFlightOf(node: Node | null | undefined): {
+        resetToSpawn(): void;
+        releaseInput(): void;
+    } | null {
+        if (!node?.isValid) {
+            return null;
+        }
+        return node.getComponent(PLAYER_FLIGHT_CCLASS) as {
+            resetToSpawn(): void;
+            releaseInput(): void;
+        } | null;
     }
 
     /** PlayerAnimationController висит на Pigeon, не на корне Player. */
@@ -2002,7 +2107,7 @@ export class GameManager extends Component {
         const stack = [...root.children];
         while (stack.length > 0) {
             const n = stack.pop()!;
-            if (n.getComponent(PlayerFlight)) {
+            if (n.getComponent(PLAYER_FLIGHT_CCLASS)) {
                 return n;
             }
             stack.push(...n.children);
@@ -2108,7 +2213,7 @@ export class GameManager extends Component {
         this._resetScrollAndKickback();
 
         const player = SceneNodeHub.instance?.player;
-        player?.getComponent(PlayerFlight)?.releaseInput();
+        this._playerFlightOf(player)?.releaseInput();
 
         const anim = this._findPlayerAnimation(player ?? null);
         const started =
