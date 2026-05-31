@@ -1,0 +1,51 @@
+{
+  "__type__": "cc.Material",
+  "_name": "gradient-text-gold",
+  "_objFlags": 0,
+  "__editorExtras__": {},
+  "_native": "",
+  "_effectAsset": {
+    "__uuid__": "e1f2a3b4-c5d6-4789-e012-3456789abc01",
+    "__expectedType__": "cc.EffectAsset"
+  },
+  "_techIdx": 0,
+  "_defines": [
+    {}
+  ],
+  "_states": [
+    {
+      "rasterizerState": {},
+      "depthStencilState": {},
+      "blendState": {
+        "targets": [
+          {}
+        ]
+      }
+    }
+  ],
+  "_props": [
+    {
+      "colorTop": {
+        "__type__": "cc.Color",
+        "r": 255,
+        "g": 235,
+        "b": 120,
+        "a": 255
+      },
+      "colorBottom": {
+        "__type__": "cc.Color",
+        "r": 220,
+        "g": 130,
+        "b": 25,
+        "a": 255
+      },
+      "gradientParams": {
+        "__type__": "cc.Vec4",
+        "x": 0.36,
+        "y": 0.96,
+        "z": 1,
+        "w": 1
+      }
+    }
+  ]
+}

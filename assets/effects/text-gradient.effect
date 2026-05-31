@@ -1,0 +1,110 @@
+// Градиент Label: o.rgb *= mix(bottom, top, blend). gradientParams: x=boundary, y=softness, z=strength, w=invert.
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: sprite-vs:vert
+      frag: sprite-fs:frag
+      depthStencilState:
+        depthTest: false
+        depthWrite: false
+      blendState:
+        targets:
+        - blend: true
+          blendSrc: src_alpha
+          blendDst: one_minus_src_alpha
+          blendDstAlpha: one_minus_src_alpha
+      rasterizerState:
+        cullMode: none
+      properties:
+        alphaThreshold: { value: 0.5 }
+        colorTop: { value: [1.0, 0.95, 0.4, 1.0], editor: { type: color, displayName: Color Top } }
+        colorBottom: { value: [0.9, 0.24, 0.15, 1.0], editor: { type: color, displayName: Color Bottom } }
+        gradientParams: { value: [0.5, 1.0, 1.0, 0.0], editor: { type: vector, displayName: 'Gradient (boundary, softness, strength, invert)' } }
+}%
+
+CCProgram sprite-vs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  #if USE_LOCAL
+    #include <builtin/uniforms/cc-local>
+  #endif
+  #if SAMPLE_FROM_RT
+    #include <common/common-define>
+  #endif
+  in vec3 a_position;
+  in vec2 a_texCoord;
+  in vec4 a_color;
+
+  out vec4 color;
+  out vec2 uv0;
+
+  vec4 vert () {
+    vec4 pos = vec4(a_position, 1);
+
+    #if USE_LOCAL
+      pos = cc_matWorld * pos;
+    #endif
+
+    #if USE_PIXEL_ALIGNMENT
+      pos = cc_matView * pos;
+      pos.xyz = floor(pos.xyz);
+      pos = cc_matProj * pos;
+    #else
+      pos = cc_matViewProj * pos;
+    #endif
+
+    uv0 = a_texCoord;
+    #if SAMPLE_FROM_RT
+      CC_HANDLE_RT_SAMPLE_FLIP(uv0);
+    #endif
+    color = a_color;
+
+    return pos;
+  }
+}%
+
+CCProgram sprite-fs %{
+  precision highp float;
+  #include <builtin/internal/embedded-alpha>
+  #include <builtin/internal/alpha-test>
+
+  in vec4 color;
+  in vec2 uv0;
+
+  #pragma builtin(local)
+  layout(set = 2, binding = 12) uniform sampler2D cc_spriteTexture;
+
+  uniform Properties {
+    vec4 colorTop;
+    vec4 colorBottom;
+    vec4 gradientParams;
+  };
+
+  vec4 frag () {
+    vec4 o = vec4(1, 1, 1, 1);
+    o *= CCSampleWithAlphaSeparated(cc_spriteTexture, uv0);
+    o *= color;
+
+    float gradientCenter = gradientParams.x;
+    float gradientSoftness = gradientParams.y;
+    float gradientStrength = gradientParams.z;
+    float invertGradient = gradientParams.w;
+
+    float t = uv0.y;
+    if (invertGradient > 0.5) {
+      t = 1.0 - t;
+    }
+
+    float halfW = max(gradientSoftness * 0.5, 0.0005);
+    float edge0 = clamp(gradientCenter - halfW, 0.0, 1.0);
+    float edge1 = clamp(gradientCenter + halfW, 0.0, 1.0);
+    float blend = (edge0 >= edge1) ? step(gradientCenter, t) : smoothstep(edge0, edge1, t);
+
+    vec3 gradRgb = mix(colorBottom.rgb, colorTop.rgb, blend);
+    vec3 gradientColor = mix(vec3(1.0), gradRgb, gradientStrength);
+    o.rgb *= gradientColor;
+
+    ALPHA_TEST(o);
+    return o;
+  }
+}%

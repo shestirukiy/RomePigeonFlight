@@ -6,7 +6,6 @@ import {
     instantiate,
     UITransform,
 } from 'cc';
-import { GameManager } from './GameManager';
 import { SceneNodeHub } from './SceneNodeHub';
 import { WeightedChunk } from './WeightedChunk';
 import { MilestoneSign } from './MilestoneSign';
@@ -227,6 +226,41 @@ export class LevelGenerator extends Component {
     }
 
     /**
+     * Важно: не импортируем GameManager напрямую, чтобы не создавать цикл импорта
+     * GameManager -> LevelGenerator -> GameManager в сборщике.
+     */
+    private _game(): {
+        isPlaying: boolean;
+        pixelsPerMeter: number;
+        flightDistancePx: number;
+        getForwardScrollDelta(dt: number): number;
+        getWorldKickbackDelta(dt: number): number;
+    } | null {
+        const onSameNode = this.getComponent('GameManager' as never) as unknown;
+        if (onSameNode) {
+            return onSameNode as {
+                isPlaying: boolean;
+                pixelsPerMeter: number;
+                flightDistancePx: number;
+                getForwardScrollDelta(dt: number): number;
+                getWorldKickbackDelta(dt: number): number;
+            };
+        }
+        const hubNode = SceneNodeHub.instance?.node;
+        const onHub = hubNode?.getComponent('GameManager' as never) as unknown;
+        return (onHub ??
+            null) as
+            | {
+                  isPlaying: boolean;
+                  pixelsPerMeter: number;
+                  flightDistancePx: number;
+                  getForwardScrollDelta(dt: number): number;
+                  getWorldKickbackDelta(dt: number): number;
+              }
+            | null;
+    }
+
+    /**
      * Вкл/выкл контейнеры слоёв (ObstaclesContainer / TownContainer / SkyContainer).
      * Чанки внутри не трогаем — при выключении родителя всё дерево скрыто.
      */
@@ -262,7 +296,7 @@ export class LevelGenerator extends Component {
         if (this._milestoneQueue.length === 0) {
             return;
         }
-        const game = GameManager.game;
+        const game = this._game();
         if (!game?.isPlaying || !this.milestoneSignPrefab) {
             return;
         }
@@ -333,7 +367,7 @@ export class LevelGenerator extends Component {
     }
 
     update(dt: number) {
-        const game = GameManager.game;
+        const game = this._game();
         if (!game?.isPlaying || this._strips.length === 0) {
             return;
         }
@@ -476,7 +510,7 @@ export class LevelGenerator extends Component {
         if (this._milestoneQueue.length === 0) {
             return null;
         }
-        const game = GameManager.game;
+        const game = this._game();
         if (!game?.isPlaying) {
             return null;
         }

@@ -613,6 +613,10 @@ export class PlayerAnimationController extends Component {
         run.flyElapsed = 0;
         run.node.getWorldPosition(run.startWorld);
         if (run.slotIndex >= 0) {
+            run.slotIndex =
+                GameManager.game?.resolveHeartHarvestSlotIndex(
+                    run.slotIndex,
+                ) ?? run.slotIndex;
             GameManager.game?.getHeartSlotWorldPosition(
                 run.slotIndex,
                 run.targetWorld,

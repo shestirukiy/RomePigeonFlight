@@ -9,6 +9,7 @@ import {
     tween,
     Tween,
 } from 'cc';
+import { GameOverAchievementPhrase } from './GameOverAchievementPhrase';
 import { MilestoneDistanceLabel } from './MilestoneDistanceLabel';
 
 const { ccclass, property } = _decorator;
@@ -67,6 +68,14 @@ export class SceneNodeHub extends Component {
     gameOverMilestoneSign: MilestoneDistanceLabel | null = null;
 
     @property({
+        type: GameOverAchievementPhrase,
+        displayName: 'Game Over Achievement Phrase',
+        tooltip:
+            'GameOverAchievementPhrase на Label комментария к метрам (три тира фраз).',
+    })
+    gameOverAchievementPhrase: GameOverAchievementPhrase | null = null;
+
+    @property({
         type: ParticleSystem2D,
         displayName: 'Speed Lines Emitter',
         tooltip:
@@ -88,7 +97,7 @@ export class SceneNodeHub extends Component {
         type: Node,
         displayName: 'Meters Passed Phrase Node',
         tooltip:
-            'Нода с Label/RichText «100 METERS» после столба. Отдельный стиль от Life.',
+            'Нода с Label/RichText «Record: 100 METERS» после столба. Отдельный стиль от Life.',
     })
     metersPassedPhraseNode: Node | null = null;
 
@@ -97,6 +106,14 @@ export class SceneNodeHub extends Component {
         displayName: 'Life Restored Text',
     })
     lifeRestoredText = '+1 Life restored';
+
+    @property({
+        group: G_PHRASES,
+        displayName: 'Meters Phrase Format',
+        tooltip:
+            'Шаблон фразы метров: {0} — число, {1} — суффикс (Meters Suffix). Пример: Record: {0} {1}',
+    })
+    metersPhraseFormat = 'Record: {0} {1}';
 
     @property({
         group: G_PHRASES,
@@ -169,7 +186,10 @@ export class SceneNodeHub extends Component {
     public showMetersPassed(meters: number): void {
         const root = this.metersPassedPhraseNode;
         const m = Math.max(0, Math.floor(meters));
-        if (!this._setTextOnNode(root, `${m} ${this.metersSuffix}`)) {
+        const text = this.metersPhraseFormat
+            .replace('{0}', String(m))
+            .replace('{1}', this.metersSuffix);
+        if (!this._setTextOnNode(root, text)) {
             console.warn(
                 '[SceneNodeHub] Meters Passed Phrase Node: нет Label/RichText или нода не задана.',
             );

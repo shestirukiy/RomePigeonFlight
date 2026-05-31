@@ -9,7 +9,6 @@ import {
     RigidBody2D,
     Vec3,
 } from 'cc';
-import { GameManager } from './GameManager';
 import { MilestoneDistanceLabel } from './MilestoneDistanceLabel';
 import { SceneNodeHub } from './SceneNodeHub';
 
@@ -138,8 +137,8 @@ export class MilestoneSign extends Component {
         if (this._consumed) {
             return false;
         }
-        const gm = GameManager.game;
-        if (!gm?.onMilestoneSignPassed(this._meters)) {
+        const gm = this._game();
+        if (!gm?.onMilestoneSignPassed?.(this._meters)) {
             return false;
         }
         this._consumed = true;
@@ -153,7 +152,7 @@ export class MilestoneSign extends Component {
         if (this._consumed) {
             return;
         }
-        const gm = GameManager.game;
+        const gm = this._game();
         if (!gm?.isPlaying) {
             return;
         }
@@ -258,5 +257,16 @@ export class MilestoneSign extends Component {
             yMax = Math.max(yMax, w.y);
         }
         return { xMin, xMax, yMin, yMax };
+    }
+
+    /**
+     * Не импортируем GameManager напрямую, чтобы не создавать цикл импорта в сборщике.
+     * (GameManager -> LevelGenerator -> MilestoneSign -> GameManager).
+     */
+    private _game(): { isPlaying: boolean; onMilestoneSignPassed(m: number): boolean } | null {
+        const hubNode = SceneNodeHub.instance?.node;
+        const gm = hubNode?.getComponent('GameManager' as never) as unknown;
+        return (gm ??
+            null) as { isPlaying: boolean; onMilestoneSignPassed(m: number): boolean } | null;
     }
 }

@@ -97,15 +97,16 @@ export class GameManager extends Component {
     /** После Play Again — игнорировать тап, пока палец/кнопка мыши не отпущены. */
     private _suppressTapToStart = false;
 
-    private readonly _gameOverSeedRollCounter = { value: 0 };
+    private _gameOverSeedRollCounter = { value: 0 };
+    private _gameOverSeedRollTween: Tween<{ value: number }> | null = null;
 
     private _damageInvincibleRemain = 0;
 
     /** Сколько порогов seedsPerExtraLife уже выдали за этот забег. */
     private _seedLifeBonusesGranted = 0;
 
-    /** +HP в полёте (ещё не в UI) — резерв слота под параллельные HpHarvest. */
-    private _hpHarvestPending = 0;
+    /** Слоты UI, зарезервированные под летящие HpHarvest (индекс → в полёте). */
+    private readonly _hpHarvestReservedSlots = new Set<number>();
 
     /** Повторные контакты Ground — один вызов gameOver. */
     private _instantKillPending = false;
@@ -570,6 +571,15 @@ export class GameManager extends Component {
 
     @property({
         group: G_UI,
+        type: Node,
+        displayName: 'Gameplay UI Root',
+        tooltip:
+            'Нода UI (сердечки, счёт семечек). Скрывается вне геймплея: заставка, Game Over, KTA, ожидание тапа. Пусто — ищется дочерняя нода «UI» на Canvas.',
+    })
+    gameplayUiRoot: Node | null = null;
+
+    @property({
+        group: G_UI,
         type: Label,
         displayName: 'Score Label',
         tooltip: 'Label на Canvas, куда выводится счёт очков.',
@@ -659,6 +669,24 @@ export class GameManager extends Component {
     gameOverSeedCountRollDurationSec = 1.2;
 
     @property({
+        group: G_UI,
+        displayName: 'Milestone Meters Roll Duration (s)',
+        tooltip:
+            'Game Over: LabelMeters бежит от 0 до выбранного значения метров за это время.',
+    })
+    gameOverMilestoneRollDurationSec = 1.2;
+
+    @property({
+        group: G_UI,
+        displayName: 'Game Over: Total Meters Flown',
+        tooltip:
+            'Вкл. — на Game Over точная дистанция забега (пролетел в метрах). ' +
+            'Выкл. — метры последней пройденной вехи (столб MilestoneSign). ' +
+            'Влияет на LabelMeters и комментарий GameOverAchievementPhrase.',
+    })
+    gameOverShowTotalMetersFlown = false;
+
+    @property({
         group: G_HP,
         type: Node,
         displayName: 'HP Heart (anchor)',
@@ -746,6 +774,7 @@ export class GameManager extends Component {
             );
         }
         this._hideOverlayPanels();
+        this._syncGameplayUiVisible();
         input.on(Input.EventType.TOUCH_START, this._onTouchStart, this);
         input.on(Input.EventType.TOUCH_END, this._onTouchEnd, this);
         input.on(Input.EventType.TOUCH_CANCEL, this._onTouchEnd, this);
@@ -755,10 +784,12 @@ export class GameManager extends Component {
 
     start() {
         this._bindUiButtons();
+        this._syncGameplayUiVisible();
     }
 
     onDestroy() {
         this._stopGameOverSeedCountRoll();
+        this._stopGameOverMilestoneMetersRoll();
         this._unbindUiButtons();
         input.off(Input.EventType.TOUCH_START, this._onTouchStart, this);
         input.off(Input.EventType.TOUCH_END, this._onTouchEnd, this);
@@ -1034,6 +1065,7 @@ export class GameManager extends Component {
         this._playing = false;
         this._suppressTapToStart = true;
         this._hideOverlayPanels();
+        this._syncGameplayUiVisible();
         GameIntroController.skipIntroAfterRestart();
         GameIntroController.instance?.snapToGameplayCamera();
         this._resetRunState();
@@ -1065,6 +1097,7 @@ export class GameManager extends Component {
         this._playing = true;
         this.resetScore();
         this.resetHp();
+        this._syncGameplayUiVisible();
         SoundController.instance?.resetVariantRotation();
         SoundController.instance?.playMusicForNewRun();
     }
@@ -1085,8 +1118,33 @@ export class GameManager extends Component {
         }
     }
 
+    private _resolveGameplayUiRoot(): Node | null {
+        if (this.gameplayUiRoot?.isValid) {
+            return this.gameplayUiRoot;
+        }
+        const canvas = SceneNodeHub.instance?.canvas ?? this.node;
+        return canvas.getChildByName('UI');
+    }
+
+    /** HUD (сердечки, семечки) только во время активного геймплея. */
+    private _syncGameplayUiVisible(): void {
+        const root = this._resolveGameplayUiRoot();
+        if (!root?.isValid) {
+            return;
+        }
+        const show = this.isPlaying;
+        if (root.active !== show) {
+            root.active = show;
+        }
+        if (!show) {
+            SceneNodeHub.instance?.hideAllPhrases();
+        }
+    }
+
     private _hideOverlayPanels(): void {
         this._stopGameOverSeedCountRoll();
+        this._stopGameOverMilestoneMetersRoll();
+        SceneNodeHub.instance?.gameOverAchievementPhrase?.clearPhrase();
         if (this.gameOverPanel?.isValid) {
             this._stopGameOverPanelIntro();
             this.gameOverPanel.active = false;
@@ -1302,6 +1360,7 @@ export class GameManager extends Component {
 
     private _showKtaPanel(): void {
         this._ktaPanelShown = true;
+        this._syncGameplayUiVisible();
         if (this.gameOverPanel?.isValid) {
             this._stopGameOverPanelIntro();
             this.gameOverPanel.active = false;
@@ -1542,17 +1601,17 @@ export class GameManager extends Component {
 
     /** +1 HP: сначала HpHarvest на игроке, UI-сердечко — по прилёту. */
     public grantExtraLifeWithHarvest(): boolean {
-        const slotIndex = this._currentHp + this._hpHarvestPending;
+        const slotIndex = this._findNextVacantHeartSlotIndex();
         if (!this._canGrantHeartSlot(slotIndex)) {
             return false;
         }
 
-        this._hpHarvestPending++;
+        this._hpHarvestReservedSlots.add(slotIndex);
         this._hideHeartSlotUntilHarvest(slotIndex);
 
         const target = new Vec3();
         if (!this._getHeartSlotWorldPosition(slotIndex, target)) {
-            this._hpHarvestPending--;
+            this._hpHarvestReservedSlots.delete(slotIndex);
             return this._commitGrantExtraLifeAtSlot(slotIndex);
         }
 
@@ -1562,20 +1621,77 @@ export class GameManager extends Component {
         if (
             playerAnim?.playHpHarvest(target, slotIndex, () => {
                 this._commitGrantExtraLifeAtSlot(slotIndex);
-                this._hpHarvestPending = Math.max(
-                    0,
-                    this._hpHarvestPending - 1,
-                );
+                this._hpHarvestReservedSlots.delete(slotIndex);
             })
         ) {
             return true;
         }
 
-        this._hpHarvestPending--;
+        this._hpHarvestReservedSlots.delete(slotIndex);
         console.warn(
             '[GameManager] HpHarvest не запустился — сердечко в UI сразу.',
         );
         return this._commitGrantExtraLifeAtSlot(slotIndex);
+    }
+
+    /**
+     * Первый свободный слот: логически пустой (HP), падает HpFall или уже зарезервирован под harvest.
+     */
+    private _findNextVacantHeartSlotIndex(): number {
+        for (let i = 0; i < this._heartNodes.length; i++) {
+            if (this._hpHarvestReservedSlots.has(i)) {
+                continue;
+            }
+            if (this._isVacantHeartSlot(i)) {
+                return i;
+            }
+        }
+        let i = this._heartNodes.length;
+        while (this._hpHarvestReservedSlots.has(i)) {
+            i++;
+        }
+        return i;
+    }
+
+    /** Самый левый свободный слот при завершении harvest (кроме чужих резервов). */
+    private _findVacantSlotForCommit(releasingReservation: number): number {
+        for (let i = 0; i < this._heartNodes.length; i++) {
+            if (
+                this._hpHarvestReservedSlots.has(i) &&
+                i !== releasingReservation
+            ) {
+                continue;
+            }
+            if (this._isVacantHeartSlot(i)) {
+                return i;
+            }
+        }
+        let i = this._heartNodes.length;
+        while (
+            this._hpHarvestReservedSlots.has(i) &&
+            i !== releasingReservation
+        ) {
+            i++;
+        }
+        return i;
+    }
+
+    /** Слот пуст для +HP: за пределами текущего HP, скрыт или сердечко уже «сорвано» падением. */
+    private _isVacantHeartSlot(index: number): boolean {
+        if (index < 0) {
+            return false;
+        }
+        if (index >= this._heartNodes.length) {
+            return index === this._heartNodes.length;
+        }
+        const heart = this._heartNodes[index];
+        if (heart?.isValid && this._heartsFalling.has(heart)) {
+            return true;
+        }
+        if (index >= this._currentHp) {
+            return true;
+        }
+        return !heart?.isValid || !heart.active;
     }
 
     private _canGrantHeartSlot(slotIndex: number): boolean {
@@ -1643,8 +1759,16 @@ export class GameManager extends Component {
         return true;
     }
 
+    /**
+     * Актуальный слот для HpHarvest (урон мог «освободить» ячейку после старта полёта).
+     */
+    public resolveHeartHarvestSlotIndex(requestedSlot: number): number {
+        return this._findVacantSlotForCommit(requestedSlot);
+    }
+
     /** Показать сердечко в UI в зарезервированном слоте. */
-    private _commitGrantExtraLifeAtSlot(slotIndex: number): boolean {
+    private _commitGrantExtraLifeAtSlot(requestedSlot: number): boolean {
+        const slotIndex = this._findVacantSlotForCommit(requestedSlot);
         if (slotIndex < 0) {
             return false;
         }
@@ -1692,7 +1816,7 @@ export class GameManager extends Component {
         this._clearSpawnedHearts();
         this._heartNodes.length = 0;
         this._currentHp = 0;
-        this._hpHarvestPending = 0;
+        this._hpHarvestReservedSlots.clear();
         this._instantKillPending = false;
         this._gameOverHeartBurstCount = 0;
 
@@ -1757,12 +1881,12 @@ export class GameManager extends Component {
             if (this._currentHp <= 0) {
                 break;
             }
-            const idx = this._currentHp - 1;
+            this._currentHp--;
+            const idx = this._currentHp;
             const heart = this._heartNodes[idx];
             if (heart?.isValid) {
                 this._playHpFallOnHeart(heart);
             }
-            this._currentHp--;
             lost++;
         }
 
@@ -1978,6 +2102,7 @@ export class GameManager extends Component {
         this._gameOverHeartBurstCount = 0;
         this._cancelDeferredDeathSequence();
         this._dying = true;
+        this._syncGameplayUiVisible();
         this._damageInvincibleRemain = 0;
         this.cancelWorldKickback();
         this._resetScrollAndKickback();
@@ -2045,6 +2170,7 @@ export class GameManager extends Component {
         this._playing = false;
         this._ktaPanelShown = false;
         this._hideOverlayPanels();
+        this._syncGameplayUiVisible();
         this._hideWorldChunkContainers();
         SoundController.instance?.endKtaBgmPhase();
         SoundController.instance?.stopBgm();
@@ -2057,15 +2183,43 @@ export class GameManager extends Component {
 
         this._bindUiButtons();
         this.scheduleOnce(() => {
-            this._refreshGameOverMilestoneLabel();
+            this._playGameOverMilestoneMetersRoll();
+            this._refreshGameOverAchievementPhrase();
             this._playGameOverSeedCountRoll(this._score);
         }, 0);
     }
 
-    private _refreshGameOverMilestoneLabel(): void {
-        SceneNodeHub.instance?.gameOverMilestoneSign?.setMeters(
-            this._lastCompletedMilestoneMeters,
+    /** Метры для Game Over: веха или полная дистанция забега (см. gameOverShowTotalMetersFlown). */
+    private _getGameOverDisplayMeters(): number {
+        if (this.gameOverShowTotalMetersFlown) {
+            return Math.max(0, Math.floor(this.flightDistanceMeters));
+        }
+        return Math.max(0, Math.floor(this._lastCompletedMilestoneMeters));
+    }
+
+    private _refreshGameOverAchievementPhrase(): void {
+        SceneNodeHub.instance?.gameOverAchievementPhrase?.refreshForMeters(
+            this._getGameOverDisplayMeters(),
         );
+    }
+
+    private _playGameOverMilestoneMetersRoll(): void {
+        const display = SceneNodeHub.instance?.gameOverMilestoneSign;
+        if (!display?.isValid) {
+            return;
+        }
+        display.playMetersRollFromZero(
+            this._getGameOverDisplayMeters(),
+            this.gameOverMilestoneRollDurationSec,
+        );
+    }
+
+    private _stopGameOverMilestoneMetersRoll(): void {
+        const sign = SceneNodeHub.instance?.gameOverMilestoneSign;
+        if (!sign?.isValid) {
+            return;
+        }
+        sign.stopMetersRoll();
     }
 
     private _playGameOverSeedCountRoll(targetScore: number): void {
@@ -2086,20 +2240,22 @@ export class GameManager extends Component {
         }
 
         const duration = Math.max(0.05, this.gameOverSeedCountRollDurationSec);
-        tween(this._gameOverSeedRollCounter)
+        this._gameOverSeedRollTween = tween(this._gameOverSeedRollCounter)
             .to(
                 duration,
                 { value: target },
                 {
                     easing: 'quadOut',
                     onUpdate: () => {
-                        if (label.isValid) {
-                            label.string = `${Math.round(this._gameOverSeedRollCounter.value)}`;
+                        if (!this.isValid || !label.isValid) {
+                            return;
                         }
+                        label.string = `${Math.round(this._gameOverSeedRollCounter.value)}`;
                     },
                 },
             )
             .call(() => {
+                this._gameOverSeedRollTween = null;
                 if (label.isValid) {
                     label.string = `${target}`;
                 }
@@ -2108,7 +2264,14 @@ export class GameManager extends Component {
     }
 
     private _stopGameOverSeedCountRoll(): void {
-        Tween.stopAllByTarget(this._gameOverSeedRollCounter);
+        if (this._gameOverSeedRollTween) {
+            this._gameOverSeedRollTween.stop();
+            this._gameOverSeedRollTween = null;
+        }
+        if (!this._gameOverSeedRollCounter) {
+            this._gameOverSeedRollCounter = { value: 0 };
+            return;
+        }
         this._gameOverSeedRollCounter.value = 0;
     }
 
