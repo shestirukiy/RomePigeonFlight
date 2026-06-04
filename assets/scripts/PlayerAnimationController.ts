@@ -179,12 +179,15 @@ export class PlayerAnimationController extends Component {
     private _flapState: AnimationState | null = null;
     protected _flight: PlayerFlight | null = null;
 
-    private _electricOverlayRemain = 0;
+    protected _electricOverlayRemain = 0;
 
-    private _wallHitOverlayRemain = 0;
+    protected _wallHitOverlayRemain = 0;
 
     /** Игрок на поверхности снизу — без остановки скролла, отдельный клип. */
-    private _surfaceRunActive = false;
+    protected _surfaceRunActive = false;
+
+    /** Есть опора под ногами (бег, стойка или переход). */
+    protected _feetOnSurface = false;
 
     private _flapSpeed = 0;
 
@@ -200,7 +203,7 @@ export class PlayerAnimationController extends Component {
     private _waitingStayActive = false;
 
     /** Проигрывается deathClip до вызова onComplete. */
-    private _deathSequenceActive = false;
+    protected _deathSequenceActive = false;
 
     /** Local position тела в префабе — сброс после забега. */
     protected readonly _deathFallSpawnLocal = new Vec3();
@@ -273,7 +276,44 @@ export class PlayerAnimationController extends Component {
      * Контакт с твёрдой поверхностью снизу (не скролл-стоп): зацикленный клип поверхности.
      * Приоритет ниже удара облака и стены.
      */
+    /** Старт забега по тапу (до update PathSensors / анимации). */
+    public onGameRunStarted(): void {
+        /* Переопределяет FediaAnimationController. */
+    }
+
+    /** Вызывается из PlayerPathSensors при опоре снизу (до задержки бега). */
+    public setFeetOnSurface(active: boolean): void {
+        this._feetOnSurface = active;
+    }
+
     public setRunningOnSurface(active: boolean): void {
+        if (active) {
+            this._feetOnSurface = true;
+        }
+        if (this._tryPlaySurfaceRunTransition(active)) {
+            if (!active) {
+                this._feetOnSurface = false;
+            }
+            return;
+        }
+        if (!active) {
+            this._feetOnSurface = false;
+        }
+        this._applyRunningOnSurface(active);
+    }
+
+    /**
+     * Переход run ↔ fly (например FediaStartFly). true — состояние применится после onDone.
+     */
+    protected _tryPlaySurfaceRunTransition(_active: boolean): boolean {
+        return false;
+    }
+
+    protected _blocksRoutineFlightAnimUpdate(): boolean {
+        return false;
+    }
+
+    protected _applyRunningOnSurface(active: boolean): void {
         /* PlayerPathSensors.update идёт после физики в том же кадре — иначе бег по земле перебивает клип удара. */
         if (
             active &&
@@ -355,6 +395,7 @@ export class PlayerAnimationController extends Component {
         this._electricOverlayRemain = 0;
         this._wallHitOverlayRemain = 0;
         this._surfaceRunActive = false;
+        this._feetOnSurface = false;
         this._tailTimeLeft = 0;
         this._wasHeld = false;
         this._waitingStayActive = false;
@@ -662,6 +703,7 @@ export class PlayerAnimationController extends Component {
         this._electricOverlayRemain = 0;
         this._wallHitOverlayRemain = 0;
         this._surfaceRunActive = false;
+        this._feetOnSurface = false;
         this._tailTimeLeft = 0;
         this._wasHeld = false;
         this._waitingStayActive = false;
@@ -674,6 +716,7 @@ export class PlayerAnimationController extends Component {
         this._electricOverlayRemain = 0;
         this._wallHitOverlayRemain = 0;
         this._surfaceRunActive = false;
+        this._feetOnSurface = false;
         this._tailTimeLeft = 0;
         this._wasHeld = false;
         this._flapState = null;
@@ -770,6 +813,10 @@ export class PlayerAnimationController extends Component {
             if (this._flapState) {
                 this._flapState.pause();
             }
+            return;
+        }
+
+        if (this._blocksRoutineFlightAnimUpdate()) {
             return;
         }
 

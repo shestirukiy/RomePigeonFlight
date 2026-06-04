@@ -109,7 +109,7 @@
         "__id__": 15
       }
     ],
-    "_active": true,
+    "_active": false,
     "_components": [
       {
         "__id__": 27
@@ -839,7 +839,7 @@
     },
     "flapSpeedPressed": 1.5,
     "flapSpeedInAir": 0.65,
-    "wingFlapInertiaDuration": 1,
+    "wingFlapInertiaDuration": 0.45,
     "electricDamageClip": {
       "__uuid__": "b6788b28-1f6f-4e9a-99da-22f24547804c",
       "__expectedType__": "cc.AnimationClip"
@@ -1322,7 +1322,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": 22.973,
+      "y": 9.088,
       "z": 0
     },
     "_lrot": {
@@ -1757,7 +1757,7 @@
       "__uuid__": "ed16a3e5-e496-4147-9bdd-dc560e62554c",
       "__expectedType__": "cc.AnimationClip"
     },
-    "flapSpeedPressed": 1.35,
+    "flapSpeedPressed": 2,
     "flapSpeedInAir": 0.65,
     "wingFlapInertiaDuration": 0.45,
     "electricDamageClip": {
@@ -1779,7 +1779,7 @@
     "deathFallNode": {
       "__id__": 57
     },
-    "deathFallDeltaY": -900,
+    "deathFallDeltaY": -1900,
     "deathSequenceDurationSec": 1.85,
     "hpHarvestNode": {
       "__id__": 35
@@ -1789,7 +1789,11 @@
       "__expectedType__": "cc.AnimationClip"
     },
     "hpHarvestClipMinSec": 0.5,
-    "hpHarvestFlySpeedPxPerSec": 520,
+    "hpHarvestFlySpeedPxPerSec": 1020,
+    "startFlyClip": {
+      "__uuid__": "8c966588-e4df-4b36-a6c7-764d1e07107e",
+      "__expectedType__": "cc.AnimationClip"
+    },
     "_id": ""
   },
   {
@@ -1934,6 +1938,9 @@
     "scaleFlightWithWorldSpeed": true,
     "flightWorldSpeedMatch": 0.85,
     "flightGravityMatch": 0.35,
+    "flightMassCoefficient": 1,
+    "flightMassReferenceWidth": 284,
+    "flightMassReferenceHeight": 192.8,
     "_id": ""
   },
   {
@@ -1958,9 +1965,9 @@
     "pathSideDeadZonePx": 24,
     "pathVerticalDeadZonePx": 32,
     "obstacleGroup": 1,
-    "surfaceRunActivationDelaySec": 0.05,
+    "surfaceRunActivationDelaySec": 0,
     "belowFloorSupportOverlapMin": 0.38,
-    "debugLog": true,
+    "debugLog": false,
     "_id": ""
   },
   {

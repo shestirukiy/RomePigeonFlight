@@ -276,10 +276,11 @@ export class PlayerPathSensors extends Component {
         if (!hasBelow) {
             this._surfaceHoldAccumSec = 0;
             forEachPlayerAnimController(this.node, (a) =>
-            a.setRunningOnSurface(false),
-        );
+                a.setRunningOnSurface(false),
+            );
             return;
         }
+        forEachPlayerAnimController(this.node, (a) => a.setFeetOnSurface(true));
         const minSec = this.surfaceRunActivationDelaySec;
         if (minSec <= 0) {
             forEachPlayerAnimController(this.node, (a) =>

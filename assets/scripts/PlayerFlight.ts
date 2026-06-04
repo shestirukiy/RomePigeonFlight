@@ -7,6 +7,9 @@ import {
     Input,
     RigidBody2D,
     ERigidBody2DType,
+    BoxCollider2D,
+    CircleCollider2D,
+    Collider2D,
     Vec2,
     Vec3,
     director,
@@ -150,6 +153,34 @@ export class PlayerFlight extends Component {
     })
     flightGravityMatch = 0.35;
 
+    @property({
+        group: 'Flight',
+        displayName: 'Mass Coefficient',
+        tooltip:
+            'Множитель массы тела. 1 = эталон (см. Mass Reference Size). Размер BoxCollider на массу не влияет — только этот коэффициент.',
+        min: 0.01,
+        step: 0.05,
+        slide: true,
+    })
+    flightMassCoefficient = 1;
+
+    @property({
+        group: 'Flight',
+        displayName: 'Mass Reference Width',
+        tooltip:
+            'Эталонная ширина бокса (px) при калибровке. С coeff=1 масса = width × height (как при density 1 на эталоне).',
+        min: 1,
+    })
+    flightMassReferenceWidth = 284;
+
+    @property({
+        group: 'Flight',
+        displayName: 'Mass Reference Height',
+        tooltip: 'Эталонная высота бокса (px) при калибровке.',
+        min: 1,
+    })
+    flightMassReferenceHeight = 192.8;
+
     /** Локальный X в PlayerContainer — всегда 0 (дорожка раннера). */
     private static readonly RUNWAY_LOCAL_X = 0;
 
@@ -235,6 +266,55 @@ export class PlayerFlight extends Component {
 
     private _savedGravityScale = 1;
 
+    /**
+     * Cocos считает массу из density × площадь коллайдера.
+     * Подбираем density так, чтобы масса = coeff × (эталонная площадь), независимо от текущего size бокса.
+     */
+    private _applyFlightMassFromCoefficient(): void {
+        const colliders = this.node.getComponents(Collider2D);
+        let totalArea = 0;
+        const solids: Collider2D[] = [];
+        for (const col of colliders) {
+            if (!col.enabled || col.sensor) {
+                continue;
+            }
+            const area = this._colliderArea(col);
+            if (area > 0) {
+                totalArea += area;
+                solids.push(col);
+            }
+        }
+        if (solids.length === 0 || totalArea <= 0) {
+            return;
+        }
+
+        const refArea = Math.max(
+            1e-6,
+            this.flightMassReferenceWidth * this.flightMassReferenceHeight,
+        );
+        const coeff = Math.max(0.01, this.flightMassCoefficient);
+        const targetMass = coeff * refArea;
+        const density = targetMass / totalArea;
+
+        for (const col of solids) {
+            col.density = density;
+        }
+
+        this._body?.wakeUp?.();
+    }
+
+    private _colliderArea(col: Collider2D): number {
+        if (col instanceof BoxCollider2D) {
+            const s = col.size;
+            return Math.max(0, s.width) * Math.max(0, s.height);
+        }
+        if (col instanceof CircleCollider2D) {
+            const r = Math.max(0, col.radius);
+            return Math.PI * r * r;
+        }
+        return 0;
+    }
+
     onLoad() {
         const p = this.node.position;
         this._spawnLocalPos.set(PlayerFlight.RUNWAY_LOCAL_X, p.y, p.z);
@@ -249,6 +329,8 @@ export class PlayerFlight extends Component {
             // Lets physics report contacts (obstacles can listen; some setups need listener on dynamic body too).
             this._body.enabledContactListener = true;
         }
+
+        this._applyFlightMassFromCoefficient();
 
         if (!this.pitchVisual) {
             const pigeon = this.node.getChildByName('Pigeon');

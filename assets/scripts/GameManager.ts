@@ -352,6 +352,16 @@ export class GameManager extends Component {
         return this._playerPathSensors()?.shouldHoldForwardScroll() === true;
     }
 
+    /** Мир не скроллится (стена впереди, отдача, блок). */
+    public get isForwardScrollHalted(): boolean {
+        return this._isForwardScrollHalted();
+    }
+
+    /** Опора под ногами (PlayerPathSensors). */
+    public get isPlayerOnSurfaceBelow(): boolean {
+        return this._playerPathSensors()?.isOnSurfaceBelow === true;
+    }
+
     /** Разгон мира после старта / снятия блокировки (forwardScrollEaseInSec). */
     private _tickForwardScrollEase(dt: number): void {
         if (this._isForwardScrollHalted()) {
@@ -1186,6 +1196,9 @@ export class GameManager extends Component {
         this._syncGameplayUiVisible();
         SoundController.instance?.resetVariantRotation();
         SoundController.instance?.playMusicForNewRun();
+        forEachPlayerAnimController(SceneNodeHub.instance?.player, (a) =>
+            a.onGameRunStarted(),
+        );
     }
 
     private _prewarmAnimatedPrefabSpawners(): void {
