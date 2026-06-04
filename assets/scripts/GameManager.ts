@@ -100,6 +100,17 @@ export class GameManager extends Component {
     /** ContinueBttn на Chunk_Start (не Game Over). */
     private _introContinueButtonBound: Button | null = null;
 
+    /**
+     * Пульс (Animation на scale) на той же ноде, что и Button SCALE — перебивает pressed-скейл.
+     * На время нажатия ставим клип на паузу.
+     */
+    private readonly _buttonPulsePressHandlers = new Map<
+        Node,
+        { pause: () => void; resume: () => void }
+    >();
+
+    private _playAgainActionPending = false;
+
     private _gameOverSeedRollCounter = { value: 0 };
     private _gameOverSeedRollTween: Tween<{ value: number }> | null = null;
 
@@ -629,7 +640,7 @@ export class GameManager extends Component {
         type: Button,
         displayName: 'Intro Continue Button',
         tooltip:
-            'ContinueBttn на Chunk_Start — тот же эффект, что тап по экрану. Пусто — ищется автоматически (не Game Over / KTA).',
+            'ContinueBttn на Chunk_Start — единственный ввод на заставке (допечатка, панорама). Пусто — ищется автоматически.',
     })
     introContinueButton: Button | null = null;
 
@@ -664,6 +675,38 @@ export class GameManager extends Component {
         tooltip: 'WatchBttn на KTAPanel (компонент Button).',
     })
     watchButton: Button | null = null;
+
+    @property({
+        group: G_UI,
+        displayName: 'Menu Button Camera Shake',
+        tooltip:
+            'Тряска камеры при нажатии кнопок меню (Continue, Play Again, Share, Watch, Continue на заставке).',
+    })
+    shakeCameraOnMenuButtons = true;
+
+    @property({
+        group: G_UI,
+        displayName: 'Menu Shake Intensity',
+        tooltip:
+            'Множитель амплитуды тряски для кнопок меню (1 = как при уроне). Только если Menu Button Camera Shake включён.',
+        min: 0,
+        max: 2,
+        step: 0.05,
+        slide: true,
+    })
+    menuButtonCameraShakeIntensity = 0.65;
+
+    @property({
+        group: G_UI,
+        displayName: 'Play Again Press Delay (s)',
+        tooltip:
+            'Пауза после нажатия Play Again перед сбросом — чтобы успел scale pressed (обычно ≈ duration кнопки).',
+        min: 0,
+        max: 1,
+        step: 0.01,
+        slide: true,
+    })
+    playAgainPressFeedbackDelaySec = 0.12;
 
     @property({
         group: G_UI,
@@ -802,6 +845,7 @@ export class GameManager extends Component {
     }
 
     onDestroy() {
+        this._cancelPendingPlayAgain();
         this._stopGameOverSeedCountRoll();
         this._stopGameOverMilestoneMetersRoll();
         this._unbindUiButtons();
@@ -1075,6 +1119,7 @@ export class GameManager extends Component {
      * Play Again: сброс уровня/игрока и ожидание тапа (как при первом входе в сцену).
      */
     public returnToTapToStart(): void {
+        this._cancelPendingPlayAgain();
         this._gameOver = false;
         this._dying = false;
         this._instantKillPending = false;
@@ -1400,18 +1445,22 @@ export class GameManager extends Component {
         const cont = this._resolveContinueButton();
         if (cont) {
             cont.node.on(Button.EventType.CLICK, this._onContinueClick, this);
+            this._enableButtonPressScaleFeedback(cont);
         }
         const again = this._resolvePlayAgainButton();
         if (again) {
             again.node.on(Button.EventType.CLICK, this._onPlayAgainClick, this);
+            this._enableButtonPressScaleFeedback(again);
         }
         const share = this._resolveShareButton();
         if (share) {
             share.node.on(Button.EventType.CLICK, this._onShareClick, this);
+            this._enableButtonPressScaleFeedback(share);
         }
         const watch = this._resolveWatchButton();
         if (watch) {
             watch.node.on(Button.EventType.CLICK, this._onWatchClick, this);
+            this._enableButtonPressScaleFeedback(watch);
         }
     }
 
@@ -1419,19 +1468,117 @@ export class GameManager extends Component {
         const cont = this._resolveContinueButton();
         if (cont?.node?.isValid) {
             cont.node.off(Button.EventType.CLICK, this._onContinueClick, this);
+            this._disableButtonPressScaleFeedback(cont.node);
         }
         const again = this._resolvePlayAgainButton();
         if (again?.node?.isValid) {
             again.node.off(Button.EventType.CLICK, this._onPlayAgainClick, this);
+            this._disableButtonPressScaleFeedback(again.node);
         }
         const share = this._resolveShareButton();
         if (share?.node?.isValid) {
             share.node.off(Button.EventType.CLICK, this._onShareClick, this);
+            this._disableButtonPressScaleFeedback(share.node);
         }
         const watch = this._resolveWatchButton();
         if (watch?.node?.isValid) {
             watch.node.off(Button.EventType.CLICK, this._onWatchClick, this);
+            this._disableButtonPressScaleFeedback(watch.node);
         }
+    }
+
+    /**
+     * Animation (пульс scale) и Button.transition=SCALE конфликтуют:
+     * клип каждый кадр перезаписывает scale, pressed не виден. Пауза на время нажатия.
+     * PlayAgainBttn: пульс в клипе KTAPanel на родителе, не на ноде кнопки.
+     */
+    private _enableButtonPressScaleFeedback(btn: Button): void {
+        const node = btn.node;
+        if (!node?.isValid || this._buttonPulsePressHandlers.has(node)) {
+            return;
+        }
+        if (btn.transition !== Button.Transition.SCALE) {
+            return;
+        }
+
+        const pulseAnims: Animation[] = [];
+        const selfAnim = node.getComponent(Animation);
+        if (selfAnim) {
+            pulseAnims.push(selfAnim);
+        }
+        if (!selfAnim) {
+            const panelAnim = this._resolveKtaPanelPulseAnimation(btn);
+            if (panelAnim) {
+                pulseAnims.push(panelAnim);
+            }
+        }
+        if (pulseAnims.length === 0) {
+            return;
+        }
+
+        const pause = () => {
+            for (const anim of pulseAnims) {
+                if (anim.isValid) {
+                    anim.pause();
+                }
+            }
+        };
+        const resume = () => {
+            for (const anim of pulseAnims) {
+                if (anim.isValid) {
+                    anim.resume();
+                }
+            }
+        };
+        this._buttonPulsePressHandlers.set(node, { pause, resume });
+        node.on(Node.EventType.TOUCH_START, pause, this);
+        node.on(Node.EventType.TOUCH_END, resume, this);
+        node.on(Node.EventType.TOUCH_CANCEL, resume, this);
+        node.on(Node.EventType.MOUSE_DOWN, pause, this);
+        node.on(Node.EventType.MOUSE_UP, resume, this);
+    }
+
+    /** KTAPanel.anim пульсирует scale у PlayAgainBttn через иерархию. */
+    private _resolveKtaPanelPulseAnimation(btn: Button): Animation | null {
+        const panel = this.ktaPanel;
+        if (panel?.isValid && this._isNodeUnderPanel(btn.node, panel)) {
+            return panel.getComponent(Animation);
+        }
+        let cur: Node | null = btn.node.parent;
+        while (cur) {
+            if (cur.name === 'KTAPanel') {
+                return cur.getComponent(Animation);
+            }
+            cur = cur.parent;
+        }
+        return null;
+    }
+
+    private _isNodeUnderPanel(node: Node, panel: Node): boolean {
+        let cur: Node | null = node;
+        while (cur) {
+            if (cur === panel) {
+                return true;
+            }
+            cur = cur.parent;
+        }
+        return false;
+    }
+
+    private _disableButtonPressScaleFeedback(node: Node): void {
+        if (!node?.isValid) {
+            return;
+        }
+        const handlers = this._buttonPulsePressHandlers.get(node);
+        if (!handlers) {
+            return;
+        }
+        node.off(Node.EventType.TOUCH_START, handlers.pause, this);
+        node.off(Node.EventType.TOUCH_END, handlers.resume, this);
+        node.off(Node.EventType.TOUCH_CANCEL, handlers.resume, this);
+        node.off(Node.EventType.MOUSE_DOWN, handlers.pause, this);
+        node.off(Node.EventType.MOUSE_UP, handlers.resume, this);
+        this._buttonPulsePressHandlers.delete(node);
     }
 
     private _tryBindIntroContinueButton(attempt: number): void {
@@ -1440,6 +1587,7 @@ export class GameManager extends Component {
             this._unbindIntroContinueButton();
             this._introContinueButtonBound = btn;
             btn.node.on(Button.EventType.CLICK, this._onIntroContinueClick, this);
+            this._enableButtonPressScaleFeedback(btn);
             return;
         }
         if (attempt < 80) {
@@ -1455,11 +1603,9 @@ export class GameManager extends Component {
             this._introContinueButtonBound = null;
             return;
         }
-        this._introContinueButtonBound.node.off(
-            Button.EventType.CLICK,
-            this._onIntroContinueClick,
-            this,
-        );
+        const node = this._introContinueButtonBound.node;
+        node.off(Button.EventType.CLICK, this._onIntroContinueClick, this);
+        this._disableButtonPressScaleFeedback(node);
         this._introContinueButtonBound = null;
     }
 
@@ -1502,8 +1648,28 @@ export class GameManager extends Component {
     }
 
     private _onIntroContinueClick(): void {
+        this._shakeCameraOnMenuButton();
         this._suppressTapToStart = false;
+        const intro = GameIntroController.instance;
+        if (intro?.tryConsumeIntroTap()) {
+            return;
+        }
+        if (intro?.isBlockingInput) {
+            return;
+        }
         this._onMenuTap();
+    }
+
+    /** Тряска камеры при клике по кнопкам меню (если включено в UI). */
+    private _shakeCameraOnMenuButton(): void {
+        if (!this.shakeCameraOnMenuButtons) {
+            return;
+        }
+        const mult = Math.max(0, this.menuButtonCameraShakeIntensity);
+        if (mult <= 0) {
+            return;
+        }
+        CameraShake.instance?.shake(mult);
     }
 
     private _resolveContinueButton(): Button | null {
@@ -1556,6 +1722,7 @@ export class GameManager extends Component {
     }
 
     private _onContinueClick(): void {
+        this._shakeCameraOnMenuButton();
         if (this._dying || !this._gameOver || this._ktaPanelShown) {
             return;
         }
@@ -1563,13 +1730,48 @@ export class GameManager extends Component {
     }
 
     private _onPlayAgainClick(): void {
+        this._shakeCameraOnMenuButton();
+        if (this._dying || !this._gameOver || !this._ktaPanelShown) {
+            return;
+        }
+        if (this._playAgainActionPending) {
+            return;
+        }
+
+        const btn = this._resolvePlayAgainButton();
+        const delay = this._playAgainPressDelaySec(btn);
+        if (delay <= 0) {
+            this.returnToTapToStart();
+            return;
+        }
+
+        this._playAgainActionPending = true;
+        this.scheduleOnce(this._executePlayAgainAfterPressFeedback, delay);
+    }
+
+    private _playAgainPressDelaySec(btn: Button | null): number {
+        if (this.playAgainPressFeedbackDelaySec > 0) {
+            return this.playAgainPressFeedbackDelaySec;
+        }
+        const transitionSec = btn?.duration ?? 0.1;
+        return transitionSec + 0.02;
+    }
+
+    private _executePlayAgainAfterPressFeedback(): void {
+        this._playAgainActionPending = false;
         if (this._dying || !this._gameOver || !this._ktaPanelShown) {
             return;
         }
         this.returnToTapToStart();
     }
 
+    private _cancelPendingPlayAgain(): void {
+        this.unschedule(this._executePlayAgainAfterPressFeedback);
+        this._playAgainActionPending = false;
+    }
+
     private _onShareClick(): void {
+        this._shakeCameraOnMenuButton();
         if (this._dying || !this._gameOver || !this._ktaPanelShown) {
             return;
         }
@@ -1580,6 +1782,7 @@ export class GameManager extends Component {
     }
 
     private _onWatchClick(): void {
+        this._shakeCameraOnMenuButton();
         if (this._dying || !this._gameOver || !this._ktaPanelShown) {
             return;
         }
@@ -1590,9 +1793,6 @@ export class GameManager extends Component {
     }
 
     private _onMenuTap(): void {
-        if (GameIntroController.instance?.tryConsumeIntroTap()) {
-            return;
-        }
         if (GameIntroController.instance?.isBlockingInput) {
             return;
         }

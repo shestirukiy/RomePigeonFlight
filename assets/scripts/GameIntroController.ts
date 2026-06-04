@@ -18,9 +18,9 @@ const G_INTRO = { id: 'Intro', name: 'First launch intro' };
 const G_CAM = { id: 'Camera', name: 'Camera pan' };
 
 /**
- * Запуск сцены: камера на introPosition, ждём любой клик → (опц.) клип → панорама на gameplayPosition.
+ * Запуск сцены: камера на introPosition, печать текста, затем ContinueBttn → панорама.
+ * Клики по экрану на заставке не обрабатываются — только кнопка Continue (GameManager).
  * После Play Again (рестарт внутри сессии) — без заставки, сразу игровая камера.
- * Без localStorage: только флаг сессии, сбрасывается при перезагрузке сцены.
  */
 @ccclass('GameIntroController')
 @executionOrder(-100)
@@ -108,11 +108,27 @@ export class GameIntroController extends Component {
     })
     typewriterCharIntervalSec = 0.045;
 
+    @property({
+        group: G_INTRO,
+        displayName: 'Intro Board Name',
+        tooltip:
+            'Нода IntroBoard в Chunk_Start: после допечатки текста проигрывается SkipTextScroll.',
+    })
+    introBoardNodeName = 'IntroBoard';
+
+    @property({
+        group: G_INTRO,
+        displayName: 'Skip Text Scroll Clip',
+        tooltip: 'Клип Animation на IntroBoard после окончания печати.',
+    })
+    skipTextScrollClipName = 'SkipTextScroll';
+
     private _blockingInput = false;
     /** Ждём клик для панорамы камеры (после допечатки текста). */
     private _awaitingUserTap = false;
     private _running = false;
     private _label: Label | null = null;
+    private _introBoardAnim: Animation | null = null;
     private _fullLabelText = '';
     private _typewriterCharIndex = 0;
     private _typewriterDone = false;
@@ -127,7 +143,8 @@ export class GameIntroController extends Component {
     }
 
     /**
-     * Первый клик по экрану запускает заставку (панораму). Возвращает true, если клик принят.
+     * ContinueBttn на заставке: допечатка / SkipTextScroll / панорама камеры.
+     * Возвращает true, если нажатие обработано заставкой.
      */
     public tryConsumeIntroTap(): boolean {
         if (!this._shouldPlayIntro() || this._running) {
@@ -177,7 +194,7 @@ export class GameIntroController extends Component {
             this._awaitingUserTap = true;
             this._applyIntroCamera(cam);
             console.log(
-                '[GameIntroController] Заставка: печать текста LabelBoard, затем панорама камеры.',
+                '[GameIntroController] Заставка: печать LabelBoard → ContinueBttn → SkipTextScroll → панорама.',
             );
             this.scheduleOnce(() => this._applyIntroCamera(this._resolveCamera()), 0);
         } else {
@@ -190,7 +207,7 @@ export class GameIntroController extends Component {
             return;
         }
         this._applyIntroCamera(this._resolveCamera());
-        this._tryStartLabelTypewriter(0);
+        this._tryStartIntroContent(0);
     }
 
     onDestroy() {
@@ -216,9 +233,13 @@ export class GameIntroController extends Component {
         return !this._skipIntroAfterRestart;
     }
 
-    private _tryStartLabelTypewriter(attempt: number): void {
+    private _tryStartIntroContent(attempt: number): void {
         if (!this._shouldPlayIntro() || this._running) {
             return;
+        }
+
+        if (!this._introBoardAnim?.isValid) {
+            this._introBoardAnim = this._findIntroBoardAnimation();
         }
 
         const label = this._findLabelBoard();
@@ -234,7 +255,7 @@ export class GameIntroController extends Component {
         }
 
         if (attempt < 60) {
-            this.scheduleOnce(() => this._tryStartLabelTypewriter(attempt + 1), 0.1);
+            this.scheduleOnce(() => this._tryStartIntroContent(attempt + 1), 0.1);
             return;
         }
 
@@ -244,26 +265,38 @@ export class GameIntroController extends Component {
         this._typewriterDone = true;
     }
 
-    private _findLabelBoard(): Label | null {
+    private _findNodeByName(nodeName: string): Node | null {
         const scene = this.node.scene;
         if (!scene?.isValid) {
             return null;
         }
-        const targetName = this.labelBoardNodeName.trim() || 'LabelBoard';
+        const targetName = nodeName.trim();
+        if (!targetName) {
+            return null;
+        }
         const stack: Node[] = [scene];
         while (stack.length > 0) {
             const node = stack.pop()!;
             if (node.name === targetName) {
-                const label = node.getComponent(Label);
-                if (label) {
-                    return label;
-                }
+                return node;
             }
             for (let i = node.children.length - 1; i >= 0; i--) {
                 stack.push(node.children[i]);
             }
         }
         return null;
+    }
+
+    private _findLabelBoard(): Label | null {
+        const node = this._findNodeByName(this.labelBoardNodeName || 'LabelBoard');
+        return node?.getComponent(Label) ?? null;
+    }
+
+    private _findIntroBoardAnimation(): Animation | null {
+        const node = this._findNodeByName(
+            this.introBoardNodeName || 'IntroBoard',
+        );
+        return node?.getComponent(Animation) ?? null;
     }
 
     private _tickTypewriter(): void {
@@ -276,21 +309,55 @@ export class GameIntroController extends Component {
         this._label.string = this._fullLabelText.slice(0, this._typewriterCharIndex);
 
         if (this._typewriterCharIndex >= this._fullLabelText.length) {
-            this._stopTypewriter();
-            this._typewriterDone = true;
+            this._finishTypewriter();
         }
     }
 
     private _completeTypewriterInstant(): void {
         if (!this._label?.isValid) {
-            this._typewriterDone = true;
+            this._finishTypewriter();
             return;
         }
 
         this._stopTypewriter();
         this._label.string = this._fullLabelText;
         this._typewriterCharIndex = this._fullLabelText.length;
+        this._finishTypewriter();
+    }
+
+    /** Текст допечатан (сам или по клику) — проигрываем SkipTextScroll на IntroBoard. */
+    private _finishTypewriter(): void {
+        if (this._typewriterDone) {
+            return;
+        }
+        this._stopTypewriter();
         this._typewriterDone = true;
+        this._playSkipTextScroll();
+    }
+
+    private _playSkipTextScroll(): void {
+        const anim =
+            this._introBoardAnim?.isValid
+                ? this._introBoardAnim
+                : this._findIntroBoardAnimation();
+        if (!anim?.isValid) {
+            console.warn(
+                `[GameIntroController] "${this.introBoardNodeName}" / Animation не найден — SkipTextScroll пропущен.`,
+            );
+            return;
+        }
+        this._introBoardAnim = anim;
+
+        const clipName =
+            this.skipTextScrollClipName.trim() ||
+            anim.defaultClip?.name ||
+            anim.clips[0]?.name ||
+            'SkipTextScroll';
+        if (!clipName) {
+            return;
+        }
+        anim.stop();
+        anim.play(clipName);
     }
 
     private _stopTypewriter(): void {

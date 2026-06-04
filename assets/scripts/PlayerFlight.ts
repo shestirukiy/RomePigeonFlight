@@ -115,7 +115,7 @@ export class PlayerFlight extends Component {
             'После первой пройденной вехи: лимиты vy и слабее подъём под скорость Plane 1 (вехи × parallax). ' +
             'До вехи — как без галочки. Pass Boost не учитывается.',
     })
-    scaleFlightWithWorldSpeed = false;
+    scaleFlightWithWorldSpeed = true;
 
     @property({
         group: 'Flight',
@@ -127,7 +127,7 @@ export class PlayerFlight extends Component {
         step: 0.05,
         slide: true,
     })
-    flightWorldSpeedMatch = 1;
+    flightWorldSpeedMatch = 0.85;
 
     @property({
         group: 'Flight',
@@ -139,7 +139,7 @@ export class PlayerFlight extends Component {
         step: 0.05,
         slide: true,
     })
-    flightGravityMatch = 0.5;
+    flightGravityMatch = 0.35;
 
     /** Локальный X в PlayerContainer — всегда 0 (дорожка раннера). */
     private static readonly RUNWAY_LOCAL_X = 0;

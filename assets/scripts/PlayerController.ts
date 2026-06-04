@@ -23,7 +23,7 @@ export class PlayerController extends Component {
         tooltip:
             'После потери HP игрок не получает урон повторно, пока не истечёт таймер.',
     })
-    damageInvincibilitySec = 0.85;
+    damageInvincibilitySec = 3;
 
     @property({
         group: G_CLOUD,
@@ -39,14 +39,14 @@ export class PlayerController extends Component {
         tooltip:
             'Минимум между повторными срабатываниями одного и того же коллайдера облака.',
     })
-    electricCloudCooldownSeconds = 0.55;
+    electricCloudCooldownSeconds = 4;
 
     @property({
         group: G_WALL,
         displayName: 'Knockback duration (s)',
         tooltip: 'Сколько секунд идёт отдача мира назад.',
     })
-    towerWallKnockbackDurationSec = 0.55;
+    towerWallKnockbackDurationSec = 0.7;
 
     @property({
         group: G_WALL,
@@ -54,7 +54,7 @@ export class PlayerController extends Component {
         tooltip:
             'Модуль скорости сдвига чанков при отдаче (положительное число).',
     })
-    towerWallKnockbackHorizontalPxPerSec = 280;
+    towerWallKnockbackHorizontalPxPerSec = 1300;
 
     @property({
         group: G_WALL,
@@ -70,21 +70,21 @@ export class PlayerController extends Component {
         tooltip:
             'Сколько секунд показывается анимация удара. Если 0 — берётся то же время, что и «Knockback duration».',
     })
-    towerWallHitAnimationDurationSec = 0;
+    towerWallHitAnimationDurationSec = 0.7;
 
     @property({
         group: G_WALL,
         displayName: 'Lift lock (s)',
         tooltip: 'Блок подъёма после удара; 0 — без блока.',
     })
-    towerWallDefaultLiftLockDuration = 0.45;
+    towerWallDefaultLiftLockDuration = 0.7;
 
     @property({
         group: G_WALL,
         displayName: 'Cooldown (s)',
         tooltip: 'Минимум между повторными срабатываниями одной и той же стены.',
     })
-    towerWallCooldownSeconds = 0.65;
+    towerWallCooldownSeconds = 0.5;
 
     private _flight: PlayerFlight | null = null;
     private _anim: PlayerAnimationController | null = null;

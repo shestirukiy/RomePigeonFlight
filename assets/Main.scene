@@ -1363,11 +1363,7 @@
     "fileId": "9f+H9gXp5HhbudZZzk5zaL",
     "prefabRootNode": null,
     "mountedChildren": [],
-    "mountedComponents": [
-      {
-        "__id__": 72
-      }
-    ],
+    "mountedComponents": [],
     "propertyOverrides": [
       {
         "__id__": 75
@@ -1452,48 +1448,6 @@
       }
     ],
     "removedComponents": []
-  },
-  {
-    "__type__": "cc.MountedComponentsInfo",
-    "targetInfo": {
-      "__id__": 73
-    },
-    "components": [
-      {
-        "__id__": 74
-      }
-    ]
-  },
-  {
-    "__type__": "cc.TargetInfo",
-    "localID": [
-      "53h+W4e9FJ168K0mSwSAXD"
-    ]
-  },
-  {
-    "__type__": "8132aLAz0JHDZJMaAGpDuOa",
-    "_name": "",
-    "_objFlags": 0,
-    "__editorExtras__": {
-      "mountedRoot": {
-        "__id__": 69
-      }
-    },
-    "node": {
-      "__id__": 69
-    },
-    "_enabled": true,
-    "__prefab": null,
-    "damageInvincibilitySec": 3,
-    "electricDefaultLiftLockDuration": 0.5,
-    "electricCloudCooldownSeconds": 4,
-    "towerWallKnockbackDurationSec": 0.7,
-    "towerWallKnockbackHorizontalPxPerSec": 1300,
-    "towerWallDownwardImpulse": 0,
-    "towerWallHitAnimationDurationSec": 0.7,
-    "towerWallDefaultLiftLockDuration": 0.7,
-    "towerWallCooldownSeconds": 0.5,
-    "_id": "7c4vpcMFZEX7NfDl+srzHt"
   },
   {
     "__type__": "CCPropertyOverrideInfo",

@@ -59,7 +59,7 @@ export class PlayerAnimationController extends Component {
         tooltip:
             'Скорость воспроизведения клипа при удержании экрана (быстрое хлопанье).',
     })
-    flapSpeedPressed = 1.35;
+    flapSpeedPressed = 1.5;
 
     @property({
         displayName: 'Flap Speed (In Air)',
@@ -73,7 +73,7 @@ export class PlayerAnimationController extends Component {
         tooltip:
             'Секунды после отпускания: скорость хлопанья линейно падает до нуля (инерция крыльев).',
     })
-    wingFlapInertiaDuration = 0.45;
+    wingFlapInertiaDuration = 1;
 
     @property({
         type: AnimationClip,
@@ -121,7 +121,7 @@ export class PlayerAnimationController extends Component {
         tooltip:
             'На сколько local Y сместить узел за время death-клипа (от текущей позы, отрицательное = вниз).',
     })
-    deathFallDeltaY = -900;
+    deathFallDeltaY = -1900;
 
     @property({
         displayName: 'Death Sequence Duration',
@@ -156,7 +156,7 @@ export class PlayerAnimationController extends Component {
         displayName: 'HP Harvest Fly Speed (px/s)',
         tooltip: 'Скорость полёта к слоту HP после окончания клипа.',
     })
-    hpHarvestFlySpeedPxPerSec = 520;
+    hpHarvestFlySpeedPxPerSec = 1020;
 
     private _anim: Animation | null = null;
     private _flapState: AnimationState | null = null;

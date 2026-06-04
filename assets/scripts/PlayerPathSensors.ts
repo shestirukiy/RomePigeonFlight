@@ -63,7 +63,7 @@ export class PlayerPathSensors extends Component {
             'Группа коллайдеров-препятствий.\n' +
             '-1 — любой твёрдый коллайдер (Sensor=false) вне игрока.',
     })
-    obstacleGroup = -1;
+    obstacleGroup = 1;
 
     @property({
         displayName: 'Surface run activation delay (s)',
@@ -71,7 +71,7 @@ export class PlayerPathSensors extends Component {
             'Непрерывный контакт «снизу» должен длиться не меньше этого времени, чтобы включить анимацию бега. ' +
             'Короткие касания игнорируются. 0 — без задержки.',
     })
-    surfaceRunActivationDelaySec = 0.12;
+    surfaceRunActivationDelaySec = 0.05;
 
     @property({
         displayName: 'Below — floor overlap min',
@@ -85,7 +85,7 @@ export class PlayerPathSensors extends Component {
         displayName: 'Debug Log',
         tooltip: 'Контакты и счётчики блокировок.',
     })
-    debugLog = false;
+    debugLog = true;
 
     private static readonly _PRUNE_AABB_EPS = 12;
 

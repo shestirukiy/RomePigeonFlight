@@ -13,5 +13,10 @@
         }
       }
     }
+  },
+  "splash-setting": {
+    "logo": {
+      "type": "none"
+    }
   }
 }
