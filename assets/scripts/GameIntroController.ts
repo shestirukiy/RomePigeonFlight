@@ -179,6 +179,16 @@ export class GameIntroController extends Component {
 
     private _markSkipIntroAfterRestart(): void {
         this._skipIntroAfterRestart = true;
+        this._clearIntroBlockingState();
+    }
+
+    /** После Play Again заставка не должна блокировать тап по экрану. */
+    private _clearIntroBlockingState(): void {
+        this._blockingInput = false;
+        this._awaitingUserTap = false;
+        this._running = false;
+        this._stopTypewriter();
+        this._stopPanTween();
     }
 
     onLoad() {

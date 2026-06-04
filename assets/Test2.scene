@@ -10803,6 +10803,9 @@
     "watchButton": {
       "__id__": 280
     },
+    "shakeCameraOnMenuButtons": true,
+    "menuButtonCameraShakeIntensity": 0.65,
+    "playAgainPressFeedbackDelaySec": 0.12,
     "watchUrl": "https://www.youtube.com/@TriBogatirya",
     "gameOverSeedCountRollDurationSec": 1.2,
     "gameOverMilestoneRollDurationSec": 1.2,
@@ -10905,6 +10908,8 @@
     "introWaitSec": 0.5,
     "labelBoardNodeName": "LabelBoard",
     "typewriterCharIntervalSec": 0.1,
+    "introBoardNodeName": "IntroBoard",
+    "skipTextScrollClipName": "SkipTextScroll",
     "_id": "dbIphvZEtAa5GukH7Ef/Ii"
   },
   {

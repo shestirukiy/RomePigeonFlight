@@ -94,8 +94,16 @@ export class GameManager extends Component {
     /** После game over пользователь уже тапнул — показана KTAPanel. */
     private _ktaPanelShown = false;
 
-    /** После Play Again — игнорировать тап, пока палец/кнопка мыши не отпущены. */
+    /** Игнорировать один touch/mouse down (клик по UI). Сбрасывается на up. */
     private _suppressTapToStart = false;
+
+    /** После returnToTapToStart — ждём новый тап (не отпускание клика по Play Again). */
+    private _awaitingFirstTapToRun = false;
+
+    private _requireFreshPointerDownForRun = false;
+
+    /** Последний pointer down не запустил забег (suppress / game over). */
+    private _pointerDownDidNotStartRun = false;
 
     /** ContinueBttn на Chunk_Start (не Game Over). */
     private _introContinueButtonBound: Button | null = null;
@@ -1126,7 +1134,10 @@ export class GameManager extends Component {
         this._cancelDeferredDeathSequence();
         this._ktaPanelShown = false;
         this._playing = false;
-        this._suppressTapToStart = true;
+        this._suppressTapToStart = false;
+        this._awaitingFirstTapToRun = true;
+        this._requireFreshPointerDownForRun = true;
+        this._pointerDownDidNotStartRun = false;
         this._hideOverlayPanels();
         this._syncGameplayUiVisible();
         GameIntroController.skipIntroAfterRestart();
@@ -1148,6 +1159,10 @@ export class GameManager extends Component {
         if (this._playing) {
             return;
         }
+        this._awaitingFirstTapToRun = false;
+        this._requireFreshPointerDownForRun = false;
+        this._pointerDownDidNotStartRun = false;
+        this._suppressTapToStart = false;
         SoundController.instance?.playRunStartTap();
         this._gameOver = false;
         this._dying = false;
@@ -1794,22 +1809,43 @@ export class GameManager extends Component {
 
     private _onMenuTap(): void {
         if (GameIntroController.instance?.isBlockingInput) {
+            this._pointerDownDidNotStartRun = true;
             return;
         }
         if (this._suppressTapToStart) {
+            this._pointerDownDidNotStartRun = true;
             return;
         }
+        this._pointerDownDidNotStartRun = !this._tryStartRunFromMenuTap();
+    }
+
+    private _tryStartRunFromMenuTap(): boolean {
         if (this._dying) {
-            return;
+            return false;
         }
         if (this._playing && !this._gameOver) {
-            return;
+            return false;
         }
         if (this._gameOver) {
             // GameOver → KTAPanel только через кнопку Continue.
-            return;
+            return false;
         }
         this.startNewRun();
+        return true;
+    }
+
+    private _tryStartRunAfterPointerUp(): void {
+        if (this._requireFreshPointerDownForRun) {
+            return;
+        }
+        if (!this._awaitingFirstTapToRun || !this._pointerDownDidNotStartRun) {
+            return;
+        }
+        if (GameIntroController.instance?.isBlockingInput) {
+            return;
+        }
+        this._pointerDownDidNotStartRun = false;
+        this._tryStartRunFromMenuTap();
     }
 
     private _resetScrollAndKickback(): void {
@@ -2791,15 +2827,18 @@ export class GameManager extends Component {
     }
 
     private _onTouchStart(_e: EventTouch) {
+        this._requireFreshPointerDownForRun = false;
         this._onMenuTap();
     }
 
     private _onTouchEnd(_e: EventTouch | EventMouse) {
         this._suppressTapToStart = false;
+        this._tryStartRunAfterPointerUp();
     }
 
     private _onMouseDown(e: EventMouse) {
         if (e.getButton() === 0) {
+            this._requireFreshPointerDownForRun = false;
             this._onMenuTap();
         }
     }
