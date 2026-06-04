@@ -16,6 +16,23 @@ import { PlayerFlight } from './PlayerFlight';
 
 const { ccclass, property } = _decorator;
 
+/** Все контроллеры анимации на Player (Pigeon + Fedia overlay). */
+export function forEachPlayerAnimController(
+    playerRoot: Node | null | undefined,
+    fn: (anim: PlayerAnimationController) => void,
+): void {
+    if (!playerRoot?.isValid) {
+        return;
+    }
+    for (const anim of playerRoot.getComponentsInChildren(
+        PlayerAnimationController,
+    )) {
+        if (anim?.enabled && anim.isValid) {
+            fn(anim);
+        }
+    }
+}
+
 type HpHarvestRun = {
     node: Node;
     slotIndex: number;
@@ -158,9 +175,9 @@ export class PlayerAnimationController extends Component {
     })
     hpHarvestFlySpeedPxPerSec = 1020;
 
-    private _anim: Animation | null = null;
+    protected _anim: Animation | null = null;
     private _flapState: AnimationState | null = null;
-    private _flight: PlayerFlight | null = null;
+    protected _flight: PlayerFlight | null = null;
 
     private _electricOverlayRemain = 0;
 
@@ -185,8 +202,8 @@ export class PlayerAnimationController extends Component {
     /** Проигрывается deathClip до вызова onComplete. */
     private _deathSequenceActive = false;
 
-    /** Local position PigeonBody в префабе — сброс после забега. */
-    private readonly _deathFallSpawnLocal = new Vec3();
+    /** Local position тела в префабе — сброс после забега. */
+    protected readonly _deathFallSpawnLocal = new Vec3();
 
     private _deathWingWasActive = true;
 
@@ -199,10 +216,7 @@ export class PlayerAnimationController extends Component {
 
     onLoad() {
         const pigeon = this._resolvePigeonRoot() ?? this.node;
-        this._anim =
-            pigeon.getComponent(Animation) ??
-            this.getComponent(Animation) ??
-            this.getComponentInChildren(Animation);
+        this._anim = this._resolveAnimTarget();
         this._flight =
             this.getComponent(PlayerFlight) ??
             this.node.parent?.getComponent(PlayerFlight) ??
@@ -213,6 +227,15 @@ export class PlayerAnimationController extends Component {
             this._deathFallSpawnLocal.set(fallNode.position);
         }
         this._hideHpHarvestTemplate();
+    }
+
+    protected _resolveAnimTarget(): Animation | null {
+        const pigeon = this._resolvePigeonRoot() ?? this.node;
+        return (
+            pigeon.getComponent(Animation) ??
+            this.getComponent(Animation) ??
+            this.getComponentInChildren(Animation)
+        );
     }
 
     start() {
@@ -369,7 +392,7 @@ export class PlayerAnimationController extends Component {
         return true;
     }
 
-    private _ensureClipOnAnimator(clip: AnimationClip): void {
+    protected _ensureClipOnAnimator(clip: AnimationClip): void {
         if (!this._anim) {
             return;
         }
@@ -423,19 +446,19 @@ export class PlayerAnimationController extends Component {
         cb?.();
     };
 
-    private _resolvePigeonRoot(): Node | null {
+    protected _resolvePigeonRoot(): Node | null {
         if (this.node.name === 'Pigeon') {
             return this.node;
         }
         return this.node.getChildByName('Pigeon');
     }
 
-    /** Спрайт тела — всегда PigeonBody, не путать с узлом падения. */
-    private _resolvePigeonBodyNode(): Node | null {
+    /** Спрайт тела — PigeonBody / FediaAnim, не путать с узлом падения. */
+    protected _resolvePigeonBodyNode(): Node | null {
         return this._resolvePigeonRoot()?.getChildByName('PigeonBody') ?? null;
     }
 
-    private _resolveDeathFallNode(): Node | null {
+    protected _resolveDeathFallNode(): Node | null {
         if (this.deathFallNode?.isValid) {
             const body = this._resolvePigeonBodyNode();
             if (body && this.deathFallNode !== body) {
@@ -461,7 +484,7 @@ export class PlayerAnimationController extends Component {
         tween(fallNode).to(durationSec, { position: to }, { easing: 'quadIn' }).start();
     }
 
-    private _resetDeathFallPose(): void {
+    protected _resetDeathFallPose(): void {
         const fallNode = this._resolveDeathFallNode();
         if (!fallNode?.isValid) {
             return;
@@ -476,7 +499,7 @@ export class PlayerAnimationController extends Component {
     }
 
     /** После смерти playDeath выключает узел — для забега / бега снова включаем. */
-    private _restoreWingVisibility(): void {
+    protected _restoreWingVisibility(): void {
         const wing = this._resolvePigeonBodyNode()?.getChildByName('PigeonFlyWing');
         if (wing?.isValid) {
             wing.active = true;
@@ -484,7 +507,7 @@ export class PlayerAnimationController extends Component {
     }
 
     /** Спрайты тела/ног — только из deathClip; код лишь прячет крыло, если клип его не гасит. */
-    private _hideWingForDeath(): void {
+    protected _hideWingForDeath(): void {
         const wing = this._resolvePigeonBodyNode()?.getChildByName('PigeonFlyWing');
         if (wing?.isValid) {
             this._deathWingWasActive = wing.active;
@@ -914,7 +937,7 @@ export class PlayerAnimationController extends Component {
         return anim.defaultClip;
     }
 
-    private _hideHpHarvestTemplate(): void {
+    protected _hideHpHarvestTemplate(): void {
         const template = this._resolveHpHarvestTemplate();
         if (!template?.isValid) {
             return;

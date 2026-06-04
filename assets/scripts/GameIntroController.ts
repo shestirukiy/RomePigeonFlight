@@ -28,9 +28,6 @@ const G_CAM = { id: 'Camera', name: 'Camera pan' };
 export class GameIntroController extends Component {
     private static _inst: GameIntroController | null = null;
 
-    /** После Play Again — static: Chunk_Start пересоздаётся, инстанс новый. */
-    private static _skipIntroAfterRestart = false;
-
     public static get instance(): GameIntroController | null {
         return GameIntroController._inst;
     }
@@ -244,9 +241,8 @@ export class GameIntroController extends Component {
         return true;
     }
 
-    /** Вызвать из GameManager.returnToTapToStart — не показывать заставку до перезагрузки сцены. */
+    /** Вызвать из GameManager.returnToTapToStart — снять блок ввода (камеру ставит новый Chunk_Start). */
     public static skipIntroAfterRestart(): void {
-        GameIntroController._skipIntroAfterRestart = true;
         GameIntroController._inst?._clearIntroBlockingState();
     }
 
@@ -275,11 +271,10 @@ export class GameIntroController extends Component {
         if (this._shouldPlayIntro()) {
             this._blockingInput = true;
             this._awaitingUserTap = false;
-            this._applyIntroCamera(cam);
+            this._ensureIntroCamera(0);
             console.log(
                 '[GameIntroController] Заставка: typewriter → Skip → ChangeToStart → StartGameBttn → панорама.',
             );
-            this.scheduleOnce(() => this._applyIntroCamera(this._resolveCamera()), 0);
         } else {
             this.snapToGameplayCamera();
         }
@@ -291,7 +286,7 @@ export class GameIntroController extends Component {
         if (!this._shouldPlayIntro()) {
             return;
         }
-        this._applyIntroCamera(this._resolveCamera());
+        this._ensureIntroCamera(0);
         this._tryStartIntroContent(0);
     }
 
@@ -316,7 +311,26 @@ export class GameIntroController extends Component {
     }
 
     private _shouldPlayIntro(): boolean {
-        return !GameIntroController._skipIntroAfterRestart;
+        return !(GameSession.game?.isAwaitingFirstTapToRun ?? false);
+    }
+
+    /** Камера/Canvas иногда ещё не готовы в onLoad чанка (редактор) — несколько попыток. */
+    private _ensureIntroCamera(attempt: number): void {
+        if (!this._shouldPlayIntro()) {
+            return;
+        }
+        const cam = this._resolveCamera();
+        if (cam?.isValid) {
+            this._applyIntroCamera(cam);
+            return;
+        }
+        if (attempt >= 40) {
+            console.warn(
+                '[GameIntroController] Камера не найдена — intro-позиция не применена.',
+            );
+            return;
+        }
+        this.scheduleOnce(() => this._ensureIntroCamera(attempt + 1), 0.05);
     }
 
     private _onSkipButtonClick(): void {

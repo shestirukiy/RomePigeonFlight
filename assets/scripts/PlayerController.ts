@@ -1,7 +1,10 @@
 import { _decorator, Component, Node } from 'cc';
 import type { PlayerFlight } from './PlayerFlight';
 import { GameSession, PLAYER_FLIGHT_CCLASS } from './GameSession';
-import { PlayerAnimationController } from './PlayerAnimationController';
+import {
+    forEachPlayerAnimController,
+    PlayerAnimationController,
+} from './PlayerAnimationController';
 import { SoundController } from './SoundController';
 import { SoundId } from './SoundLibrary';
 
@@ -87,8 +90,6 @@ export class PlayerController extends Component {
     towerWallCooldownSeconds = 0.5;
 
     private _flight: PlayerFlight | null = null;
-    private _anim: PlayerAnimationController | null = null;
-
     onLoad() {
         this._flight =
             (this.getComponent(PLAYER_FLIGHT_CCLASS) as PlayerFlight | null) ??
@@ -96,9 +97,10 @@ export class PlayerController extends Component {
                 PLAYER_FLIGHT_CCLASS,
             ) as PlayerFlight | null) ??
             null;
-        this._anim =
-            this.getComponent(PlayerAnimationController) ??
-            this.getComponentInChildren(PlayerAnimationController);
+    }
+
+    private _forEachAnim(fn: (a: PlayerAnimationController) => void): void {
+        forEachPlayerAnimController(this.node, fn);
     }
 
     /**
@@ -115,7 +117,7 @@ export class PlayerController extends Component {
         if (lethal) {
             if (t > 0) {
                 this._flight?.setElectricLiftBlockedFor(t);
-                this._anim?.notifyElectricDamage(t);
+                this._forEachAnim((a) => a.notifyElectricDamage(t));
                 gm.scheduleDeathAfterHazardAnimation(t);
             } else {
                 gm.beginDeathSequence();
@@ -127,7 +129,7 @@ export class PlayerController extends Component {
         }
         this._flight?.setElectricLiftBlockedFor(t);
         this._flight?.allowHorizontalDriftFor(t);
-        this._anim?.notifyElectricDamage(t);
+        this._forEachAnim((a) => a.notifyElectricDamage(t));
     }
 
     /**
@@ -152,7 +154,7 @@ export class PlayerController extends Component {
                     this.towerWallHitAnimationDurationSec > 0
                         ? this.towerWallHitAnimationDurationSec
                         : kd;
-                this._anim?.notifyWallHit(animDur);
+                this._forEachAnim((a) => a.notifyWallHit(animDur));
                 this._flight?.allowHorizontalDriftFor(
                     Math.max(kd, animDur, this.towerWallDefaultLiftLockDuration),
                 );
@@ -178,7 +180,7 @@ export class PlayerController extends Component {
             this.towerWallHitAnimationDurationSec > 0
                 ? this.towerWallHitAnimationDurationSec
                 : kd;
-        this._anim?.notifyWallHit(animDur);
+        this._forEachAnim((a) => a.notifyWallHit(animDur));
         this._flight?.allowHorizontalDriftFor(
             Math.max(kd, animDur, this.towerWallDefaultLiftLockDuration),
         );

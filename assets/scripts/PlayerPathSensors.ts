@@ -11,7 +11,7 @@ import {
     Vec3,
 } from 'cc';
 import { GameManager } from './GameManager';
-import { PlayerAnimationController } from './PlayerAnimationController';
+import { forEachPlayerAnimController } from './PlayerAnimationController';
 import { PlayerController } from './PlayerController';
 import { PickupBase } from './PickupBase';
 import { MilestoneSign } from './MilestoneSign';
@@ -99,7 +99,6 @@ export class PlayerPathSensors extends Component {
 
     private _resolvedPathCollider: Collider2D | null = null;
 
-    private _anim: PlayerAnimationController | null = null;
 
     private _playerCtrl: PlayerController | null = null;
 
@@ -142,7 +141,9 @@ export class PlayerPathSensors extends Component {
         this._activeWallContacts.clear();
         this._electricHazardCoolById.clear();
         this._wallHazardCoolById.clear();
-        this._anim?.setRunningOnSurface(false);
+        forEachPlayerAnimController(this.node, (a) =>
+            a.setRunningOnSurface(false),
+        );
         GameManager.game?.syncPathSensorBlockCounts(0, 0);
     }
 
@@ -152,10 +153,6 @@ export class PlayerPathSensors extends Component {
             this.node.getComponent(BoxCollider2D) ??
             this.node.getComponent(Collider2D);
         this._resolvedPathCollider = probe;
-
-        this._anim =
-            this.getComponent(PlayerAnimationController) ??
-            this.getComponentInChildren(PlayerAnimationController);
 
         if (!this.getComponent(PlayerController)) {
             this.addComponent(PlayerController);
@@ -205,7 +202,9 @@ export class PlayerPathSensors extends Component {
                 this._activeCloudContacts.clear();
                 this._activeWallContacts.clear();
                 this._wasDamageInvincible = false;
-                this._anim?.setRunningOnSurface(false);
+                forEachPlayerAnimController(this.node, (a) =>
+            a.setRunningOnSurface(false),
+        );
             }
             return;
         }
@@ -276,17 +275,23 @@ export class PlayerPathSensors extends Component {
         const hasBelow = this._hasActiveSurfaceSupportBelow();
         if (!hasBelow) {
             this._surfaceHoldAccumSec = 0;
-            this._anim?.setRunningOnSurface(false);
+            forEachPlayerAnimController(this.node, (a) =>
+            a.setRunningOnSurface(false),
+        );
             return;
         }
         const minSec = this.surfaceRunActivationDelaySec;
         if (minSec <= 0) {
-            this._anim?.setRunningOnSurface(true);
+            forEachPlayerAnimController(this.node, (a) =>
+                a.setRunningOnSurface(true),
+            );
             return;
         }
         this._surfaceHoldAccumSec += dt;
         if (this._surfaceHoldAccumSec >= minSec) {
-            this._anim?.setRunningOnSurface(true);
+            forEachPlayerAnimController(this.node, (a) =>
+                a.setRunningOnSurface(true),
+            );
         }
     }
 

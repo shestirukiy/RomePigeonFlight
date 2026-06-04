@@ -85,6 +85,15 @@ export class PlayerFlight extends Component {
     pitchVisual: Node | null = null;
 
     @property({
+        group: 'Pitch',
+        type: [Node],
+        displayName: 'Pitch Overlay Nodes',
+        tooltip:
+            'Доп. узлы с тем же креном, что pitchVisual (например Fedia поверх Pigeon). Пусто — ищется ребёнок Fedia.',
+    })
+    pitchOverlayNodes: Node[] = [];
+
+    @property({
         group: 'Flight',
         displayName: 'Lock Horizontal X',
         tooltip:
@@ -158,6 +167,8 @@ export class PlayerFlight extends Component {
 
     /** Сглаженная vy только для расчёта крена. */
     private _pitchVyFiltered = 0;
+
+    private readonly _pitchOverlays: Node[] = [];
 
     /** Для анимаций / UI: удерживается ли тап или ЛКМ. */
     public get isInputHeld(): boolean {
@@ -244,6 +255,17 @@ export class PlayerFlight extends Component {
             if (pigeon) {
                 this.pitchVisual = pigeon;
             }
+        }
+
+        this._pitchOverlays.length = 0;
+        for (const n of this.pitchOverlayNodes) {
+            if (n?.isValid && this._pitchOverlays.indexOf(n) < 0) {
+                this._pitchOverlays.push(n);
+            }
+        }
+        const fedia = this.node.getChildByName('Fedia');
+        if (fedia?.isValid && this._pitchOverlays.indexOf(fedia) < 0) {
+            this._pitchOverlays.push(fedia);
         }
 
         input.on(Input.EventType.TOUCH_START, this._onTouchStart, this);
@@ -451,7 +473,13 @@ export class PlayerFlight extends Component {
         const pivot = this.pitchVisual ?? this.node;
         const cur = pivot.angle;
         const t = Math.min(1, this._angleSmoothRate() * dt);
-        pivot.angle = cur + (targetAngle - cur) * t;
+        const next = cur + (targetAngle - cur) * t;
+        pivot.angle = next;
+        for (const overlay of this._pitchOverlays) {
+            if (overlay?.isValid) {
+                overlay.angle = next;
+            }
+        }
     }
 
     private _resetPitchAngle() {
@@ -459,6 +487,11 @@ export class PlayerFlight extends Component {
             this.pitchVisual.angle = 0;
         } else {
             this.node.angle = 0;
+        }
+        for (const overlay of this._pitchOverlays) {
+            if (overlay?.isValid) {
+                overlay.angle = 0;
+            }
         }
     }
 

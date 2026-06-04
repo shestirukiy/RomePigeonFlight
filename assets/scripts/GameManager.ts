@@ -25,7 +25,10 @@ import {
 } from 'cc';
 import { LevelGenerator } from './LevelGenerator';
 import { PlayerPathSensors } from './PlayerPathSensors';
-import { PlayerAnimationController } from './PlayerAnimationController';
+import {
+    forEachPlayerAnimController,
+    PlayerAnimationController,
+} from './PlayerAnimationController';
 import { SceneNodeHub } from './SceneNodeHub';
 import { CameraShake } from './CameraShake';
 import { GameIntroController } from './GameIntroController';
@@ -226,6 +229,11 @@ export class GameManager extends Component {
 
     public get isPlaying(): boolean {
         return this._playing && !this._gameOver && !this._dying;
+    }
+
+    /** true после Play Again — ждём тап, intro-камеру не показываем. */
+    public get isAwaitingFirstTapToRun(): boolean {
+        return this._awaitingFirstTapToRun;
     }
 
     public get isWorldKickbackActive(): boolean {
@@ -1133,7 +1141,7 @@ export class GameManager extends Component {
         this._prewarmAnimatedPrefabSpawners();
 
         const player = SceneNodeHub.instance?.player;
-        this._findPlayerAnimation(player)?.playWaitingStay();
+        forEachPlayerAnimController(player, (a) => a.playWaitingStay());
     }
 
     /** Тряска при клике по кнопкам меню / заставки (вызывается из GameIntroController на Chunk_Start). */
@@ -1797,7 +1805,7 @@ export class GameManager extends Component {
         if (player) {
             this._playerFlightOf(player)?.resetToSpawn();
             player.getComponent(PlayerPathSensors)?.resetForNewRun();
-            this._findPlayerAnimation(player)?.resetForNewRun();
+            forEachPlayerAnimController(player, (a) => a.resetForNewRun());
         }
     }
 
@@ -1876,15 +1884,22 @@ export class GameManager extends Component {
             return this._commitGrantExtraLifeAtSlot(slotIndex);
         }
 
-        const playerAnim = this._findPlayerAnimation(
-            SceneNodeHub.instance?.player ?? null,
-        );
-        if (
-            playerAnim?.playHpHarvest(target, slotIndex, () => {
-                this._commitGrantExtraLifeAtSlot(slotIndex);
-                this._hpHarvestReservedSlots.delete(slotIndex);
-            })
-        ) {
+        const playerRoot = SceneNodeHub.instance?.player ?? null;
+        let harvestStarted = false;
+        forEachPlayerAnimController(playerRoot, (anim) => {
+            if (harvestStarted) {
+                return;
+            }
+            if (
+                anim.playHpHarvest(target, slotIndex, () => {
+                    this._commitGrantExtraLifeAtSlot(slotIndex);
+                    this._hpHarvestReservedSlots.delete(slotIndex);
+                })
+            ) {
+                harvestStarted = true;
+            }
+        });
+        if (harvestStarted) {
             return true;
         }
 
@@ -2371,12 +2386,21 @@ export class GameManager extends Component {
         const player = SceneNodeHub.instance?.player;
         this._playerFlightOf(player)?.releaseInput();
 
-        const anim = this._findPlayerAnimation(player ?? null);
-        const started =
-            anim?.playDeath(() => {
-                this._dying = false;
-                this.gameOver();
-            }) === true;
+        let started = false;
+        let deathDone = false;
+        const onDeathDone = () => {
+            if (deathDone) {
+                return;
+            }
+            deathDone = true;
+            this._dying = false;
+            this.gameOver();
+        };
+        forEachPlayerAnimController(player ?? null, (anim) => {
+            if (anim.playDeath(onDeathDone)) {
+                started = true;
+            }
+        });
         if (!started) {
             this._dying = false;
             this.gameOver();
@@ -2437,8 +2461,10 @@ export class GameManager extends Component {
         SoundController.instance?.stopBgm();
         SoundController.instance?.play(SoundId.WallHit);
         SoundController.instance?.playGameOverJingle();
-        this._findPlayerAnimation(SceneNodeHub.instance?.player ?? null)
-            ?.freezeIdleFlightPose();
+        forEachPlayerAnimController(
+            SceneNodeHub.instance?.player ?? null,
+            (a) => a.freezeIdleFlightPose(),
+        );
 
         this._showOverlayPanelDeferred(this.gameOverPanel);
 

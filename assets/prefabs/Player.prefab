@@ -1304,7 +1304,7 @@
         "__id__": 63
       }
     ],
-    "_active": false,
+    "_active": true,
     "_components": [
       {
         "__id__": 67
@@ -1322,7 +1322,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": 0,
+      "y": 22.973,
       "z": 0
     },
     "_lrot": {
@@ -1334,9 +1334,9 @@
     },
     "_lscale": {
       "__type__": "cc.Vec3",
-      "x": 1,
-      "y": 1,
-      "z": 1
+      "x": 1.032,
+      "y": 1.032,
+      "z": 1.032
     },
     "_mobility": 0,
     "_layer": 33554432,
@@ -1776,7 +1776,9 @@
       "__uuid__": "0bf764a6-c274-48fe-a91e-68e480c99e2f",
       "__expectedType__": "cc.AnimationClip"
     },
-    "deathFallNode": null,
+    "deathFallNode": {
+      "__id__": 57
+    },
     "deathFallDeltaY": -900,
     "deathSequenceDurationSec": 1.85,
     "hpHarvestNode": {
@@ -1821,8 +1823,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 227.7,
-      "height": 205
+      "width": 241,
+      "height": 217
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -1860,8 +1862,8 @@
     },
     "_size": {
       "__type__": "cc.Size",
-      "width": 241.3,
-      "height": 217.1
+      "width": 284,
+      "height": 192.8
     },
     "_id": ""
   },
@@ -1925,6 +1927,7 @@
     "pitchSmoothness": 0.33,
     "pitchInvert": false,
     "pitchVisual": null,
+    "pitchOverlayNodes": [],
     "lockHorizontalX": true,
     "runwaySnapEpsilonPx": 0.35,
     "runwaySnapEaseSec": 0.28,
