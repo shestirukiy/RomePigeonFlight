@@ -10792,7 +10792,6 @@
     "continueButton": {
       "__id__": 229
     },
-    "introContinueButton": null,
     "playAgainButton": {
       "__id__": 299
     },
@@ -10884,7 +10883,7 @@
     "node": {
       "__id__": 2
     },
-    "_enabled": true,
+    "_enabled": false,
     "__prefab": null,
     "cameraNode": {
       "__id__": 3
@@ -10906,10 +10905,19 @@
     "introAnimation": null,
     "introClipName": "",
     "introWaitSec": 0.5,
+    "labelBoard": null,
+    "introBoardAnimation": null,
+    "skipButton": null,
+    "startGameButton": null,
+    "introButtonsAnimation": null,
     "labelBoardNodeName": "LabelBoard",
     "typewriterCharIntervalSec": 0.1,
     "introBoardNodeName": "IntroBoard",
     "skipTextScrollClipName": "SkipTextScroll",
+    "introButtonsContainerName": "",
+    "changeToStartClipName": "ChangeToStart",
+    "skipButtonNodeName": "SkipBttn",
+    "startGameButtonNodeName": "StartGameBttn",
     "_id": "dbIphvZEtAa5GukH7Ef/Ii"
   },
   {

@@ -105,9 +105,6 @@ export class GameManager extends Component {
     /** Последний pointer down не запустил забег (suppress / game over). */
     private _pointerDownDidNotStartRun = false;
 
-    /** ContinueBttn на Chunk_Start (не Game Over). */
-    private _introContinueButtonBound: Button | null = null;
-
     /**
      * Пульс (Animation на scale) на той же ноде, что и Button SCALE — перебивает pressed-скейл.
      * На время нажатия ставим клип на паузу.
@@ -646,15 +643,6 @@ export class GameManager extends Component {
     @property({
         group: G_UI,
         type: Button,
-        displayName: 'Intro Continue Button',
-        tooltip:
-            'ContinueBttn на Chunk_Start — единственный ввод на заставке (допечатка, панорама). Пусто — ищется автоматически.',
-    })
-    introContinueButton: Button | null = null;
-
-    @property({
-        group: G_UI,
-        type: Button,
         displayName: 'Play Again Button',
         tooltip:
             'PlayAgainBttn на KTAPanel — новый забег после KTA (компонент Button).',
@@ -688,7 +676,7 @@ export class GameManager extends Component {
         group: G_UI,
         displayName: 'Menu Button Camera Shake',
         tooltip:
-            'Тряска камеры при нажатии кнопок меню (Continue, Play Again, Share, Watch, Continue на заставке).',
+            'Тряска камеры при нажатии кнопок меню (Continue, Play Again, Share, Watch, Skip/Start на Chunk_Start).',
     })
     shakeCameraOnMenuButtons = true;
 
@@ -826,9 +814,6 @@ export class GameManager extends Component {
     onLoad() {
         GameManager._inst = this;
         GameSession.bind(this);
-        if (!this.getComponent(GameIntroController)) {
-            this.addComponent(GameIntroController);
-        }
         this._setSpeedLinesEmitter(false);
         this._refreshScoreLabel();
         this.resetHp();
@@ -848,7 +833,6 @@ export class GameManager extends Component {
 
     start() {
         this._bindUiButtons();
-        this._tryBindIntroContinueButton(0);
         this._syncGameplayUiVisible();
     }
 
@@ -857,7 +841,6 @@ export class GameManager extends Component {
         this._stopGameOverSeedCountRoll();
         this._stopGameOverMilestoneMetersRoll();
         this._unbindUiButtons();
-        this._unbindIntroContinueButton();
         input.off(Input.EventType.TOUCH_START, this._onTouchStart, this);
         input.off(Input.EventType.TOUCH_END, this._onTouchEnd, this);
         input.off(Input.EventType.TOUCH_CANCEL, this._onTouchEnd, this);
@@ -1151,7 +1134,23 @@ export class GameManager extends Component {
 
         const player = SceneNodeHub.instance?.player;
         this._findPlayerAnimation(player)?.playWaitingStay();
-        this._tryBindIntroContinueButton(0);
+    }
+
+    /** Тряска при клике по кнопкам меню / заставки (вызывается из GameIntroController на Chunk_Start). */
+    public shakeMenuButton(): void {
+        this._shakeCameraOnMenuButton();
+    }
+
+    public bindMenuButtonPressFeedback(btn: Button | null): void {
+        if (btn) {
+            this._enableButtonPressScaleFeedback(btn);
+        }
+    }
+
+    public unbindMenuButtonPressFeedback(node: Node | null): void {
+        if (node?.isValid) {
+            this._disableButtonPressScaleFeedback(node);
+        }
     }
 
     /** Новый забег по тапу (первый вход или после returnToTapToStart). */
@@ -1594,85 +1593,6 @@ export class GameManager extends Component {
         node.off(Node.EventType.MOUSE_DOWN, handlers.pause, this);
         node.off(Node.EventType.MOUSE_UP, handlers.resume, this);
         this._buttonPulsePressHandlers.delete(node);
-    }
-
-    private _tryBindIntroContinueButton(attempt: number): void {
-        const btn = this._resolveIntroContinueButton();
-        if (btn) {
-            this._unbindIntroContinueButton();
-            this._introContinueButtonBound = btn;
-            btn.node.on(Button.EventType.CLICK, this._onIntroContinueClick, this);
-            this._enableButtonPressScaleFeedback(btn);
-            return;
-        }
-        if (attempt < 80) {
-            this.scheduleOnce(
-                () => this._tryBindIntroContinueButton(attempt + 1),
-                0.1,
-            );
-        }
-    }
-
-    private _unbindIntroContinueButton(): void {
-        if (!this._introContinueButtonBound?.node?.isValid) {
-            this._introContinueButtonBound = null;
-            return;
-        }
-        const node = this._introContinueButtonBound.node;
-        node.off(Button.EventType.CLICK, this._onIntroContinueClick, this);
-        this._disableButtonPressScaleFeedback(node);
-        this._introContinueButtonBound = null;
-    }
-
-    private _resolveIntroContinueButton(): Button | null {
-        if (this.introContinueButton?.isValid) {
-            return this.introContinueButton;
-        }
-        const scene = this.node.scene;
-        if (!scene?.isValid) {
-            return null;
-        }
-        const stack: Node[] = [scene];
-        while (stack.length > 0) {
-            const node = stack.pop()!;
-            if (
-                (node.name === 'ContinueBttn' || node.name === 'ContinueBtn') &&
-                !this._isUnderOverlayPanel(node)
-            ) {
-                const button = node.getComponent(Button);
-                if (button) {
-                    return button;
-                }
-            }
-            for (let i = node.children.length - 1; i >= 0; i--) {
-                stack.push(node.children[i]);
-            }
-        }
-        return null;
-    }
-
-    private _isUnderOverlayPanel(node: Node): boolean {
-        let cur: Node | null = node;
-        while (cur) {
-            if (cur === this.gameOverPanel || cur === this.ktaPanel) {
-                return true;
-            }
-            cur = cur.parent;
-        }
-        return false;
-    }
-
-    private _onIntroContinueClick(): void {
-        this._shakeCameraOnMenuButton();
-        this._suppressTapToStart = false;
-        const intro = GameIntroController.instance;
-        if (intro?.tryConsumeIntroTap()) {
-            return;
-        }
-        if (intro?.isBlockingInput) {
-            return;
-        }
-        this._onMenuTap();
     }
 
     /** Тряска камеры при клике по кнопкам меню (если включено в UI). */
