@@ -8,7 +8,7 @@
     },
     "_native": "",
     "sample": 10,
-    "speed": 2.2,
+    "speed": 3,
     "wrapMode": 1,
     "enableTrsBlending": false,
     "_duration": 0.8,
@@ -156,7 +156,7 @@
     "__type__": "cc.RealCurve",
     "_times": [
       0,
-      0.7
+      0.699999988079071
     ],
     "_values": [
       {
@@ -201,14 +201,14 @@
     "__type__": "cc.RealCurve",
     "_times": [
       0,
-      0.7
+      0.699999988079071
     ],
     "_values": [
       {
         "__type__": "cc.RealKeyframeValue",
         "interpolationMode": 0,
         "tangentWeightMode": 0,
-        "value": 45.402,
+        "value": 45.402000427246094,
         "rightTangent": 0,
         "rightTangentWeight": 1,
         "leftTangent": 0,
@@ -246,7 +246,7 @@
     "__type__": "cc.RealCurve",
     "_times": [
       0,
-      0.7
+      0.699999988079071
     ],
     "_values": [
       {

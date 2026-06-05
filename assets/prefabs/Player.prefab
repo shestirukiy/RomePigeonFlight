@@ -1500,8 +1500,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 297,
-      "height": 172
+      "width": 300,
+      "height": 300
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -1542,7 +1542,7 @@
     },
     "_type": 0,
     "_fillType": 0,
-    "_sizeMode": 1,
+    "_sizeMode": 2,
     "_fillCenter": {
       "__type__": "cc.Vec2",
       "x": 0,
@@ -1550,7 +1550,7 @@
     },
     "_fillStart": 0,
     "_fillRange": 0,
-    "_isTrimmedMode": true,
+    "_isTrimmedMode": false,
     "_useGrayscale": false,
     "_atlas": null,
     "_id": ""
@@ -1725,6 +1725,14 @@
       {
         "__uuid__": "0b38b5cf-7c54-41f0-b01e-72c705213c82",
         "__expectedType__": "cc.AnimationClip"
+      },
+      {
+        "__uuid__": "933dd802-3fa1-45bd-80b0-87fd84a6ba6e",
+        "__expectedType__": "cc.AnimationClip"
+      },
+      {
+        "__uuid__": "0bf764a6-c274-48fe-a91e-68e480c99e2f",
+        "__expectedType__": "cc.AnimationClip"
       }
     ],
     "_defaultClip": {
@@ -1792,6 +1800,10 @@
     "hpHarvestFlySpeedPxPerSec": 1020,
     "startFlyClip": {
       "__uuid__": "8c966588-e4df-4b36-a6c7-764d1e07107e",
+      "__expectedType__": "cc.AnimationClip"
+    },
+    "surfaceRunClipFly": {
+      "__uuid__": "0b38b5cf-7c54-41f0-b01e-72c705213c82",
       "__expectedType__": "cc.AnimationClip"
     },
     "_id": ""
@@ -2036,12 +2048,12 @@
     },
     "damageInvincibilitySec": 3,
     "electricDefaultLiftLockDuration": 0.5,
-    "electricCloudCooldownSeconds": 4,
+    "electricCloudCooldownSeconds": 2,
     "towerWallKnockbackDurationSec": 0.7,
     "towerWallKnockbackHorizontalPxPerSec": 1300,
     "towerWallDownwardImpulse": 0,
-    "towerWallHitAnimationDurationSec": 0.7,
-    "towerWallDefaultLiftLockDuration": 0.7,
+    "towerWallHitAnimationDurationSec": 0.5,
+    "towerWallDefaultLiftLockDuration": 0.5,
     "towerWallCooldownSeconds": 0.5,
     "_id": ""
   },

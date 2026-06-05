@@ -2055,7 +2055,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": -837.733,
-      "y": -430.093,
+      "y": -437.87,
       "z": 0
     },
     "_lrot": {
@@ -4313,7 +4313,7 @@
     "node": {
       "__id__": 186
     },
-    "_enabled": true,
+    "_enabled": false,
     "__prefab": {
       "__id__": 196
     },
@@ -4565,7 +4565,7 @@
     "node": {
       "__id__": 198
     },
-    "_enabled": true,
+    "_enabled": false,
     "__prefab": {
       "__id__": 208
     },
@@ -4644,10 +4644,18 @@
       {
         "__uuid__": "0e75a08e-e1ff-4bdc-bc20-5285fc8e0034",
         "__expectedType__": "cc.AnimationClip"
+      },
+      {
+        "__uuid__": "b4638003-5136-4788-8908-7b7d3132f97c",
+        "__expectedType__": "cc.AnimationClip"
+      },
+      {
+        "__uuid__": "978e04f0-e33a-4346-aee5-4ce754727437",
+        "__expectedType__": "cc.AnimationClip"
       }
     ],
     "_defaultClip": {
-      "__uuid__": "0e75a08e-e1ff-4bdc-bc20-5285fc8e0034",
+      "__uuid__": "978e04f0-e33a-4346-aee5-4ce754727437",
       "__expectedType__": "cc.AnimationClip"
     },
     "_id": ""
@@ -5198,6 +5206,7 @@
     "skipTextScrollClipName": "SkipTextScroll",
     "introButtonsContainerName": "",
     "changeToStartClipName": "ChangeToStart",
+    "startRemoveClipName": "StartRemove",
     "skipButtonNodeName": "SkipBttn",
     "startGameButtonNodeName": "StartGameBttn",
     "_id": ""

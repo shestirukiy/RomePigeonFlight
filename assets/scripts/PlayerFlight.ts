@@ -483,6 +483,14 @@ export class PlayerFlight extends Component {
     }
 
     /**
+     * Множитель от пройденных MilestoneSign (как для физики полёта), без Pass Boost.
+     * До первой вехи — 1. Для анимации бега и scaleFlightWithWorldSpeed.
+     */
+    public getMilestoneFlightSpeedFactor(): number {
+        return this._worldSpeedFlightFactor();
+    }
+
+    /**
      * Смягчённый множитель под видимый скролл Plane 1 (вехи × parallax), без Pass Boost.
      */
     private _worldSpeedFlightFactor(): number {

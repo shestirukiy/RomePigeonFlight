@@ -2406,8 +2406,7 @@ export class GameManager extends Component {
                 return;
             }
             deathDone = true;
-            this._dying = false;
-            this.gameOver();
+            this.gameOver({ fromDeathSequence: true });
         };
         forEachPlayerAnimController(player ?? null, (anim) => {
             if (anim.playDeath(onDeathDone)) {
@@ -2457,10 +2456,11 @@ export class GameManager extends Component {
     }
 
     /** Конец забега — наполните позже (UI, рестарт и т.д.). */
-    public gameOver(): void {
+    public gameOver(options?: { fromDeathSequence?: boolean }): void {
         if (this._gameOver) {
             return;
         }
+        const fromDeathSequence = options?.fromDeathSequence === true;
         this._instantKillPending = false;
         this._cancelDeferredDeathSequence();
         this._dying = false;
@@ -2469,17 +2469,25 @@ export class GameManager extends Component {
         this._ktaPanelShown = false;
         this._hideOverlayPanels();
         this._syncGameplayUiVisible();
-        this._hideWorldChunkContainers();
         SoundController.instance?.endKtaBgmPhase();
         SoundController.instance?.stopBgm();
         SoundController.instance?.play(SoundId.WallHit);
         SoundController.instance?.playGameOverJingle();
         forEachPlayerAnimController(
             SceneNodeHub.instance?.player ?? null,
-            (a) => a.freezeIdleFlightPose(),
+            (a) =>
+                fromDeathSequence
+                    ? a.holdDeathPose()
+                    : a.freezeIdleFlightPose(),
         );
 
-        this._showOverlayPanelDeferred(this.gameOverPanel);
+        if (fromDeathSequence) {
+            this._showOverlayPanel(this.gameOverPanel);
+            this._hideWorldChunkContainers();
+        } else {
+            this._hideWorldChunkContainers();
+            this._showOverlayPanelDeferred(this.gameOverPanel);
+        }
 
         this._bindUiButtons();
         this.scheduleOnce(() => {

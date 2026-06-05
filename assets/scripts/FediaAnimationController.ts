@@ -19,27 +19,34 @@ export class FediaAnimationController extends PlayerAnimationController {
     })
     startFlyClip: AnimationClip | null = null;
 
+    @property({
+        type: AnimationClip,
+        displayName: 'Surface Run Fly Clip',
+        tooltip: 'Вариант бега FediaRunFly. Должен быть в Clips у Animation на Fedia.',
+    })
+    surfaceRunClipFly: AnimationClip | null = null;
+
+    private _surfaceRunVariants: AnimationClip[] = [];
+
     private _startFlyTransitionActive = false;
+    /** Целевое состояние после полного доигрывания (не отката). */
     private _startFlyTransitionTarget = false;
-    private _startFlyFinishedBound = false;
-    /** Полёт→бег: отрицательный speed в движке не крутит клип — двигаем time вручную. */
-    private _startFlyManualReverse = false;
+    /** true — исходная поза на земле (t=0); false — в воздухе (t=конец клипа). */
+    private _startFlyOriginGrounded = true;
+    private _startFlyRewinding = false;
+    private _startFlyClipLen = 0.8;
     private _startFlyManualTime = 0;
     private _startFlyPlaySpeed = 1;
+    /** +1 к концу перехода, −1 откат к origin. */
+    private _startFlyPlaybackSign = 1;
     /** Первый взлёт после тапа «старт» — FediaStartFly вместо сразу FediaFly. */
     private _runStartTakeoffPending = false;
     private readonly _onStartFlyTransitionEnd = (): void => {
-        this._finishStartFlyTransition();
-    };
-    private readonly _onStartFlyAnimFinished = (
-        _type?: string,
-        st?: { name?: string },
-    ): void => {
-        const want = this.startFlyClip?.name;
-        if (want && st?.name && st.name !== want) {
-            return;
+        if (this._startFlyRewinding) {
+            this._completeStartFlyRewind();
+        } else {
+            this._finishStartFlyTransition();
         }
-        this._finishStartFlyTransition();
     };
 
     protected override _resolvePigeonRoot(): Node | null {
@@ -122,15 +129,21 @@ export class FediaAnimationController extends PlayerAnimationController {
             return false;
         }
         if (this._startFlyTransitionActive) {
-            this._startFlyTransitionTarget = active;
+            if (active === this._startFlyTransitionTarget && !this._startFlyRewinding) {
+                return true;
+            }
+            this._beginStartFlyRewind();
             return true;
         }
 
         this._startFlyTransitionActive = true;
         this._startFlyTransitionTarget = active;
+        this._startFlyRewinding = false;
         this._flapState = null;
         if (!active) {
             this._runStartTakeoffPending = false;
+            /* Иначе после отката FediaStartFly _applyRunningOnSurface(true) не перезапустит бег. */
+            this._surfaceRunActive = false;
         }
         this._playStartFlyTransition(active);
         return true;
@@ -164,6 +177,7 @@ export class FediaAnimationController extends PlayerAnimationController {
 
     public override playDeath(onComplete?: () => void): boolean {
         this._cancelStartFlyTransition();
+        this._bindClipRefsFromAnimator();
         return super.playDeath(onComplete);
     }
 
@@ -209,6 +223,11 @@ export class FediaAnimationController extends PlayerAnimationController {
             'FediaRun',
             'Run',
         );
+        this.surfaceRunClipFly = this._pickClip(
+            this.surfaceRunClipFly,
+            'FediaRunFly',
+        );
+        this._rebuildSurfaceRunVariants();
         this.startFlyClip = this._pickClip(
             this.startFlyClip,
             'FediaStartFly',
@@ -249,6 +268,37 @@ export class FediaAnimationController extends PlayerAnimationController {
         return this._anim!.clips.indexOf(clip) >= 0;
     }
 
+    private _rebuildSurfaceRunVariants(): void {
+        const list: AnimationClip[] = [];
+        const seen = new Set<string>();
+        for (const clip of [this.surfaceRunClip, this.surfaceRunClipFly]) {
+            if (!clip?.name || seen.has(clip.name)) {
+                continue;
+            }
+            seen.add(clip.name);
+            list.push(clip);
+        }
+        this._surfaceRunVariants = list;
+    }
+
+    protected override _resolveSurfaceRunClipForTransition(): AnimationClip | null {
+        if (this._surfaceRunVariants.length === 0) {
+            this._rebuildSurfaceRunVariants();
+        }
+        if (this._surfaceRunVariants.length === 0) {
+            return this.surfaceRunClip;
+        }
+        const idx = Math.floor(Math.random() * this._surfaceRunVariants.length);
+        return this._surfaceRunVariants[idx] ?? this.surfaceRunClip;
+    }
+
+    private _stopAllSurfaceRunClips(): void {
+        for (const clip of this._surfaceRunVariants) {
+            this._stopClipIfPlaying(clip);
+        }
+        this._stopClipIfPlaying(this.surfaceRunClip);
+    }
+
     private _isStayClipPlaying(): boolean {
         if (!this._anim || !this.stayClip?.name) {
             return false;
@@ -274,14 +324,17 @@ export class FediaAnimationController extends PlayerAnimationController {
         this._ensureClipOnAnimator(this.stayClip);
         this._flapState = null;
         const name = this.stayClip.name;
-        this._anim.play(name);
         const st = this._anim.getState(name);
-        if (!st) {
+        if (st?.isPlaying) {
+            this._applyStayState(st);
             return;
         }
-        st.wrapMode = AnimationClip.WrapMode.Loop;
-        st.speed = 1;
-        st.resume();
+        this._anim.play(name);
+        const playing = this._anim.getState(name);
+        if (!playing) {
+            return;
+        }
+        this._applyStayState(playing);
     }
 
     protected override _applyRunningOnSurface(active: boolean): void {
@@ -314,17 +367,16 @@ export class FediaAnimationController extends PlayerAnimationController {
     }
 
     /**
-     * @param toSurface true — полёт→бег (клип назад); false — бег→полёт (вперёд).
+     * @param toSurface true — полёт→бег (к t=0); false — бег/стойка→полёт (к t=конец).
      */
     private _playStartFlyTransition(toSurface: boolean): void {
         const clip = this.startFlyClip!;
         const anim = this._anim!;
         this._ensureClipOnAnimator(clip);
         this.unschedule(this._onStartFlyTransitionEnd);
-        this._detachStartFlyFinished(anim);
 
         const name = clip.name;
-        this._stopClipIfPlaying(this.surfaceRunClip);
+        this._stopAllSurfaceRunClips();
         this._stopClipIfPlaying(this.stayClip);
 
         anim.stop();
@@ -344,38 +396,56 @@ export class FediaAnimationController extends PlayerAnimationController {
             clip.speed > 1e-5 ? Math.abs(clip.speed) : 0,
             1,
         );
-        const duration = Math.max(0.08, clipLen / baseSpeed);
+        this._startFlyClipLen = clipLen;
         this._startFlyPlaySpeed = baseSpeed;
+        this._startFlyOriginGrounded = !toSurface;
+
         st.wrapMode = AnimationClip.WrapMode.Normal;
         st.repeatCount = 1;
+        st.speed = 0;
 
         if (toSurface) {
-            this._startFlyManualReverse = true;
             this._startFlyManualTime = clipLen;
-            st.speed = 0;
-            st.time = clipLen;
-            st.sample();
-            st.pause();
-            this.scheduleOnce(this._onStartFlyTransitionEnd, duration + 0.08);
+            this._startFlyPlaybackSign = -1;
         } else {
-            this._startFlyManualReverse = false;
-            st.speed = baseSpeed;
-            st.time = 0;
-            st.sample();
-            st.resume();
-            anim.once(
-                Animation.EventType.FINISHED,
-                this._onStartFlyAnimFinished,
-                this,
-            );
-            this._startFlyFinishedBound = true;
-            this.scheduleOnce(this._onStartFlyTransitionEnd, duration + 0.05);
+            this._startFlyManualTime = 0;
+            this._startFlyPlaybackSign = 1;
         }
+        st.time = this._startFlyManualTime;
+        st.sample();
+        st.pause();
+
+        this._scheduleStartFlyEndFallback();
     }
 
-    private _tickStartFlyManualReverse(dt: number): void {
+    private _scheduleStartFlyEndFallback(): void {
+        const dist = this._startFlyRewinding
+            ? this._startFlyOriginGrounded
+                ? this._startFlyManualTime
+                : this._startFlyClipLen - this._startFlyManualTime
+            : this._startFlyOriginGrounded
+              ? this._startFlyClipLen - this._startFlyManualTime
+              : this._startFlyManualTime;
+        const duration = Math.max(
+            0.05,
+            dist / Math.max(this._startFlyPlaySpeed, 1e-5),
+        );
+        this.scheduleOnce(this._onStartFlyTransitionEnd, duration + 0.06);
+    }
+
+    /** Прервали переход — откатываем клип к исходной позе (земля или воздух). */
+    private _beginStartFlyRewind(): void {
+        if (this._startFlyRewinding) {
+            return;
+        }
+        this._startFlyRewinding = true;
+        this._startFlyPlaybackSign = this._startFlyOriginGrounded ? -1 : 1;
+        this.unschedule(this._onStartFlyTransitionEnd);
+        this._scheduleStartFlyEndFallback();
+    }
+
+    private _tickStartFlyTransition(dt: number): void {
         if (
-            !this._startFlyManualReverse ||
             !this._startFlyTransitionActive ||
             !this._anim ||
             !this.startFlyClip?.name
@@ -384,56 +454,103 @@ export class FediaAnimationController extends PlayerAnimationController {
         }
         const st = this._anim.getState(this.startFlyClip.name);
         if (!st) {
+            if (this._startFlyRewinding) {
+                this._completeStartFlyRewind();
+            } else {
+                this._finishStartFlyTransition();
+            }
+            return;
+        }
+
+        const len = this._startFlyClipLen;
+        this._startFlyManualTime +=
+            this._startFlyPlaybackSign * dt * this._startFlyPlaySpeed;
+
+        if (this._startFlyRewinding) {
+            if (this._startFlyOriginGrounded) {
+                if (this._startFlyManualTime <= 0) {
+                    this._startFlyManualTime = 0;
+                    st.time = 0;
+                    st.sample();
+                    this._completeStartFlyRewind();
+                    return;
+                }
+            } else if (this._startFlyManualTime >= len) {
+                this._startFlyManualTime = len;
+                st.time = len;
+                st.sample();
+                this._completeStartFlyRewind();
+                return;
+            }
+        } else if (this._startFlyOriginGrounded) {
+            if (this._startFlyManualTime >= len) {
+                this._startFlyManualTime = len;
+                st.time = len;
+                st.sample();
+                this._finishStartFlyTransition();
+                return;
+            }
+        } else if (this._startFlyManualTime <= 0) {
+            this._startFlyManualTime = 0;
+            st.time = 0;
+            st.sample();
             this._finishStartFlyTransition();
             return;
         }
 
-        this._startFlyManualTime -= dt * this._startFlyPlaySpeed;
-        if (this._startFlyManualTime <= 0) {
-            st.time = 0;
-            st.sample();
-            this._startFlyManualReverse = false;
-            this._finishStartFlyTransition();
-            return;
-        }
-        st.time = this._startFlyManualTime;
+        st.time = Math.min(len, Math.max(0, this._startFlyManualTime));
         st.sample();
     }
 
-    private _detachStartFlyFinished(anim: Animation): void {
-        if (!this._startFlyFinishedBound) {
+    private _finishStartFlyTransition(): void {
+        if (!this._startFlyTransitionActive || this._startFlyRewinding) {
             return;
         }
-        anim.off(Animation.EventType.FINISHED, this._onStartFlyAnimFinished, this);
-        this._startFlyFinishedBound = false;
+        this.unschedule(this._onStartFlyTransitionEnd);
+        this._startFlyTransitionActive = false;
+        this._startFlyRewinding = false;
+        const target = this._startFlyTransitionTarget;
+        if (!target) {
+            this._feetOnSurface = false;
+        }
+        this._applyRunningOnSurface(target);
     }
 
-    private _finishStartFlyTransition(): void {
+    private _completeStartFlyRewind(): void {
         if (!this._startFlyTransitionActive) {
             return;
         }
         this.unschedule(this._onStartFlyTransitionEnd);
-        if (this._anim) {
-            this._detachStartFlyFinished(this._anim);
-        }
         this._startFlyTransitionActive = false;
-        this._startFlyManualReverse = false;
-        const target = this._startFlyTransitionTarget;
-        this._applyRunningOnSurface(target);
+        this._startFlyRewinding = false;
+        this._runStartTakeoffPending = false;
+
+        if (this._startFlyOriginGrounded) {
+            this._feetOnSurface = true;
+            this._applyRunningOnSurface(true);
+        } else {
+            this._feetOnSurface = false;
+            this._applyRunningOnSurface(false);
+        }
     }
 
     private _cancelStartFlyTransition(): void {
         if (!this._startFlyTransitionActive) {
             return;
         }
+        const resumeRunOnSurface = this._feetOnSurface && !this._surfaceRunActive;
         this.unschedule(this._onStartFlyTransitionEnd);
-        if (this._anim) {
-            this._detachStartFlyFinished(this._anim);
-        }
         this._startFlyTransitionActive = false;
-        this._startFlyManualReverse = false;
+        this._startFlyRewinding = false;
         this._runStartTakeoffPending = false;
         this._flapState = null;
+        if (resumeRunOnSurface) {
+            this._applyRunningOnSurface(true);
+        }
+    }
+
+    protected override _onBeforeResumeSurfaceRun(): void {
+        this._stopClipIfPlaying(this.startFlyClip);
     }
 
     private _tryRunStartTakeoffTransition(): void {
@@ -448,7 +565,7 @@ export class FediaAnimationController extends PlayerAnimationController {
     }
 
     update(dt: number): void {
-        this._tickStartFlyManualReverse(dt);
+        this._tickStartFlyTransition(dt);
         this._tryRunStartTakeoffTransition();
         this._syncFeetOnSurfaceStay();
         super.update(dt);
@@ -465,11 +582,12 @@ export class FediaAnimationController extends PlayerAnimationController {
         super.playWaitingStay();
     }
 
+    /** hp_Icon на корне Player — та же логика, что у Pigeon (клип + полёт к UI). */
     public override playHpHarvest(
-        _targetWorldPos: Vec3,
-        _slotIndex: number,
-        _onComplete: () => void,
+        targetWorldPos: Vec3,
+        slotIndex: number,
+        onComplete: () => void,
     ): boolean {
-        return false;
+        return super.playHpHarvest(targetWorldPos, slotIndex, onComplete);
     }
 }

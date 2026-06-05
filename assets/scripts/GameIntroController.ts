@@ -20,7 +20,7 @@ const G_INTRO = { id: 'Intro', name: 'First launch intro' };
 const G_CAM = { id: 'Camera', name: 'Camera pan' };
 
 /**
- * Заставка на корне Chunk_Start: typewriter → Skip → ChangeToStart → StartGameBttn → панорама.
+ * Заставка на корне Chunk_Start: typewriter → Skip → ChangeToStart → StartGameBttn → StartRemove → панорама.
  * Кнопки и Animation — ссылки в инспекторе на этом же префабе (не на Canvas).
  */
 @ccclass('GameIntroController')
@@ -120,7 +120,7 @@ export class GameIntroController extends Component {
         group: G_INTRO,
         type: Button,
         displayName: 'Start Game Button',
-        tooltip: 'StartGameBttn — панорама после ChangeToStart.',
+        tooltip: 'StartGameBttn — StartRemove, затем панорама.',
     })
     startGameButton: Button | null = null;
 
@@ -178,6 +178,13 @@ export class GameIntroController extends Component {
 
     @property({
         group: G_INTRO,
+        displayName: 'Start Remove Clip',
+        tooltip: 'Клип на контейнере кнопок после нажатия StartGameBttn (перед панорамой).',
+    })
+    startRemoveClipName = 'StartRemove';
+
+    @property({
+        group: G_INTRO,
         displayName: 'Skip Button Name',
         tooltip: 'SkipBttn на Chunk_Start.',
     })
@@ -186,7 +193,7 @@ export class GameIntroController extends Component {
     @property({
         group: G_INTRO,
         displayName: 'Start Game Button Name',
-        tooltip: 'StartGameBttn — панорама камеры после ChangeToStart.',
+        tooltip: 'StartGameBttn — StartRemove, затем панорама камеры.',
     })
     startGameButtonNodeName = 'StartGameBttn';
 
@@ -227,7 +234,7 @@ export class GameIntroController extends Component {
         return true;
     }
 
-    /** StartGameBttn: панорама камеры (после ChangeToStart). */
+    /** StartGameBttn: StartRemove → панорама камеры (после ChangeToStart). */
     public handleStartGameButtonClick(): boolean {
         if (!this._shouldPlayIntro() || this._running) {
             return false;
@@ -237,7 +244,10 @@ export class GameIntroController extends Component {
         }
 
         this._awaitingUserTap = false;
-        this._runIntroSequence();
+        if (this.startGameButton?.isValid) {
+            this.startGameButton.interactable = false;
+        }
+        this._playStartRemoveThen(() => this._runIntroSequence());
         return true;
     }
 
@@ -273,7 +283,7 @@ export class GameIntroController extends Component {
             this._awaitingUserTap = false;
             this._ensureIntroCamera(0);
             console.log(
-                '[GameIntroController] Заставка: typewriter → Skip → ChangeToStart → StartGameBttn → панорама.',
+                '[GameIntroController] Заставка: typewriter → Skip → ChangeToStart → StartGameBttn → StartRemove → панорама.',
             );
         } else {
             this.snapToGameplayCamera();
@@ -577,12 +587,45 @@ export class GameIntroController extends Component {
         if (this.skipButton?.isValid) {
             this.skipButton.interactable = false;
         }
-        this._playClipThen(
-            this._introBoardAnim ?? this._findIntroBoardAnimation(),
-            this.skipTextScrollClipName,
-            'SkipTextScroll',
-            () => this._playChangeToStart(),
-        );
+        const boardAnim = this._introBoardAnim ?? this._findIntroBoardAnimation();
+        const scrollClip = this.skipTextScrollClipName.trim() || 'SkipTextScroll';
+        this._playClipThen(boardAnim, scrollClip, () => this._playChangeToStart());
+    }
+
+    private _playStartRemoveThen(onDone: () => void): void {
+        const anim =
+            this._introButtonsAnim?.isValid
+                ? this._introButtonsAnim
+                : this._findIntroButtonsAnimation();
+        if (!anim?.isValid) {
+            console.warn(
+                '[GameIntroController] Контейнер кнопок / StartRemove не найден — сразу панорама.',
+            );
+            onDone();
+            return;
+        }
+        this._introButtonsAnim = anim;
+
+        const clipName = this._resolveStartRemoveClipName(anim);
+        if (!clipName) {
+            console.warn(
+                '[GameIntroController] Клип StartRemove не найден — сразу панорама.',
+            );
+            onDone();
+            return;
+        }
+        this._playClipThen(anim, clipName, onDone);
+    }
+
+    private _resolveStartRemoveClipName(anim: Animation): string | null {
+        const custom = this.startRemoveClipName.trim();
+        const candidates = [custom, 'StartRemove'];
+        for (const name of candidates) {
+            if (name && this._animHasClip(anim, name)) {
+                return name;
+            }
+        }
+        return null;
     }
 
     private _playChangeToStart(): void {
@@ -600,27 +643,29 @@ export class GameIntroController extends Component {
         this._introButtonsAnim = anim;
 
         const clipName = this._resolveChangeToStartClipName(anim);
-        this._playClipThen(anim, clipName, clipName, () => this._onButtonsReady());
+        if (!clipName) {
+            console.warn(
+                '[GameIntroController] Клип ChangeToStart не найден.',
+            );
+            this._onButtonsReady();
+            return;
+        }
+        this._playClipThen(anim, clipName, () => this._onButtonsReady());
     }
 
-    private _resolveChangeToStartClipName(anim: Animation): string {
+    private _resolveChangeToStartClipName(anim: Animation): string | null {
         const custom = this.changeToStartClipName.trim();
-        const candidates = [
-            custom,
-            'ChangeToStart',
-            'ChanfeToStart',
-            anim.defaultClip?.name ?? '',
-            anim.clips[0]?.name ?? '',
-        ];
+        const candidates = [custom, 'ChangeToStart', 'ChanfeToStart'];
         for (const name of candidates) {
-            if (!name) {
-                continue;
-            }
-            if (anim.clips.some((c) => c?.name === name)) {
+            if (name && this._animHasClip(anim, name)) {
                 return name;
             }
         }
-        return custom || 'ChangeToStart';
+        return null;
+    }
+
+    private _animHasClip(anim: Animation, clipName: string): boolean {
+        return anim.clips.some((c) => c?.name === clipName);
     }
 
     private _onButtonsReady(): void {
@@ -636,8 +681,7 @@ export class GameIntroController extends Component {
 
     private _playClipThen(
         anim: Animation | null,
-        preferredClip: string,
-        fallbackClip: string,
+        clipName: string,
         onDone: () => void,
     ): void {
         if (!anim?.isValid) {
@@ -645,9 +689,8 @@ export class GameIntroController extends Component {
             return;
         }
 
-        const clipName =
-            this._resolveClipName(anim, preferredClip, fallbackClip) ?? '';
-        if (!clipName) {
+        const name = clipName.trim();
+        if (!name || !this._animHasClip(anim, name)) {
             onDone();
             return;
         }
@@ -663,16 +706,21 @@ export class GameIntroController extends Component {
             onDone();
         };
 
-        const onFinished = () => finish();
+        const onFinished = (_type: string, state: { name?: string } | null) => {
+            if (state?.name && state.name !== name) {
+                return;
+            }
+            finish();
+        };
 
         anim.off(Animation.EventType.FINISHED, onFinished, this);
         anim.on(Animation.EventType.FINISHED, onFinished, this);
         anim.stop();
-        anim.play(clipName);
+        anim.play(name);
 
-        const clip = this._findClip(anim, clipName);
+        const clip = this._findClip(anim, name);
         const speed =
-            anim.getState(clipName)?.speed ??
+            anim.getState(name)?.speed ??
             (clip as AnimationClip | null)?.speed ??
             1;
         const wait = Math.max(
@@ -680,20 +728,6 @@ export class GameIntroController extends Component {
             (clip?.duration ?? 0.35) / Math.max(0.01, Math.abs(speed)) + 0.06,
         );
         this.scheduleOnce(finish, wait);
-    }
-
-    private _resolveClipName(
-        anim: Animation,
-        preferred: string,
-        fallback: string,
-    ): string | null {
-        const names = [preferred.trim(), fallback.trim()];
-        for (const name of names) {
-            if (name && anim.clips.some((c) => c?.name === name)) {
-                return name;
-            }
-        }
-        return anim.defaultClip?.name ?? anim.clips[0]?.name ?? null;
     }
 
     private _findClip(anim: Animation, clipName: string): AnimationClip | null {

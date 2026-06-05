@@ -2,7 +2,7 @@
   "ver": "1.0.27",
   "importer": "image",
   "imported": true,
-  "uuid": "f7713266-4b25-40b6-9be2-13e709c261ac",
+  "uuid": "19adacab-b989-4be2-a139-a960ff0572f4",
   "files": [
     ".json",
     ".png"
@@ -10,14 +10,14 @@
   "subMetas": {
     "6c48a": {
       "importer": "texture",
-      "uuid": "f7713266-4b25-40b6-9be2-13e709c261ac@6c48a",
-      "displayName": "DeadPlayerFoot",
+      "uuid": "19adacab-b989-4be2-a139-a960ff0572f4@6c48a",
+      "displayName": "PigeonFlyLight",
       "id": "6c48a",
       "name": "texture",
       "userData": {
         "wrapModeS": "clamp-to-edge",
         "wrapModeT": "clamp-to-edge",
-        "imageUuidOrDatabaseUri": "f7713266-4b25-40b6-9be2-13e709c261ac",
+        "imageUuidOrDatabaseUri": "19adacab-b989-4be2-a139-a960ff0572f4",
         "isUuid": true,
         "visible": false,
         "minfilter": "linear",
@@ -34,21 +34,21 @@
     },
     "f9941": {
       "importer": "sprite-frame",
-      "uuid": "f7713266-4b25-40b6-9be2-13e709c261ac@f9941",
-      "displayName": "DeadPlayerFoot",
+      "uuid": "19adacab-b989-4be2-a139-a960ff0572f4@f9941",
+      "displayName": "PigeonFlyLight",
       "id": "f9941",
       "name": "spriteFrame",
       "userData": {
         "trimThreshold": 1,
         "rotated": false,
-        "offsetX": -2,
-        "offsetY": 0,
+        "offsetX": 0,
+        "offsetY": -14,
         "trimX": 0,
-        "trimY": 0,
-        "width": 42,
-        "height": 85,
-        "rawWidth": 46,
-        "rawHeight": 85,
+        "trimY": 51,
+        "width": 300,
+        "height": 226,
+        "rawWidth": 300,
+        "rawHeight": 300,
         "borderTop": 0,
         "borderBottom": 0,
         "borderLeft": 0,
@@ -60,17 +60,17 @@
         "meshType": 0,
         "vertices": {
           "rawPosition": [
-            -21,
-            -42.5,
+            -150,
+            -113,
             0,
-            21,
-            -42.5,
+            150,
+            -113,
             0,
-            -21,
-            42.5,
+            -150,
+            113,
             0,
-            21,
-            42.5,
+            150,
+            113,
             0
           ],
           "indexes": [
@@ -83,37 +83,37 @@
           ],
           "uv": [
             0,
-            85,
-            42,
-            85,
+            249,
+            300,
+            249,
             0,
-            0,
-            42,
-            0
+            23,
+            300,
+            23
           ],
           "nuv": [
             0,
-            0,
-            0.9130434782608695,
-            0,
-            0,
+            0.07666666666666666,
             1,
-            0.9130434782608695,
-            1
+            0.07666666666666666,
+            0,
+            0.83,
+            1,
+            0.83
           ],
           "minPos": [
-            -21,
-            -42.5,
+            -150,
+            -113,
             0
           ],
           "maxPos": [
-            21,
-            42.5,
+            150,
+            113,
             0
           ]
         },
         "isUuid": true,
-        "imageUuidOrDatabaseUri": "f7713266-4b25-40b6-9be2-13e709c261ac@6c48a",
+        "imageUuidOrDatabaseUri": "19adacab-b989-4be2-a139-a960ff0572f4@6c48a",
         "atlasUuid": "",
         "trimType": "auto"
       },
@@ -129,10 +129,6 @@
     "type": "sprite-frame",
     "fixAlphaTransparencyArtifacts": false,
     "hasAlpha": true,
-    "redirect": "f7713266-4b25-40b6-9be2-13e709c261ac@6c48a",
-    "compressSettings": {
-      "useCompressTexture": true,
-      "presetId": "fdujFqhPBOUJ9mIvc5FH08"
-    }
+    "redirect": "19adacab-b989-4be2-a139-a960ff0572f4@6c48a"
   }
 }

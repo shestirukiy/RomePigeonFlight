@@ -186,6 +186,9 @@ export class PlayerAnimationController extends Component {
     /** Игрок на поверхности снизу — без остановки скролла, отдельный клип. */
     protected _surfaceRunActive = false;
 
+    /** Текущий клип бега (после входа на землю); у Fedia — один из вариантов. */
+    protected _activeSurfaceRunClip: AnimationClip | null = null;
+
     /** Есть опора под ногами (бег, стойка или переход). */
     protected _feetOnSurface = false;
 
@@ -204,6 +207,9 @@ export class PlayerAnimationController extends Component {
 
     /** Проигрывается deathClip до вызова onComplete. */
     protected _deathSequenceActive = false;
+
+    /** После HP-смерти: не переключать на stay/run до нового забега. */
+    private _poseHeldForGameOver = false;
 
     /** Local position тела в префабе — сброс после забега. */
     protected readonly _deathFallSpawnLocal = new Vec3();
@@ -265,6 +271,9 @@ export class PlayerAnimationController extends Component {
         );
         this._ensureFlapState();
         if (this.electricDamageClip && this._anim) {
+            // Важно: клип должен быть добавлен в Animation.clips, иначе play() может не стартовать.
+            this._ensureClipOnAnimator(this.electricDamageClip);
+            this._anim.stop();
             this._anim.play(this.electricDamageClip.name);
         }
         if (this._flapState) {
@@ -313,6 +322,81 @@ export class PlayerAnimationController extends Component {
         return false;
     }
 
+    /** Клип при каждом входе в бег (false→true). У Fedia — случайный из вариантов. */
+    protected _resolveSurfaceRunClipForTransition(): AnimationClip | null {
+        return this.surfaceRunClip;
+    }
+
+    protected _getActiveSurfaceRunClip(): AnimationClip | null {
+        return this._activeSurfaceRunClip ?? this.surfaceRunClip;
+    }
+
+    /**
+     * Как полёт: до первой вехи ×1 (speed из клипа), далее getFlightScrollSpeedFactor × Flight Speed Match.
+     */
+    protected _surfaceRunMilestoneSpeedFactor(): number {
+        return this._flight?.getMilestoneFlightSpeedFactor() ?? 1;
+    }
+
+    protected _applySurfaceRunPlaybackSpeed(clip: AnimationClip): void {
+        if (!this._anim) {
+            return;
+        }
+        const st = this._anim.getState(clip.name);
+        if (!st) {
+            return;
+        }
+        const base = clip.speed > 0 ? clip.speed : 1;
+        st.speed = base * this._surfaceRunMilestoneSpeedFactor();
+    }
+
+    protected _playSurfaceRunClip(clip: AnimationClip): void {
+        if (!this._anim) {
+            return;
+        }
+        this._onBeforeResumeSurfaceRun();
+        this._ensureClipOnAnimator(clip);
+        this._anim.play(clip.name);
+        this._applySurfaceRunPlaybackSpeed(clip);
+    }
+
+    protected _isActiveSurfaceRunClipPlaying(): boolean {
+        const clip = this._getActiveSurfaceRunClip();
+        if (!clip?.name || !this._anim) {
+            return false;
+        }
+        return this._anim.getState(clip.name)?.isPlaying === true;
+    }
+
+    /** Перезапуск бега, если флаг активен, а клип остановлен (после FediaStartFly и т.п.). */
+    protected _resumeSurfaceRunIfNeeded(): void {
+        if (!this._surfaceRunActive || !this._anim) {
+            return;
+        }
+        const clip = this._getActiveSurfaceRunClip();
+        if (!clip) {
+            return;
+        }
+        if (this._isActiveSurfaceRunClipPlaying()) {
+            this._applySurfaceRunPlaybackSpeed(clip);
+            return;
+        }
+        this._playSurfaceRunClip(clip);
+    }
+
+    /** Снять overlay-клипы перед возобновлением бега (FediaStartFly у наследника). */
+    protected _onBeforeResumeSurfaceRun(): void {
+        /* no-op */
+    }
+
+    protected _syncSurfaceRunPlaybackSpeed(): void {
+        const clip = this._getActiveSurfaceRunClip();
+        if (!clip) {
+            return;
+        }
+        this._applySurfaceRunPlaybackSpeed(clip);
+    }
+
     protected _applyRunningOnSurface(active: boolean): void {
         /* PlayerPathSensors.update идёт после физики в том же кадре — иначе бег по земле перебивает клип удара. */
         if (
@@ -322,16 +406,24 @@ export class PlayerAnimationController extends Component {
             return;
         }
         if (this._surfaceRunActive === active) {
+            if (active) {
+                this._resumeSurfaceRunIfNeeded();
+            }
             return;
         }
         this._surfaceRunActive = active;
-        if (active && this.surfaceRunClip && this._anim) {
-            this._anim.play(this.surfaceRunClip.name);
+        if (active) {
+            const clip = this._resolveSurfaceRunClipForTransition();
+            if (!clip) {
+                return;
+            }
+            this._activeSurfaceRunClip = clip;
+            this._playSurfaceRunClip(clip);
             return;
         }
+        this._activeSurfaceRunClip = null;
         /* Контакт с поверхностью закончился — снова клип полёта (не перебиваем удар облака/стены). */
         if (
-            !active &&
             this._wallHitOverlayRemain <= 0 &&
             this._electricOverlayRemain <= 0
         ) {
@@ -351,6 +443,8 @@ export class PlayerAnimationController extends Component {
         );
         this._ensureFlapState();
         if (this.wallHitClip && this._anim) {
+            this._ensureClipOnAnimator(this.wallHitClip);
+            this._anim.stop();
             this._anim.play(this.wallHitClip.name);
         }
         if (this._flapState) {
@@ -698,6 +792,7 @@ export class PlayerAnimationController extends Component {
         this.unschedule(this._onDeathSequenceEnd);
         this._deathSequenceActive = false;
         this._deathCompleteCallback = null;
+        this._poseHeldForGameOver = false;
         this._resetDeathFallPose();
         this._restoreWingVisibility();
         this._electricOverlayRemain = 0;
@@ -709,6 +804,12 @@ export class PlayerAnimationController extends Component {
         this._waitingStayActive = false;
         this._flapSpeed = this.flapSpeedInAir;
         this._restoreFlapClip(this.flapSpeedInAir);
+    }
+
+    /** Stay: только loop + resume; speed — из клипа в ассете, код не трогает. */
+    protected _applyStayState(st: AnimationState): void {
+        st.wrapMode = AnimationClip.WrapMode.Loop;
+        st.resume();
     }
 
     /** Ожидание тапа: PlayerStay (до старта и после game over). */
@@ -742,14 +843,44 @@ export class PlayerAnimationController extends Component {
             this._waitingStayActive = false;
             return;
         }
-        st.wrapMode = AnimationClip.WrapMode.Loop;
-        st.speed = 1;
-        st.resume();
+        this._applyStayState(st);
     }
 
     /** @deprecated Используйте playWaitingStay */
     public freezeIdleFlightPose(): void {
         this.playWaitingStay();
+    }
+
+    /** Зафиксировать последний кадр deathClip после HP-смерти (не stay/run). */
+    public holdDeathPose(): void {
+        this._poseHeldForGameOver = true;
+        this._waitingStayActive = false;
+        this._surfaceRunActive = false;
+        this._feetOnSurface = false;
+        this._tailTimeLeft = 0;
+        this._wasHeld = false;
+        this._flapState = null;
+
+        if (!this._anim || !this.deathClip) {
+            return;
+        }
+
+        const name = this.deathClip.name;
+        const st = this._anim.getState(name);
+        if (!st) {
+            return;
+        }
+        if (st.isPlaying) {
+            st.pause();
+            st.sample();
+            return;
+        }
+        const holdTime =
+            st.duration > 0
+                ? Math.max(0, st.duration - 1e-4)
+                : Math.max(0, st.time);
+        st.time = holdTime;
+        st.sample();
     }
 
     private _exitWaitingStay(): void {
@@ -775,14 +906,15 @@ export class PlayerAnimationController extends Component {
     update(dt: number) {
         this._tickHpHarvestRuns(dt);
 
-        if (this._deathSequenceActive) {
+        if (this._deathSequenceActive || this._poseHeldForGameOver) {
             return;
         }
 
         const playing = GameManager.game?.isPlaying === true;
         const dying = GameManager.game?.isDying === true;
+        const gameOver = GameManager.game?.isGameOver === true;
         if (!playing || !this._anim) {
-            if (!playing && !dying && !this._waitingStayActive) {
+            if (!playing && !dying && !gameOver && !this._waitingStayActive) {
                 this.playWaitingStay();
             }
             this._tailTimeLeft = 0;
@@ -828,8 +960,9 @@ export class PlayerAnimationController extends Component {
             if (GameManager.game?.isAwaitingDeathSequence) {
                 return;
             }
-            if (this._surfaceRunActive && this.surfaceRunClip) {
-                this._anim.play(this.surfaceRunClip.name);
+            const runClip = this._getActiveSurfaceRunClip();
+            if (this._surfaceRunActive && runClip) {
+                this._playSurfaceRunClip(runClip);
             } else {
                 this._resumeFlapPlayback();
             }
@@ -841,10 +974,11 @@ export class PlayerAnimationController extends Component {
 
         if (
             this._surfaceRunActive &&
-            this.surfaceRunClip &&
+            this._getActiveSurfaceRunClip() &&
             this._wallHitOverlayRemain <= 0 &&
             this._electricOverlayRemain <= 0
         ) {
+            this._resumeSurfaceRunIfNeeded();
             if (this._flapState) {
                 this._flapState.pause();
             }

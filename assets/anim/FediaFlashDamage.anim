@@ -1,7 +1,7 @@
 [
   {
     "__type__": "cc.AnimationClip",
-    "_name": "FediaRunFly",
+    "_name": "FediaFlashDamage",
     "_objFlags": 0,
     "__editorExtras__": {
       "embeddedPlayerGroups": []
@@ -11,18 +11,21 @@
     "speed": 1,
     "wrapMode": 2,
     "enableTrsBlending": false,
-    "_duration": 0.4,
+    "_duration": 0.7,
     "_hash": 500763545,
     "_tracks": [
       {
         "__id__": 1
+      },
+      {
+        "__id__": 7
       }
     ],
     "_exoticAnimation": null,
     "_events": [],
     "_embeddedPlayers": [],
     "_additiveSettings": {
-      "__id__": 6
+      "__id__": 13
     },
     "_auxiliaryCurveEntries": []
   },
@@ -36,7 +39,7 @@
       "proxy": null
     },
     "_channel": {
-      "__id__": 4
+      "__id__": 5
     }
   },
   {
@@ -45,8 +48,15 @@
       {
         "__id__": 3
       },
+      {
+        "__id__": 4
+      },
       "spriteFrame"
     ]
+  },
+  {
+    "__type__": "cc.animation.HierarchyPath",
+    "path": "FediaAnim"
   },
   {
     "__type__": "cc.animation.ComponentPath",
@@ -55,32 +65,98 @@
   {
     "__type__": "cc.animation.Channel",
     "_curve": {
-      "__id__": 5
+      "__id__": 6
     }
   },
   {
     "__type__": "cc.ObjectCurve",
     "_times": [
       0,
-      0.1,
       0.2,
-      0.3
+      0.4,
+      0.6
     ],
     "_values": [
       {
-        "__uuid__": "3ca54e37-b32b-474e-9441-419367c7b3f0@f9941",
+        "__uuid__": "19adacab-b989-4be2-a139-a960ff0572f4@f9941",
         "__expectedType__": "cc.SpriteFrame"
       },
       {
-        "__uuid__": "7cff3250-8d6f-4edd-9085-145dc1b2cc75@f9941",
+        "__uuid__": "93a200d3-f98a-4ab6-8bd7-bb4c7c1b5555@f9941",
         "__expectedType__": "cc.SpriteFrame"
       },
       {
-        "__uuid__": "ae1e0eef-50b9-4243-aec9-00b0b62463f3@f9941",
+        "__uuid__": "19adacab-b989-4be2-a139-a960ff0572f4@f9941",
         "__expectedType__": "cc.SpriteFrame"
       },
       {
-        "__uuid__": "47a2235b-743c-40ab-9b8d-5167afd505bc@f9941",
+        "__uuid__": "93a200d3-f98a-4ab6-8bd7-bb4c7c1b5555@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      }
+    ]
+  },
+  {
+    "__type__": "cc.animation.ObjectTrack",
+    "_binding": {
+      "__type__": "cc.animation.TrackBinding",
+      "path": {
+        "__id__": 8
+      },
+      "proxy": null
+    },
+    "_channel": {
+      "__id__": 11
+    }
+  },
+  {
+    "__type__": "cc.animation.TrackPath",
+    "_paths": [
+      {
+        "__id__": 9
+      },
+      {
+        "__id__": 10
+      },
+      "spriteFrame"
+    ]
+  },
+  {
+    "__type__": "cc.animation.HierarchyPath",
+    "path": "FrontEff"
+  },
+  {
+    "__type__": "cc.animation.ComponentPath",
+    "component": "cc.Sprite"
+  },
+  {
+    "__type__": "cc.animation.Channel",
+    "_curve": {
+      "__id__": 12
+    }
+  },
+  {
+    "__type__": "cc.ObjectCurve",
+    "_times": [
+      0,
+      0.2,
+      0.4,
+      0.6
+    ],
+    "_values": [
+      {
+        "__uuid__": "4bf94ec0-36c2-4db1-9199-d900a11e3079@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "e5617ac2-5cb2-457f-accd-9a5796d2ae39@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "4bf94ec0-36c2-4db1-9199-d900a11e3079@f9941",
+        "__expectedType__": "cc.SpriteFrame"
+      },
+      {
+        "__uuid__": "ebc39e3c-0ead-4792-989c-3d55ed1f81b5@f9941",
         "__expectedType__": "cc.SpriteFrame"
       }
     ]
