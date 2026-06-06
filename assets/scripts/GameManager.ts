@@ -33,9 +33,11 @@ import { SceneNodeHub } from './SceneNodeHub';
 import { CameraShake } from './CameraShake';
 import { GameIntroController } from './GameIntroController';
 import { GameSession, PLAYER_FLIGHT_CCLASS } from './GameSession';
+import type { PlayerFlight } from './PlayerFlight';
 import { SoundController } from './SoundController';
 import { SoundId } from './SoundLibrary';
 import { AnimatedPrefabSpawner } from './AnimatedPrefabSpawner';
+import { BonusItemScheduler } from './BonusItemScheduler';
 
 const { ccclass, property, executionOrder } = _decorator;
 
@@ -54,6 +56,8 @@ const G_HP = { id: 'Health', name: 'Health & seeds' };
 export class GameManager extends Component {
     private static readonly GAME_OVER_PANEL_ANIM = 'GameOverPanelAnim';
     private static readonly KTA_PANEL_ANIM = 'KTAPanel';
+    /** ShareBttn.anim на WatchBttn (playOnLoad не повторяется при повторном show). */
+    private static readonly KTA_BUTTON_LOOP_ANIM = 'ShareBttn';
 
     private static _inst: GameManager | null = null;
 
@@ -123,6 +127,24 @@ export class GameManager extends Component {
     private _gameOverSeedRollTween: Tween<{ value: number }> | null = null;
 
     private _damageInvincibleRemain = 0;
+
+    /** 0 или 1: один шлем; повторный pickup заменяет предыдущий. */
+    private _helmetCharges = 0;
+
+    /** Пока играет detached break FX — новый pickup не начинаем. */
+    private _helmetBreakActive = false;
+
+    /** Активная копия break FX вне игрока (Canvas). */
+    private _helmetBreakFxNode: Node | null = null;
+
+    private _helmetBreakFxPlaying = false;
+
+    /** После спасения шлемом от Ground — не вызывать instantKill повторно. */
+    private _helmetGroundGraceRemain = 0;
+
+    /** Исходная local-поза HelmetEff до HelmetBreakEffect (для повторного надевания). */
+    private _helmetEffRestLocalPos: Vec3 | null = null;
+    private _helmetEffRestEuler: Vec3 | null = null;
 
     /** Сколько порогов seedsPerExtraLife уже выдали за этот забег. */
     private _seedLifeBonusesGranted = 0;
@@ -216,6 +238,19 @@ export class GameManager extends Component {
 
     public get isDamageInvincible(): boolean {
         return this._damageInvincibleRemain > 0;
+    }
+
+    /** 0 или 1 — есть ли шлем (helmet_item). */
+    public get helmetCharges(): number {
+        return this._helmetCharges;
+    }
+
+    public get hasHelmet(): boolean {
+        return this._helmetCharges > 0;
+    }
+
+    public get isHelmetGroundGraceActive(): boolean {
+        return this._helmetGroundGraceRemain > 0;
     }
 
     public get isDying(): boolean {
@@ -782,14 +817,6 @@ export class GameManager extends Component {
 
     @property({
         group: G_HP,
-        displayName: 'Seeds Per Extra Life',
-        tooltip:
-            'За каждые N собранных семечек за забег — +1 HP. 0 — бонус выключен.',
-    })
-    seedsPerExtraLife = 100;
-
-    @property({
-        group: G_HP,
         type: Prefab,
         displayName: 'Damage Particle FX Prefab',
         tooltip: 'Префаб DamageParticleFX — спавн при потере HP (рядом с игроком).',
@@ -842,6 +869,7 @@ export class GameManager extends Component {
         }
         this._hideOverlayPanels();
         this._syncGameplayUiVisible();
+        this._syncHelmetEffVisible();
         input.on(Input.EventType.TOUCH_START, this._onTouchStart, this);
         input.on(Input.EventType.TOUCH_END, this._onTouchEnd, this);
         input.on(Input.EventType.TOUCH_CANCEL, this._onTouchEnd, this);
@@ -852,6 +880,7 @@ export class GameManager extends Component {
     start() {
         this._bindUiButtons();
         this._syncGameplayUiVisible();
+        this._syncHelmetEffVisible();
     }
 
     onDestroy() {
@@ -890,6 +919,13 @@ export class GameManager extends Component {
             this._damageInvincibleRemain = Math.max(
                 0,
                 this._damageInvincibleRemain - dt,
+            );
+        }
+
+        if (this._helmetGroundGraceRemain > 0) {
+            this._helmetGroundGraceRemain = Math.max(
+                0,
+                this._helmetGroundGraceRemain - dt,
             );
         }
 
@@ -1149,6 +1185,7 @@ export class GameManager extends Component {
         SoundController.instance?.resetVariantRotation();
         SoundController.instance?.continueKtaMusicAfterPlayAgain();
         this._prewarmAnimatedPrefabSpawners();
+        this._syncHelmetEffVisible();
 
         const player = SceneNodeHub.instance?.player;
         forEachPlayerAnimController(player, (a) => a.playWaitingStay());
@@ -1292,6 +1329,7 @@ export class GameManager extends Component {
             return;
         }
         this._replayPanelIntroAnim(panel, GameManager.KTA_PANEL_ANIM);
+        this._replayKtaButtonLoopAnims();
     }
 
     private _stopKtaPanelIntro(): void {
@@ -1300,6 +1338,7 @@ export class GameManager extends Component {
             return;
         }
         this._stopPanelIntroAnim(panel, GameManager.KTA_PANEL_ANIM);
+        this._stopKtaButtonLoopAnims();
     }
 
     /** playOnLoad срабатывает только при первом enable — при повторном game over нужен play(). */
@@ -1310,6 +1349,61 @@ export class GameManager extends Component {
         if (!anim?.isValid) {
             return;
         }
+        this._replayAnimComponent(anim, clipName);
+    }
+
+    private _stopPanelIntroAnim(panel: Node, clipName: string): void {
+        const anim =
+            panel.getComponent(Animation) ??
+            panel.getComponentInChildren(Animation);
+        if (!anim?.isValid) {
+            return;
+        }
+        this._stopAnimComponent(anim, clipName);
+    }
+
+    /** WatchBttn / ShareBttn на KTAPanel: свой Animation с playOnLoad. */
+    private _replayKtaButtonLoopAnims(): void {
+        const clip = GameManager.KTA_BUTTON_LOOP_ANIM;
+        const watch = this._resolveWatchButton()?.node;
+        if (watch?.isValid) {
+            this._replayNodeAnim(watch, clip);
+        }
+        const share = this._resolveShareButton()?.node;
+        if (share?.isValid) {
+            this._replayNodeAnim(share, clip);
+        }
+    }
+
+    private _stopKtaButtonLoopAnims(): void {
+        const clip = GameManager.KTA_BUTTON_LOOP_ANIM;
+        const watch = this._resolveWatchButton()?.node;
+        if (watch?.isValid) {
+            this._stopNodeAnim(watch, clip);
+        }
+        const share = this._resolveShareButton()?.node;
+        if (share?.isValid) {
+            this._stopNodeAnim(share, clip);
+        }
+    }
+
+    private _replayNodeAnim(node: Node, clipName: string): void {
+        const anim = node.getComponent(Animation);
+        if (!anim?.isValid) {
+            return;
+        }
+        this._replayAnimComponent(anim, clipName);
+    }
+
+    private _stopNodeAnim(node: Node, clipName: string): void {
+        const anim = node.getComponent(Animation);
+        if (!anim?.isValid) {
+            return;
+        }
+        this._stopAnimComponent(anim, clipName);
+    }
+
+    private _replayAnimComponent(anim: Animation, clipName: string): void {
         const state = anim.getState(clipName);
         if (state) {
             state.stop();
@@ -1320,13 +1414,7 @@ export class GameManager extends Component {
         anim.play(clipName);
     }
 
-    private _stopPanelIntroAnim(panel: Node, clipName: string): void {
-        const anim =
-            panel.getComponent(Animation) ??
-            panel.getComponentInChildren(Animation);
-        if (!anim?.isValid) {
-            return;
-        }
+    private _stopAnimComponent(anim: Animation, clipName: string): void {
         const state = anim.getState(clipName);
         if (state) {
             state.stop();
@@ -1865,9 +1953,9 @@ export class GameManager extends Component {
         this._applySeedLifeBonuses();
     }
 
-    /** Пороги семечек → +1 HP (см. seedsPerExtraLife). */
+    /** Пороги семечек → +1 HP (см. BonusItemScheduler.seedsPerExtraLife). */
     private _applySeedLifeBonuses(): void {
-        const per = this.seedsPerExtraLife;
+        const per = this._bonusItems()?.seedsPerExtraLife ?? 0;
         if (per <= 0) {
             return;
         }
@@ -1922,6 +2010,31 @@ export class GameManager extends Component {
         );
         return this._commitGrantExtraLifeAtSlot(slotIndex);
     }
+
+    /** Сбор helmet_item — один шлем; повторный pickup снимает предыдущий. */
+    public grantHelmetPickup(): void {
+        if (!this.isPlaying) {
+            return;
+        }
+        if (this._helmetCharges > 0) {
+            this._dropHelmetOnReplace();
+        }
+        this._helmetBreakActive = false;
+        this.unschedule(this._onHelmetBreakFinished);
+        this._cancelHelmetBreakFxPlayback();
+        const eff = this._resolveHelmetEffNode();
+        if (eff?.isValid) {
+            this._cacheHelmetEffRestPoseIfNeeded(eff);
+        }
+        this._helmetCharges = 1;
+        this._syncHelmetEffVisible();
+    }
+
+    /** TODO: эффект magnet_item — реализовать по описанию. */
+    public grantSeedMagnetPickup(): void {}
+
+    /** TODO: эффект wisdom_item — реализовать по описанию. */
+    public grantWisdomPickup(): void {}
 
     /**
      * Первый свободный слот: логически пустой (HP), падает HpFall или уже зарезервирован под harvest.
@@ -2102,6 +2215,7 @@ export class GameManager extends Component {
 
     /** Восстанавливает ряд сердечек (якорь + клоны справа). */
     public resetHp(): void {
+        this._resetHelmetState();
         this._clearSpawnedHearts();
         this._heartNodes.length = 0;
         this._currentHp = 0;
@@ -2145,6 +2259,7 @@ export class GameManager extends Component {
      * При 0 HP — {@link beginDeathSequence} (клип смерти), кроме {@link instantKill}.
      * @param deferDeathSequence true — 0 HP, но {@link beginDeathSequence} вызовет вызывающий после hazard-клипа.
      * @param invincibilitySec длительность i-frames после успешной потери HP.
+     * @param options.helmetProtects true — стена; false — электрооблако и прочее.
      * @returns true, если HP стало 0.
      */
     public takeDamage(
@@ -2152,6 +2267,7 @@ export class GameManager extends Component {
         playDamageSound = true,
         deferDeathSequence = false,
         invincibilitySec = 0,
+        options?: { helmetProtects?: boolean },
     ): boolean {
         if (
             !this.isPlaying ||
@@ -2162,6 +2278,12 @@ export class GameManager extends Component {
             return false;
         }
         if (this._damageInvincibleRemain > 0) {
+            return false;
+        }
+        if (
+            options?.helmetProtects === true &&
+            this._tryAbsorbDamageWithHelmet()
+        ) {
             return false;
         }
 
@@ -2225,6 +2347,324 @@ export class GameManager extends Component {
     };
 
     private static readonly DAMAGE_PARTICLE_CHILD = 'DamageParticle';
+    private static readonly HELMET_EFF_NODE = 'HelmetEff';
+
+    private _bonusItems(): BonusItemScheduler | null {
+        const inst = BonusItemScheduler.instance;
+        if (inst?.isValid) {
+            return inst;
+        }
+        return (
+            this.getComponent(LevelGenerator)?.getComponent(BonusItemScheduler) ??
+            null
+        );
+    }
+
+    private _resetHelmetState(): void {
+        this._helmetCharges = 0;
+        this._helmetBreakActive = false;
+        this._helmetGroundGraceRemain = 0;
+        this._helmetEffRestLocalPos = null;
+        this._helmetEffRestEuler = null;
+        this.unschedule(this._onHelmetBreakFinished);
+        this._cancelHelmetBreakFxPlayback();
+        this._syncHelmetEffVisible();
+    }
+
+    /** Старый шлем «спадает» перед выдачей нового с pickup. */
+    private _dropHelmetOnReplace(): void {
+        this._helmetCharges = 0;
+        this._syncHelmetEffVisible();
+    }
+
+    private _resolveHelmetEffNode(): Node | null {
+        const player = this._resolvePlayerNode();
+        if (!player?.isValid) {
+            return null;
+        }
+        const direct = player.getChildByName(GameManager.HELMET_EFF_NODE);
+        if (direct?.isValid) {
+            return direct;
+        }
+        const stack = [...player.children];
+        while (stack.length > 0) {
+            const n = stack.pop()!;
+            if (n.name === GameManager.HELMET_EFF_NODE) {
+                return n;
+            }
+            stack.push(...n.children);
+        }
+        return null;
+    }
+
+    private _syncHelmetEffVisible(): void {
+        const eff = this._resolveHelmetEffNode();
+        if (!eff?.isValid) {
+            return;
+        }
+        const show =
+            this.isPlaying && this._helmetCharges > 0 && !this._helmetBreakActive;
+        if (show) {
+            this._restoreHelmetEffIdlePose(eff);
+        }
+        eff.active = show;
+    }
+
+    private _cacheHelmetEffRestPoseIfNeeded(eff: Node): void {
+        if (this._helmetEffRestLocalPos) {
+            return;
+        }
+        this._helmetEffRestLocalPos = eff.position.clone();
+        this._helmetEffRestEuler = eff.eulerAngles.clone();
+    }
+
+    /** Сброс local-позы equipped перед показом после pickup. */
+    private _restoreHelmetEffIdlePose(eff: Node): void {
+        if (this._helmetEffRestLocalPos) {
+            eff.setPosition(this._helmetEffRestLocalPos);
+        }
+        if (this._helmetEffRestEuler) {
+            eff.setRotationFromEuler(this._helmetEffRestEuler);
+        }
+    }
+
+    /** Поглощает удар о стену (не электрооблако — там helmetProtects: false). */
+    private _tryAbsorbDamageWithHelmet(): boolean {
+        if (this._helmetCharges <= 0 || this._helmetBreakActive) {
+            return false;
+        }
+        this._helmetCharges = 0;
+        this._playHelmetBreakEffect();
+        return true;
+    }
+
+    /**
+     * Ground: instantKill или спасение шлемом с отскоком вверх.
+     * Вызывается из {@link PlayerPathSensors}.
+     */
+    public tryInstantKillOrHelmetSave(): void {
+        if (
+            !this.isPlaying ||
+            this._awaitingDeathSequence ||
+            this._instantKillPending
+        ) {
+            return;
+        }
+        if (this._helmetGroundGraceRemain > 0) {
+            return;
+        }
+        if (this._tryHelmetSaveFromGround()) {
+            return;
+        }
+        this.instantKill();
+    }
+
+    private _tryHelmetSaveFromGround(): boolean {
+        if (this._helmetCharges <= 0 || this._helmetBreakActive) {
+            return false;
+        }
+        this._helmetCharges = 0;
+        this._playHelmetBreakEffect();
+        const cfg = this._bonusItems();
+        const grace = Math.max(0.05, cfg?.helmetGroundGraceSec ?? 1.25);
+        this._helmetGroundGraceRemain = grace;
+        this._damageInvincibleRemain = Math.max(
+            this._damageInvincibleRemain,
+            cfg?.getHelmetGroundInvincibilitySec() ?? grace,
+        );
+        this._applyHelmetGroundBounce();
+        SoundController.instance?.play(SoundId.WallHit);
+        CameraShake.instance?.shakeOnDamage();
+        return true;
+    }
+
+    private _applyHelmetGroundBounce(): void {
+        const player = this._resolvePlayerNode();
+        if (!player?.isValid) {
+            return;
+        }
+        let flight =
+            (player.getComponent(
+                PLAYER_FLIGHT_CCLASS,
+            ) as PlayerFlight | null) ??
+            (player.getComponentInChildren(
+                PLAYER_FLIGHT_CCLASS,
+            ) as PlayerFlight | null);
+        if (!flight) {
+            const hubPlayer = SceneNodeHub.instance?.player;
+            if (hubPlayer?.isValid) {
+                flight =
+                    (hubPlayer.getComponent(
+                        PLAYER_FLIGHT_CCLASS,
+                    ) as PlayerFlight | null) ??
+                    (hubPlayer.getComponentInChildren(
+                        PLAYER_FLIGHT_CCLASS,
+                    ) as PlayerFlight | null);
+            }
+        }
+        const cfg = this._bonusItems();
+        flight?.applyHelmetGroundBounce(
+            cfg?.helmetGroundBounceFactor ?? 0.55,
+            cfg?.helmetGroundLiftLockSec ?? 0.35,
+        );
+    }
+
+    private _playHelmetBreakEffect(): void {
+        const eff = this._resolveHelmetEffNode();
+        if (!eff?.isValid) {
+            return;
+        }
+
+        this._helmetBreakActive = true;
+        this._syncHelmetEffVisible();
+
+        const clip = this._bonusItems()?.helmetBreakClip ?? null;
+        if (!clip?.name) {
+            this._onHelmetBreakFinished();
+            return;
+        }
+
+        const fx = this._spawnDetachedHelmetBreakFx(eff);
+        if (!fx?.isValid) {
+            this._onHelmetBreakFinished();
+            return;
+        }
+
+        const anim = fx.getComponent(Animation);
+        if (!anim) {
+            fx.destroy();
+            this._onHelmetBreakFinished();
+            return;
+        }
+
+        this._ensureHelmetBreakClipOnAnimator(anim, clip);
+        this._helmetBreakFxNode = fx;
+        this._helmetBreakFxPlaying = true;
+
+        anim.on(
+            Animation.EventType.FINISHED,
+            this._onHelmetBreakFxAnimFinished,
+            this,
+        );
+        anim.play(clip.name);
+
+        let duration = 0.9;
+        const st = anim.getState(clip.name);
+        if (st && st.duration > 0) {
+            duration = Math.max(
+                0.05,
+                st.duration / Math.max(Math.abs(st.speed), 1e-5),
+            );
+        } else if (clip.duration > 0) {
+            duration = Math.max(0.05, clip.duration);
+        }
+        this.unschedule(this._onHelmetBreakFxTimedFinish);
+        this.scheduleOnce(this._onHelmetBreakFxTimedFinish, duration + 0.05);
+    }
+
+    private _onHelmetBreakFxAnimFinished = (
+        _type?: string,
+        st?: { name?: string },
+    ): void => {
+        if (!this._helmetBreakFxPlaying) {
+            return;
+        }
+        const clipName = this._bonusItems()?.helmetBreakClip?.name;
+        if (st?.name && clipName && st.name !== clipName) {
+            return;
+        }
+        this._finishHelmetBreakFx();
+    };
+
+    private _onHelmetBreakFxTimedFinish = (): void => {
+        this._finishHelmetBreakFx();
+    };
+
+    private _finishHelmetBreakFx(): void {
+        if (!this._helmetBreakFxPlaying) {
+            return;
+        }
+        this._helmetBreakFxPlaying = false;
+        this.unschedule(this._onHelmetBreakFxTimedFinish);
+        const fx = this._helmetBreakFxNode;
+        if (fx?.isValid) {
+            const anim = fx.getComponent(Animation);
+            anim?.off(
+                Animation.EventType.FINISHED,
+                this._onHelmetBreakFxAnimFinished,
+                this,
+            );
+            fx.destroy();
+        }
+        this._helmetBreakFxNode = null;
+        this._onHelmetBreakFinished();
+    }
+
+    /** Сброс/Play Again: уничтожить FX без повторного _onHelmetBreakFinished. */
+    private _cancelHelmetBreakFxPlayback(): void {
+        this._helmetBreakFxPlaying = false;
+        this.unschedule(this._onHelmetBreakFxTimedFinish);
+        const fx = this._helmetBreakFxNode;
+        if (fx?.isValid) {
+            const anim = fx.getComponent(Animation);
+            anim?.off(
+                Animation.EventType.FINISHED,
+                this._onHelmetBreakFxAnimFinished,
+                this,
+            );
+            anim?.stop();
+            fx.destroy();
+        }
+        this._helmetBreakFxNode = null;
+    }
+
+    /** Equipped pose → detach под Canvas (worldPositionStays) → break-клип. */
+    private _spawnDetachedHelmetBreakFx(eff: Node): Node | null {
+        const parent = this._resolveHelmetBreakFxParent();
+        if (!parent?.isValid) {
+            return null;
+        }
+
+        const cfg = this._bonusItems();
+        const prefab = cfg?.helmetBreakFxPrefab ?? null;
+        const fx = prefab ? instantiate(prefab) : instantiate(eff);
+        if (!fx?.isValid) {
+            return null;
+        }
+
+        fx.active = true;
+        fx.layer = eff.layer;
+
+        const equippedParent = eff.parent;
+        if (equippedParent?.isValid) {
+            fx.setParent(equippedParent, false);
+            fx.setPosition(eff.position);
+            fx.setRotation(eff.rotation);
+            fx.setScale(eff.scale);
+        }
+        fx.setParent(parent, true);
+        return fx;
+    }
+
+    private _resolveHelmetBreakFxParent(): Node | null {
+        const hub = SceneNodeHub.instance;
+        return hub?.canvasRoot ?? hub?.node ?? null;
+    }
+
+    private _ensureHelmetBreakClipOnAnimator(
+        anim: Animation,
+        clip: AnimationClip,
+    ): void {
+        if (anim.clips.indexOf(clip) >= 0) {
+            return;
+        }
+        anim.addClip(clip);
+    }
+
+    private _onHelmetBreakFinished = (): void => {
+        this._helmetBreakActive = false;
+        this._syncHelmetEffVisible();
+    };
 
     private _embeddedDamageParticleHideRemain = 0;
 
@@ -2420,8 +2860,9 @@ export class GameManager extends Component {
     }
 
     /**
-     * Касание Ground: птица уже «упала» — без deathClip, сразу game over.
+     * Касание Ground без шлема: птица уже «упала» — без deathClip, сразу game over.
      * Игнорирует неуязвимость после обычного урона.
+     * С шлемом — {@link tryInstantKillOrHelmetSave}.
      */
     public instantKill(): void {
         if (
@@ -2469,6 +2910,7 @@ export class GameManager extends Component {
         this._ktaPanelShown = false;
         this._hideOverlayPanels();
         this._syncGameplayUiVisible();
+        this._syncHelmetEffVisible();
         SoundController.instance?.endKtaBgmPhase();
         SoundController.instance?.stopBgm();
         SoundController.instance?.play(SoundId.WallHit);

@@ -10,8 +10,9 @@ import { SceneNodeHub } from './SceneNodeHub';
 import { WeightedChunk } from './WeightedChunk';
 import { MilestoneSign } from './MilestoneSign';
 import { MilestoneDistanceLabel } from './MilestoneDistanceLabel';
+import { BonusItemScheduler } from './BonusItemScheduler';
 
-const { ccclass, property } = _decorator;
+const { ccclass, property, requireComponent } = _decorator;
 
 /** Одна полоса тайлинга для слоя параллакса */
 type ChunkStrip = {
@@ -43,6 +44,7 @@ const G_BONUS = {
  * Скролл каждого слоя умножается на свой Parallax Factor (дальше — медленнее).
  */
 @ccclass('LevelGenerator')
+@requireComponent(BonusItemScheduler)
 export class LevelGenerator extends Component {
     @property({
         group: G_PARALLAX,
@@ -221,6 +223,14 @@ export class LevelGenerator extends Component {
     /** false — родители слоёв чанков скрыты (например, на KTA). */
     private _chunkLayersActive = true;
 
+    private _bonusScheduler: BonusItemScheduler | null = null;
+
+    onLoad() {
+        this._bonusScheduler =
+            this.getComponent(BonusItemScheduler) ??
+            this.addComponent(BonusItemScheduler);
+    }
+
     start() {
         this.rebuildChunks();
     }
@@ -323,6 +333,7 @@ export class LevelGenerator extends Component {
         this.clearMilestoneQueue();
         this._plane1SpawnCounter = 0;
         this._bonusChunkPending = false;
+        this._bonusScheduler?.resetForRun();
 
         const hub = SceneNodeHub.instance;
 
@@ -371,6 +382,12 @@ export class LevelGenerator extends Component {
         if (!game?.isPlaying || this._strips.length === 0) {
             return;
         }
+
+        const ppm = game.pixelsPerMeter;
+        if (ppm > 0) {
+            this._bonusScheduler?.tick(game.flightDistancePx / ppm);
+        }
+
         const forward = game.getForwardScrollDelta(dt);
         const kick = game.getWorldKickbackDelta(dt);
         if (forward <= 0 && kick <= 0) {
@@ -408,6 +425,15 @@ export class LevelGenerator extends Component {
         milestoneMeters: number | null;
         allowVerticalOffset: boolean;
     } {
+        const forcedBonus = this._bonusScheduler?.consumeForcedChunkPrefab();
+        if (forcedBonus) {
+            return {
+                prefab: forcedBonus,
+                milestoneMeters: null,
+                allowVerticalOffset: false,
+            };
+        }
+
         if (this._bonusChunkPending) {
             this._bonusChunkPending = false;
             const bonus = this.pickPlane1BonusChunk();
@@ -471,6 +497,10 @@ export class LevelGenerator extends Component {
             }
         }
         const name = prefab.name ?? '';
+        return this._isFixedLayoutPlane1ChunkName(name);
+    }
+
+    private _isFixedLayoutPlane1ChunkName(name: string): boolean {
         if (
             /tutorial|chunk_start|start_chunk|chunk_sign|milestone|chunk_bonus|bonus_chunk|chunk_seed/i.test(
                 name,
@@ -539,6 +569,13 @@ export class LevelGenerator extends Component {
         };
         apply();
         this.scheduleOnce(apply, 0);
+    }
+
+    private _onPlane1ChunkReady(seg: Node, prefab: Prefab): void {
+        this._bonusScheduler?.onChunkSpawned(
+            seg,
+            this._isFixedLayoutPlane1Prefab(prefab),
+        );
     }
 
     private _applyMilestoneToSegment(seg: Node, milestoneMeters: number): void {
@@ -667,6 +704,7 @@ export class LevelGenerator extends Component {
 
             const seg = instantiate(prefab);
             this._setupPlane1Segment(seg, milestoneMeters);
+            this._onPlane1ChunkReady(seg, prefab);
             seg.parent = parent;
 
             const ui = seg.getComponent(UITransform);
@@ -718,6 +756,7 @@ export class LevelGenerator extends Component {
 
         const newSeg = instantiate(prefab);
         this._setupPlane1Segment(newSeg, milestoneMeters);
+        this._onPlane1ChunkReady(newSeg, prefab);
         parent!.addChild(newSeg);
         newSeg.setSiblingIndex(siblingIndex);
         segments[idx] = newSeg;

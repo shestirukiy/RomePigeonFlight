@@ -570,7 +570,7 @@ export class PlayerPathSensors extends Component {
                     `[PlayerPathSensors] lethal Ground other="${other.node?.name ?? '?'}"`,
                 );
             }
-            gm.instantKill();
+            gm.tryInstantKillOrHelmetSave();
             return;
         }
 

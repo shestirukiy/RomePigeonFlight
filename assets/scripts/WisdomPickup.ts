@@ -2,18 +2,15 @@ import { _decorator, Node } from 'cc';
 import { BonusItemType } from './BonusItemType';
 import { GameManager } from './GameManager';
 import { PickupBase } from './PickupBase';
-import { SceneNodeHub } from './SceneNodeHub';
 import { SoundId } from './SoundLibrary';
 
 const { ccclass } = _decorator;
 
 /**
- * Сердечко на уровне. Сбор сразу даёт +1 HP — тот же эффект, что при наборе
- * seedsPerExtraLife семечек (HpHarvest + «+1 Life restored»).
- * Коллайдер игрока (PlayerPathSensors) и/или MagnetPickable.
+ * Wisdom на уровне. Эффект при сборе — {@link GameManager.grantWisdomPickup}.
  */
-@ccclass('LifePickup')
-export class LifePickup extends PickupBase {
+@ccclass('WisdomPickup')
+export class WisdomPickup extends PickupBase {
     collectSound = SoundId.PickupCollect;
 
     private _collected = false;
@@ -23,12 +20,11 @@ export class LifePickup extends PickupBase {
     }
 
     public override get scheduledBonusType(): BonusItemType | null {
-        return BonusItemType.Life;
+        return BonusItemType.Wisdom;
     }
 
-    /** @deprecated Используйте PickupBase.resolve */
-    public static resolve(from: Node | null): LifePickup | null {
-        return PickupBase.resolve(from) as LifePickup | null;
+    public static resolve(from: Node | null): WisdomPickup | null {
+        return PickupBase.resolve(from) as WisdomPickup | null;
     }
 
     public override collect(): void {
@@ -41,9 +37,7 @@ export class LifePickup extends PickupBase {
         }
         this._collected = true;
         this.playCollectSound();
-        if (gm.grantExtraLifeWithHarvest()) {
-            SceneNodeHub.instance?.showLifeRestored();
-        }
+        gm.grantWisdomPickup();
         this.destroyPickupNode();
     }
 }

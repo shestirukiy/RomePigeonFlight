@@ -264,6 +264,31 @@ export class PlayerFlight extends Component {
         }
     }
 
+    /** Отскок от Ground после спасения шлемом. */
+    public applyHelmetGroundBounce(
+        bounceFactor: number,
+        liftLockSec: number,
+    ): void {
+        const body = this._body;
+        if (body) {
+            const phys = this._flightPhysicsMultipliers();
+            const maxUp = this.maxUpSpeed * phys.maxUp;
+            const factor = Math.max(0, bounceFactor);
+            let vy = maxUp * factor;
+            if (maxUp > 0 && vy > maxUp) {
+                vy = maxUp;
+            }
+            body.linearVelocity = new Vec2(0, vy);
+            body.wakeUp?.();
+            const lift = Math.max(4, 14 * factor);
+            const p = this.node.position;
+            this.node.setPosition(PlayerFlight.RUNWAY_LOCAL_X, p.y + lift, p.z);
+        }
+        if (liftLockSec > 0) {
+            this.setElectricLiftBlockedFor(liftLockSec);
+        }
+    }
+
     private _savedGravityScale = 1;
 
     /**

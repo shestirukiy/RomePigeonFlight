@@ -27,7 +27,7 @@ export function forEachPlayerAnimController(
     for (const anim of playerRoot.getComponentsInChildren(
         PlayerAnimationController,
     )) {
-        if (anim?.enabled && anim.isValid) {
+        if (anim?.enabled && anim.isValid && anim.node.activeInHierarchy) {
             fn(anim);
         }
     }

@@ -111,7 +111,9 @@ export class PlayerController extends Component {
         if (!gm?.isPlaying) {
             return;
         }
-        const lethal = gm.takeDamage(1, false, true, this.damageInvincibilitySec);
+        const lethal = gm.takeDamage(1, false, true, this.damageInvincibilitySec, {
+            helmetProtects: false,
+        });
         SoundController.instance?.play(SoundId.ElectricHit);
         const t = this.electricDefaultLiftLockDuration;
         if (lethal) {
@@ -140,7 +142,9 @@ export class PlayerController extends Component {
         if (!gm?.isPlaying) {
             return;
         }
-        const lethal = gm.takeDamage(1, false, true, this.damageInvincibilitySec);
+        const lethal = gm.takeDamage(1, false, true, this.damageInvincibilitySec, {
+            helmetProtects: true,
+        });
         SoundController.instance?.play(SoundId.WallHit);
         const kd = this.towerWallKnockbackDurationSec;
         if (lethal) {

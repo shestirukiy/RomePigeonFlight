@@ -1,4 +1,5 @@
 import { _decorator, Component, Enum, Node } from 'cc';
+import { BonusItemType } from './BonusItemType';
 import { SoundController } from './SoundController';
 import { SoundId } from './SoundLibrary';
 
@@ -20,6 +21,11 @@ export abstract class PickupBase extends Component {
     public abstract get isCollected(): boolean;
 
     public abstract collect(): void;
+
+    /** Ненулевое значение — пикап участвует в BonusItemScheduler (life_item в чанках). */
+    public get scheduledBonusType(): BonusItemType | null {
+        return null;
+    }
 
     protected playCollectSound(): void {
         if (this.collectSound === SoundId.None) {

@@ -17,6 +17,10 @@
   "splash-setting": {
     "logo": {
       "type": "none"
+    },
+    "background": {
+      "image": "project://settings/loading.jpg",
+      "type": "custom"
     }
   }
 }
