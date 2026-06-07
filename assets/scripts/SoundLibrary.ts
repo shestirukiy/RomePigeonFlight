@@ -19,6 +19,22 @@ export enum SoundId {
     MilestonePassed = 11,
     /** Pass Boost — ускорение после вехи. */
     SpeedBoost = 12,
+    /** Кнопки меню (Continue, Play Again, Share, Watch, Skip/Start). */
+    MenuButtonClick = 13,
+    /** Слетание шлема (HelmetBreakEffect). */
+    HelmetBreak = 14,
+    /** Надевание шлема (helmet_item → grantHelmetPickup). */
+    HelmetEquip = 15,
+    /** Включение баффа Wisdom на игроке. */
+    WisdomActivate = 16,
+    /** Включение баффа Magnet на игроке. */
+    MagnetActivate = 17,
+    /** Окончание баффа Magnet. */
+    MagnetDeactivate = 18,
+    /** Окончание баффа Wisdom. */
+    WisdomDeactivate = 19,
+    /** Сбор сердечка (+1 HP). */
+    HeartCollect = 20,
 }
 
 ccenum(SoundId);
@@ -37,6 +53,7 @@ const G_PLAYER = { id: 'Player', name: 'Player' };
 const G_UI = { id: 'UI', name: 'UI' };
 const G_MUSIC = { id: 'Music', name: 'Music' };
 const G_MILESTONE = { id: 'Milestone', name: 'Milestone & boost' };
+const G_BUFFS = { id: 'Buffs', name: 'Buffs & hearts' };
 
 /**
  * Каталог AudioClip для инспектора. На сцене — рядом с SoundController (тот же узел или дочерний).
@@ -93,6 +110,62 @@ export class SoundLibrary extends Component {
     })
     wallHit: AudioClip | null = null;
 
+    @property({
+        group: G_GAMEPLAY,
+        type: AudioClip,
+        displayName: 'Helmet Break',
+        tooltip: 'Слетание шлема (стена, ground, замена с pickup).',
+    })
+    helmetBreak: AudioClip | null = null;
+
+    @property({
+        group: G_BUFFS,
+        type: AudioClip,
+        displayName: 'Helmet Equip',
+        tooltip: 'Надевание шлема при сборе helmet_item.',
+    })
+    helmetEquip: AudioClip | null = null;
+
+    @property({
+        group: G_BUFFS,
+        type: AudioClip,
+        displayName: 'Wisdom Activate',
+        tooltip: 'Включение баффа Wisdom на Player.',
+    })
+    wisdomActivate: AudioClip | null = null;
+
+    @property({
+        group: G_BUFFS,
+        type: AudioClip,
+        displayName: 'Wisdom Deactivate',
+        tooltip: 'Окончание баффа Wisdom.',
+    })
+    wisdomDeactivate: AudioClip | null = null;
+
+    @property({
+        group: G_BUFFS,
+        type: AudioClip,
+        displayName: 'Magnet Activate',
+        tooltip: 'Включение баффа Magnet на Player.',
+    })
+    magnetActivate: AudioClip | null = null;
+
+    @property({
+        group: G_BUFFS,
+        type: AudioClip,
+        displayName: 'Magnet Deactivate',
+        tooltip: 'Окончание баффа Magnet.',
+    })
+    magnetDeactivate: AudioClip | null = null;
+
+    @property({
+        group: G_BUFFS,
+        type: AudioClip,
+        displayName: 'Heart Collect',
+        tooltip: 'Сбор life_item / сердечка (+1 HP).',
+    })
+    heartCollect: AudioClip | null = null;
+
     @property({ group: G_GAMEPLAY, type: AudioClip })
     instantKill: AudioClip | null = null;
 
@@ -104,6 +177,15 @@ export class SoundLibrary extends Component {
             'Однократный джингл при поражении (отдельно от Wall Hit; можно другой клип).',
     })
     gameOver: AudioClip | null = null;
+
+    @property({
+        group: G_UI,
+        type: AudioClip,
+        displayName: 'Menu Button Click',
+        tooltip:
+            'Continue, Play Again, Share, Watch, Skip/Start на Chunk_Start.',
+    })
+    menuButtonClick: AudioClip | null = null;
 
     @property({
         group: G_UI,
@@ -229,6 +311,22 @@ export class SoundLibrary extends Component {
                 return this.milestonePassed;
             case SoundId.SpeedBoost:
                 return this.speedBoost;
+            case SoundId.MenuButtonClick:
+                return this.menuButtonClick;
+            case SoundId.HelmetBreak:
+                return this.helmetBreak;
+            case SoundId.HelmetEquip:
+                return this.helmetEquip;
+            case SoundId.WisdomActivate:
+                return this.wisdomActivate;
+            case SoundId.WisdomDeactivate:
+                return this.wisdomDeactivate;
+            case SoundId.MagnetActivate:
+                return this.magnetActivate;
+            case SoundId.MagnetDeactivate:
+                return this.magnetDeactivate;
+            case SoundId.HeartCollect:
+                return this.heartCollect;
             default:
                 return null;
         }

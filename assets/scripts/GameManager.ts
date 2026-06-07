@@ -13,6 +13,7 @@ import {
     Material,
     Node,
     Prefab,
+    Quat,
     sys,
     Tween,
     UITransform,
@@ -38,6 +39,7 @@ import { SoundController } from './SoundController';
 import { SoundId } from './SoundLibrary';
 import { AnimatedPrefabSpawner } from './AnimatedPrefabSpawner';
 import { BonusItemScheduler } from './BonusItemScheduler';
+import { PlayerEquippedBuffs } from './PlayerEquippedBuffs';
 
 const { ccclass, property, executionOrder } = _decorator;
 
@@ -56,6 +58,8 @@ const G_HP = { id: 'Health', name: 'Health & seeds' };
 export class GameManager extends Component {
     private static readonly GAME_OVER_PANEL_ANIM = 'GameOverPanelAnim';
     private static readonly KTA_PANEL_ANIM = 'KTAPanel';
+    /** UIAppear на ноде UI (playOnLoad только при первом enable). */
+    private static readonly GAMEPLAY_UI_APPEAR_ANIM = 'UIAppear';
     /** ShareBttn.anim на WatchBttn (playOnLoad не повторяется при повторном show). */
     private static readonly KTA_BUTTON_LOOP_ANIM = 'ShareBttn';
 
@@ -131,13 +135,16 @@ export class GameManager extends Component {
     /** 0 или 1: один шлем; повторный pickup заменяет предыдущий. */
     private _helmetCharges = 0;
 
-    /** Пока играет detached break FX — новый pickup не начинаем. */
+    /** Пока сломан шлем от урона — HelmetEff скрыт до конца FX. */
     private _helmetBreakActive = false;
 
     /** Активная копия break FX вне игрока (Canvas). */
     private _helmetBreakFxNode: Node | null = null;
 
     private _helmetBreakFxPlaying = false;
+
+    /** false — replace pickup: FX летит, новый шлем на голове сразу. */
+    private _helmetBreakFxBlocksEquipped = true;
 
     /** После спасения шлемом от Ground — не вызывать instantKill повторно. */
     private _helmetGroundGraceRemain = 0;
@@ -178,6 +185,12 @@ export class GameManager extends Component {
     private _milestonePassBoostFactor = 1;
     private _milestonePassBoostHoldRemain = 0;
     private _milestonePassBoostSettleRemain = 0;
+
+    /** Wisdom buff: плавное замедление мира при препятствии в WisdomCollider. */
+    private _wisdomBuffActive = false;
+    private _wisdomObstacleAhead = false;
+    private _wisdomSlowFactor = 1;
+    private _wisdomSlowTarget = 1;
 
     /** Эмиттер Speed Lines (не active ноды — только enabled + stop/reset). */
     private _speedLinesEmitterOn = false;
@@ -264,6 +277,43 @@ export class GameManager extends Component {
 
     public get isPlaying(): boolean {
         return this._playing && !this._gameOver && !this._dying;
+    }
+
+    public get isWisdomBuffActive(): boolean {
+        return this._wisdomBuffActive;
+    }
+
+    /** FediaRunFly только пока wisdom реально замедляет мир (препятствие впереди). */
+    public isWisdomRunFlyForced(): boolean {
+        return (
+            this._wisdomBuffActive &&
+            this.isPlaying &&
+            this._wisdomObstacleAhead
+        );
+    }
+
+    public setWisdomBuffActive(active: boolean): void {
+        this._wisdomBuffActive = active;
+        if (!active) {
+            this._wisdomObstacleAhead = false;
+            this._wisdomSlowTarget = 1;
+            this._wisdomSlowFactor = 1;
+        }
+    }
+
+    public notifyWisdomObstacleAhead(ahead: boolean): void {
+        this._wisdomObstacleAhead = ahead;
+        if (!this._wisdomBuffActive) {
+            this._wisdomSlowTarget = 1;
+            return;
+        }
+        const pct = Math.min(
+            100,
+            Math.max(0, this._bonusItems()?.wisdomSlowPercent ?? 50),
+        );
+        this._wisdomSlowTarget = ahead
+            ? Math.max(0.05, 1 - pct / 100)
+            : 1;
     }
 
     /** true после Play Again — ждём тап, intro-камеру не показываем. */
@@ -440,7 +490,8 @@ export class GameManager extends Component {
         return (
             base *
             this._getMilestoneSpeedMultiplier() *
-            this._milestonePassBoostFactor
+            this._milestonePassBoostFactor *
+            (this._wisdomBuffActive ? this._wisdomSlowFactor : 1)
         );
     }
 
@@ -929,6 +980,8 @@ export class GameManager extends Component {
             );
         }
 
+        this._tickWisdomSlow(dt);
+
         if (this._worldKickbackRemain > 0) {
             this._worldKickbackRemain = Math.max(
                 0,
@@ -1117,6 +1170,31 @@ export class GameManager extends Component {
         this._syncSpeedLinesEmitter();
     }
 
+    /** Плавный вход/выход wisdomSlowTarget → _wisdomSlowFactor (BonusItemScheduler.wisdomSlowEaseSec). */
+    private _tickWisdomSlow(dt: number): void {
+        if (!this._wisdomBuffActive || !this.isPlaying) {
+            if (!this._wisdomBuffActive) {
+                this._wisdomSlowFactor = 1;
+                this._wisdomSlowTarget = 1;
+            }
+            return;
+        }
+
+        const easeSec = Math.max(
+            0.01,
+            this._bonusItems()?.wisdomSlowEaseSec ?? 0.35,
+        );
+        const t = 1 - Math.exp(-dt / easeSec);
+        this._wisdomSlowFactor +=
+            (this._wisdomSlowTarget - this._wisdomSlowFactor) * t;
+
+        if (
+            Math.abs(this._wisdomSlowFactor - this._wisdomSlowTarget) < 1e-4
+        ) {
+            this._wisdomSlowFactor = this._wisdomSlowTarget;
+        }
+    }
+
     private _syncSpeedLinesEmitter(): void {
         const want = this.isMilestonePassBoostActive();
         if (want === this._speedLinesEmitterOn) {
@@ -1236,6 +1314,7 @@ export class GameManager extends Component {
         forEachPlayerAnimController(SceneNodeHub.instance?.player, (a) =>
             a.onGameRunStarted(),
         );
+        this._syncPlayerFlightInputHeld();
     }
 
     private _prewarmAnimatedPrefabSpawners(): void {
@@ -1269,12 +1348,34 @@ export class GameManager extends Component {
             return;
         }
         const show = this.isPlaying;
+        const wasActive = root.active;
         if (root.active !== show) {
             root.active = show;
         }
-        if (!show) {
-            SceneNodeHub.instance?.hideAllPhrases();
+        if (show) {
+            if (!wasActive) {
+                this._replayGameplayUiIntro();
+            }
+            return;
         }
+        this._stopGameplayUiIntro();
+        SceneNodeHub.instance?.hideAllPhrases();
+    }
+
+    private _replayGameplayUiIntro(): void {
+        const root = this._resolveGameplayUiRoot();
+        if (!root?.isValid) {
+            return;
+        }
+        this._replayPanelIntroAnim(root, GameManager.GAMEPLAY_UI_APPEAR_ANIM);
+    }
+
+    private _stopGameplayUiIntro(): void {
+        const root = this._resolveGameplayUiRoot();
+        if (!root?.isValid) {
+            return;
+        }
+        this._stopPanelIntroAnim(root, GameManager.GAMEPLAY_UI_APPEAR_ANIM);
     }
 
     private _hideOverlayPanels(): void {
@@ -1706,6 +1807,7 @@ export class GameManager extends Component {
 
     /** Тряска камеры при клике по кнопкам меню (если включено в UI). */
     private _shakeCameraOnMenuButton(): void {
+        SoundController.instance?.play(SoundId.MenuButtonClick);
         if (!this.shakeCameraOnMenuButtons) {
             return;
         }
@@ -1906,14 +2008,29 @@ export class GameManager extends Component {
         if (player) {
             this._playerFlightOf(player)?.resetToSpawn();
             player.getComponent(PlayerPathSensors)?.resetForNewRun();
+            this._playerEquippedBuffsOf(player)?.resetForNewRun();
             forEachPlayerAnimController(player, (a) => a.resetForNewRun());
         }
+    }
+
+    private _playerEquippedBuffs(): PlayerEquippedBuffs | null {
+        return this._playerEquippedBuffsOf(SceneNodeHub.instance?.player);
+    }
+
+    private _playerEquippedBuffsOf(
+        node: Node | null | undefined,
+    ): PlayerEquippedBuffs | null {
+        if (!node?.isValid) {
+            return null;
+        }
+        return node.getComponent(PlayerEquippedBuffs);
     }
 
     /** Без import PlayerFlight — разрыв цикла GameManager ↔ PlayerFlight. */
     private _playerFlightOf(node: Node | null | undefined): {
         resetToSpawn(): void;
         releaseInput(): void;
+        syncInputHeldFromPointer(): void;
     } | null {
         if (!node?.isValid) {
             return null;
@@ -1921,7 +2038,12 @@ export class GameManager extends Component {
         return node.getComponent(PLAYER_FLIGHT_CCLASS) as {
             resetToSpawn(): void;
             releaseInput(): void;
+            syncInputHeldFromPointer(): void;
         } | null;
+    }
+
+    private _syncPlayerFlightInputHeld(): void {
+        this._playerFlightOf(SceneNodeHub.instance?.player)?.syncInputHeldFromPointer();
     }
 
     /** PlayerAnimationController висит на Pigeon, не на корне Player. */
@@ -2016,25 +2138,41 @@ export class GameManager extends Component {
         if (!this.isPlaying) {
             return;
         }
-        if (this._helmetCharges > 0) {
-            this._dropHelmetOnReplace();
-        }
-        this._helmetBreakActive = false;
-        this.unschedule(this._onHelmetBreakFinished);
-        this._cancelHelmetBreakFxPlayback();
+        const replacing = this._helmetCharges > 0;
         const eff = this._resolveHelmetEffNode();
+        if (replacing) {
+            this._dropHelmetOnReplace(eff);
+        } else {
+            this._helmetBreakActive = false;
+            this.unschedule(this._onHelmetBreakFinished);
+            this._cancelHelmetBreakFxPlayback();
+        }
+
         if (eff?.isValid) {
             this._cacheHelmetEffRestPoseIfNeeded(eff);
+            if (replacing) {
+                this._restoreHelmetEffIdlePose(eff);
+            }
         }
         this._helmetCharges = 1;
+        this._helmetBreakActive = false;
         this._syncHelmetEffVisible();
+        SoundController.instance?.play(SoundId.HelmetEquip);
     }
 
-    /** TODO: эффект magnet_item — реализовать по описанию. */
-    public grantSeedMagnetPickup(): void {}
+    public grantSeedMagnetPickup(): void {
+        if (!this.isPlaying) {
+            return;
+        }
+        this._playerEquippedBuffs()?.activateMagnet();
+    }
 
-    /** TODO: эффект wisdom_item — реализовать по описанию. */
-    public grantWisdomPickup(): void {}
+    public grantWisdomPickup(): void {
+        if (!this.isPlaying) {
+            return;
+        }
+        this._playerEquippedBuffs()?.activateWisdom();
+    }
 
     /**
      * Первый свободный слот: логически пустой (HP), падает HpFall или уже зарезервирован под harvest.
@@ -2348,6 +2486,7 @@ export class GameManager extends Component {
 
     private static readonly DAMAGE_PARTICLE_CHILD = 'DamageParticle';
     private static readonly HELMET_EFF_NODE = 'HelmetEff';
+    private static readonly PLAYER_CONTAINER = 'PlayerContainer';
 
     private _bonusItems(): BonusItemScheduler | null {
         const inst = BonusItemScheduler.instance;
@@ -2363,6 +2502,7 @@ export class GameManager extends Component {
     private _resetHelmetState(): void {
         this._helmetCharges = 0;
         this._helmetBreakActive = false;
+        this._helmetBreakFxBlocksEquipped = true;
         this._helmetGroundGraceRemain = 0;
         this._helmetEffRestLocalPos = null;
         this._helmetEffRestEuler = null;
@@ -2371,10 +2511,18 @@ export class GameManager extends Component {
         this._syncHelmetEffVisible();
     }
 
-    /** Старый шлем «спадает» перед выдачей нового с pickup. */
-    private _dropHelmetOnReplace(): void {
-        this._helmetCharges = 0;
-        this._syncHelmetEffVisible();
+    /** Старый шлем слетает (тот же break FX, что от стены) — новый остаётся на голове. */
+    private _dropHelmetOnReplace(eff: Node | null): void {
+        this._cancelHelmetBreakFxPlayback();
+        if (!eff?.isValid) {
+            return;
+        }
+        this._updateWorldTransformChain(eff);
+        this._playHelmetBreakEffect(false, {
+            pos: eff.worldPosition.clone(),
+            rot: eff.worldRotation.clone(),
+            scale: eff.worldScale.clone(),
+        });
     }
 
     private _resolveHelmetEffNode(): Node | null {
@@ -2473,7 +2621,6 @@ export class GameManager extends Component {
             cfg?.getHelmetGroundInvincibilitySec() ?? grace,
         );
         this._applyHelmetGroundBounce();
-        SoundController.instance?.play(SoundId.WallHit);
         CameraShake.instance?.shakeOnDamage();
         return true;
     }
@@ -2509,31 +2656,44 @@ export class GameManager extends Component {
         );
     }
 
-    private _playHelmetBreakEffect(): void {
+    /**
+     * Detached HelmetBreakEffect.
+     * @param blocksEquipped true — урон/ground: скрыть equipped до конца FX.
+     * @param worldPose явная world-поза equipped (replace pickup — до restore idle).
+     */
+    private _playHelmetBreakEffect(
+        blocksEquipped = true,
+        worldPose?: { pos: Vec3; rot: Quat; scale: Vec3 },
+    ): void {
         const eff = this._resolveHelmetEffNode();
         if (!eff?.isValid) {
             return;
         }
 
-        this._helmetBreakActive = true;
-        this._syncHelmetEffVisible();
+        this._helmetBreakFxBlocksEquipped = blocksEquipped;
+        if (blocksEquipped) {
+            this._helmetBreakActive = true;
+            this._syncHelmetEffVisible();
+        }
+
+        SoundController.instance?.play(SoundId.HelmetBreak);
 
         const clip = this._bonusItems()?.helmetBreakClip ?? null;
         if (!clip?.name) {
-            this._onHelmetBreakFinished();
+            this._finishHelmetBreakFx();
             return;
         }
 
-        const fx = this._spawnDetachedHelmetBreakFx(eff);
+        const fx = this._spawnDetachedHelmetBreakFx(eff, worldPose);
         if (!fx?.isValid) {
-            this._onHelmetBreakFinished();
+            this._finishHelmetBreakFx();
             return;
         }
 
-        const anim = fx.getComponent(Animation);
+        const anim = fx.getComponentInChildren(Animation);
         if (!anim) {
             fx.destroy();
-            this._onHelmetBreakFinished();
+            this._finishHelmetBreakFx();
             return;
         }
 
@@ -2588,16 +2748,19 @@ export class GameManager extends Component {
         this.unschedule(this._onHelmetBreakFxTimedFinish);
         const fx = this._helmetBreakFxNode;
         if (fx?.isValid) {
-            const anim = fx.getComponent(Animation);
+            const anim = fx.getComponentInChildren(Animation);
             anim?.off(
                 Animation.EventType.FINISHED,
                 this._onHelmetBreakFxAnimFinished,
                 this,
             );
+            anim?.stop();
             fx.destroy();
         }
         this._helmetBreakFxNode = null;
-        this._onHelmetBreakFinished();
+        if (this._helmetBreakFxBlocksEquipped) {
+            this._onHelmetBreakFinished();
+        }
     }
 
     /** Сброс/Play Again: уничтожить FX без повторного _onHelmetBreakFinished. */
@@ -2606,7 +2769,7 @@ export class GameManager extends Component {
         this.unschedule(this._onHelmetBreakFxTimedFinish);
         const fx = this._helmetBreakFxNode;
         if (fx?.isValid) {
-            const anim = fx.getComponent(Animation);
+            const anim = fx.getComponentInChildren(Animation);
             anim?.off(
                 Animation.EventType.FINISHED,
                 this._onHelmetBreakFxAnimFinished,
@@ -2618,37 +2781,85 @@ export class GameManager extends Component {
         this._helmetBreakFxNode = null;
     }
 
-    /** Equipped pose → detach под Canvas (worldPositionStays) → break-клип. */
-    private _spawnDetachedHelmetBreakFx(eff: Node): Node | null {
-        const parent = this._resolveHelmetBreakFxParent();
-        if (!parent?.isValid) {
+    /** Клон/prefab break-FX в PlayerContainer (якорь = FediaAnim, клип в её local space). */
+    private _spawnDetachedHelmetBreakFx(
+        eff: Node,
+        worldPose?: { pos: Vec3; rot: Quat; scale: Vec3 },
+    ): Node | null {
+        const container = this._resolvePlayerContainer();
+        if (!container?.isValid) {
             return null;
+        }
+
+        const animHost = eff.parent;
+        this._updateWorldTransformChain(eff);
+
+        const anchor = new Node('HelmetBreakFxHost');
+        anchor.active = true;
+        anchor.layer = eff.layer;
+        anchor.setParent(container, false);
+
+        if (animHost?.isValid) {
+            anchor.setWorldPosition(animHost.worldPosition);
+            anchor.setWorldRotation(animHost.worldRotation);
+            anchor.setWorldScale(animHost.worldScale);
+        } else if (worldPose) {
+            anchor.setWorldPosition(worldPose.pos);
+            anchor.setWorldRotation(worldPose.rot);
+            anchor.setWorldScale(worldPose.scale);
+        } else {
+            anchor.setWorldPosition(eff.worldPosition);
+            anchor.setWorldRotation(eff.worldRotation);
+            anchor.setWorldScale(eff.worldScale);
         }
 
         const cfg = this._bonusItems();
         const prefab = cfg?.helmetBreakFxPrefab ?? null;
         const fx = prefab ? instantiate(prefab) : instantiate(eff);
         if (!fx?.isValid) {
+            anchor.destroy();
             return null;
         }
 
         fx.active = true;
         fx.layer = eff.layer;
+        fx.setParent(anchor, false);
+        fx.setPosition(eff.position);
+        fx.setRotation(eff.rotation);
+        fx.setScale(eff.scale);
 
-        const equippedParent = eff.parent;
-        if (equippedParent?.isValid) {
-            fx.setParent(equippedParent, false);
-            fx.setPosition(eff.position);
-            fx.setRotation(eff.rotation);
-            fx.setScale(eff.scale);
+        const anim = fx.getComponent(Animation);
+        if (anim) {
+            anim.enabled = true;
         }
-        fx.setParent(parent, true);
-        return fx;
+
+        return anchor;
     }
 
-    private _resolveHelmetBreakFxParent(): Node | null {
+    private _resolvePlayerContainer(): Node | null {
+        const player = this._resolvePlayerNode();
+        const parent = player?.parent;
+        if (parent?.isValid && parent.name === GameManager.PLAYER_CONTAINER) {
+            return parent;
+        }
+        if (parent?.isValid) {
+            return parent;
+        }
         const hub = SceneNodeHub.instance;
-        return hub?.canvasRoot ?? hub?.node ?? null;
+        const root = hub?.canvasRoot ?? hub?.node;
+        return root?.getChildByName(GameManager.PLAYER_CONTAINER) ?? null;
+    }
+
+    private _updateWorldTransformChain(node: Node): void {
+        const chain: Node[] = [];
+        let cur: Node | null = node;
+        while (cur?.isValid) {
+            chain.push(cur);
+            cur = cur.parent;
+        }
+        for (let i = chain.length - 1; i >= 0; i--) {
+            chain[i].updateWorldTransform();
+        }
     }
 
     private _ensureHelmetBreakClipOnAnimator(

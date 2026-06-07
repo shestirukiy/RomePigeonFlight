@@ -1,0 +1,1 @@
+assets\Test2.scene: node 111 "UI" -> cc.Label@123, cc.UIRenderer@128

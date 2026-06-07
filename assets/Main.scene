@@ -4989,11 +4989,16 @@
       "__uuid__": "a5ee895e-c9c7-45b9-a247-ca065dc00602",
       "__expectedType__": "cc.AudioClip"
     },
+    "helmetBreak": {
+      "__uuid__": "6fb34e55-1f48-4c18-8c25-a4d8c49b1bc7",
+      "__expectedType__": "cc.AudioClip"
+    },
     "instantKill": null,
     "gameOver": {
       "__uuid__": "a5ee895e-c9c7-45b9-a247-ca065dc00602",
       "__expectedType__": "cc.AudioClip"
     },
+    "menuButtonClick": null,
     "tapStart": null,
     "milestonePassed": {
       "__uuid__": "a832c3b8-9709-4c08-a623-619d56ab28f5",

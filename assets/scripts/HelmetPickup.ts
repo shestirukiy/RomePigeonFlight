@@ -12,7 +12,7 @@ const { ccclass } = _decorator;
  */
 @ccclass('HelmetPickup')
 export class HelmetPickup extends PickupBase {
-    collectSound = SoundId.PickupCollect;
+    collectSound = SoundId.None;
 
     private _collected = false;
 

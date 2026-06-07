@@ -77,6 +77,23 @@ export class MagnetPickable extends Component {
     private _rbWasStatic = false;
     private _attracting = false;
 
+    private static _equippedMagnetActive = false;
+    private static _equippedMagnetCenter: Node | null = null;
+    private static _equippedMagnetRadius = 0;
+
+    public static setEquippedMagnetZone(center: Node | null, radius: number): void {
+        MagnetPickable._equippedMagnetActive =
+            !!center?.isValid && radius > 0 && GameManager.game?.isPlaying === true;
+        MagnetPickable._equippedMagnetCenter = center;
+        MagnetPickable._equippedMagnetRadius = Math.max(0, radius);
+    }
+
+    public static clearEquippedMagnetZone(): void {
+        MagnetPickable._equippedMagnetActive = false;
+        MagnetPickable._equippedMagnetCenter = null;
+        MagnetPickable._equippedMagnetRadius = 0;
+    }
+
     private readonly _selfWorld = new Vec3();
     private readonly _playerWorld = new Vec3();
     private readonly _delta = new Vec3();
@@ -126,6 +143,18 @@ export class MagnetPickable extends Component {
         Vec3.subtract(this._delta, this._playerWorld, this._selfWorld);
         const dist = this._delta.length();
         const magnetR = Math.max(8, this.magnetRadius);
+
+        if (
+            !this._attracting &&
+            dist > magnetR &&
+            !this._isInsideEquippedMagnetZone()
+        ) {
+            return;
+        }
+
+        if (!this._attracting && this._isInsideEquippedMagnetZone()) {
+            this._beginAttraction();
+        }
 
         if (!this._attracting && dist > magnetR) {
             return;
@@ -193,4 +222,17 @@ export class MagnetPickable extends Component {
         }
     }
 
+    private _isInsideEquippedMagnetZone(): boolean {
+        if (
+            !MagnetPickable._equippedMagnetActive ||
+            !MagnetPickable._equippedMagnetCenter?.isValid
+        ) {
+            return false;
+        }
+        const center = new Vec3();
+        MagnetPickable._equippedMagnetCenter.getWorldPosition(center);
+        this.node.getWorldPosition(this._selfWorld);
+        Vec3.subtract(this._delta, this._selfWorld, center);
+        return this._delta.length() <= MagnetPickable._equippedMagnetRadius;
+    }
 }

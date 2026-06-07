@@ -196,6 +196,9 @@ export class PlayerFlight extends Component {
     /** Seconds left: no lift force (electric stun, etc.). */
     private _electricLiftBlockRemain = 0;
 
+    private _pendingHelmetBounceFactor = -1;
+    private _pendingHelmetLiftLockSec = 0;
+
     /** Сглаженная vy только для расчёта крена. */
     private _pitchVyFiltered = 0;
 
@@ -209,6 +212,29 @@ export class PlayerFlight extends Component {
     /** Сброс удержания (смерть, game over). */
     public releaseInput(): void {
         this._held = false;
+    }
+
+    /**
+     * После startNewRun() на том же тапе: PlayerFlight мог получить MOUSE_UP/TOUCH_END
+     * раньше GameManager или resetToSpawn() сбросил _held — подхватить зажатый указатель.
+     */
+    public syncInputHeldFromPointer(): void {
+        if (GameSession.game?.isPlaying !== true) {
+            this._held = false;
+            return;
+        }
+        if (this._electricLiftBlockRemain > 0) {
+            this._held = false;
+            return;
+        }
+        this._held = this._isPointerDown();
+    }
+
+    private _isPointerDown(): boolean {
+        if (input.getTouchCount() > 0) {
+            return true;
+        }
+        return input.getMouseButtonState?.(EventMouse.BUTTON_LEFT) === 1;
     }
 
     /**
@@ -269,24 +295,51 @@ export class PlayerFlight extends Component {
         bounceFactor: number,
         liftLockSec: number,
     ): void {
-        const body = this._body;
-        if (body) {
-            const phys = this._flightPhysicsMultipliers();
-            const maxUp = this.maxUpSpeed * phys.maxUp;
-            const factor = Math.max(0, bounceFactor);
-            let vy = maxUp * factor;
-            if (maxUp > 0 && vy > maxUp) {
-                vy = maxUp;
-            }
-            body.linearVelocity = new Vec2(0, vy);
-            body.wakeUp?.();
-            const lift = Math.max(4, 14 * factor);
-            const p = this.node.position;
-            this.node.setPosition(PlayerFlight.RUNWAY_LOCAL_X, p.y + lift, p.z);
+        this._pendingHelmetBounceFactor = Math.max(0, bounceFactor);
+        this._pendingHelmetLiftLockSec = Math.max(0, liftLockSec);
+        this.unschedule(this._executeHelmetGroundBounce);
+        this.scheduleOnce(this._executeHelmetGroundBounce, 0);
+    }
+
+    private _executeHelmetGroundBounce = (): void => {
+        const bounceFactor = this._pendingHelmetBounceFactor;
+        this._pendingHelmetBounceFactor = -1;
+        if (bounceFactor < 0) {
+            return;
         }
+        const liftLockSec = this._pendingHelmetLiftLockSec;
+        this._pendingHelmetLiftLockSec = 0;
+
+        const body = this._body;
+        if (!body) {
+            if (liftLockSec > 0) {
+                this.setElectricLiftBlockedFor(liftLockSec);
+            }
+            return;
+        }
+
+        const phys = this._flightPhysicsMultipliers();
+        const maxUp = this.maxUpSpeed * phys.maxUp;
+        let vy = maxUp * bounceFactor;
+        if (maxUp > 0 && vy > maxUp) {
+            vy = maxUp;
+        }
+
+        const lift = Math.max(20, 50 * bounceFactor);
+        const p = this.node.position;
+        this.node.setPosition(PlayerFlight.RUNWAY_LOCAL_X, p.y + lift, p.z);
+        body.linearVelocity = new Vec2(0, vy);
+        body.wakeUp?.();
+
         if (liftLockSec > 0) {
             this.setElectricLiftBlockedFor(liftLockSec);
         }
+    };
+
+    private _cancelPendingHelmetBounce(): void {
+        this._pendingHelmetBounceFactor = -1;
+        this._pendingHelmetLiftLockSec = 0;
+        this.unschedule(this._executeHelmetGroundBounce);
     }
 
     private _savedGravityScale = 1;
@@ -385,6 +438,7 @@ export class PlayerFlight extends Component {
     }
 
     onDestroy() {
+        this._cancelPendingHelmetBounce();
         director.off(Director.EVENT_BEFORE_DRAW, this._onBeforeDrawPitch, this);
 
         input.off(Input.EventType.TOUCH_START, this._onTouchStart, this);
@@ -612,6 +666,7 @@ export class PlayerFlight extends Component {
 
     /** Старт / рестарт забега: позиция и физика как в сцене при onLoad. */
     public resetToSpawn(): void {
+        this._cancelPendingHelmetBounce();
         this._held = false;
         this._electricLiftBlockRemain = 0;
         this._allowHorizontalDriftRemain = 0;
@@ -641,15 +696,15 @@ export class PlayerFlight extends Component {
     }
 
     private _onLiftInputDown(): void {
-        const wasHeld = this._held;
-        this._held = true;
-        if (wasHeld) {
-            return;
-        }
         if (GameSession.game?.isPlaying !== true) {
             return;
         }
         if (this._electricLiftBlockRemain > 0) {
+            return;
+        }
+        const wasHeld = this._held;
+        this._held = true;
+        if (wasHeld) {
             return;
         }
         SoundController.instance?.tryPlayWingFlap();

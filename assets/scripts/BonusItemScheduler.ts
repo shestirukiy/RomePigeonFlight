@@ -22,6 +22,16 @@ const G_HELMET = {
     name: 'Helmet (gameplay)',
 };
 
+const G_WISDOM = {
+    id: 'BonusWisdom',
+    name: 'Wisdom buff',
+};
+
+const G_MAGNET_BUFF = {
+    id: 'BonusMagnetBuff',
+    name: 'Magnet buff',
+};
+
 type TypeState = {
     nextAtMeters: number;
     pending: boolean;
@@ -167,6 +177,59 @@ export class BonusItemScheduler extends Component {
         tooltip: 'Блок flap сразу после отскока от земли.',
     })
     helmetGroundLiftLockSec = 0.35;
+
+    @property({
+        group: G_WISDOM,
+        displayName: 'Buff Duration (s)',
+    })
+    wisdomBuffDurationSec = 8;
+
+    @property({
+        group: G_WISDOM,
+        displayName: 'Slow Percent',
+        tooltip: 'На сколько % снижается скорость мира при препятствии в WisdomCollider (50 → ×0.5).',
+    })
+    wisdomSlowPercent = 50;
+
+    @property({
+        group: G_WISDOM,
+        displayName: 'Slow Ease (s)',
+        tooltip: 'Плавность входа/выхода замедления скорости мира.',
+    })
+    wisdomSlowEaseSec = 0.35;
+
+    @property({ group: G_WISDOM, type: AnimationClip, displayName: 'Appear Clip' })
+    wisdomAppearClip: AnimationClip | null = null;
+
+    @property({ group: G_WISDOM, type: AnimationClip, displayName: 'Loop Clip' })
+    wisdomLoopClip: AnimationClip | null = null;
+
+    @property({ group: G_WISDOM, type: AnimationClip, displayName: 'Disappear Clip' })
+    wisdomDisappearClip: AnimationClip | null = null;
+
+    @property({
+        group: G_WISDOM,
+        type: Prefab,
+        displayName: 'Disappear FX Prefab',
+        tooltip:
+            'Отдельный VFX для исчезновения Wisdom. Пусто — клон ноды Wisdom на Player.',
+    })
+    wisdomDisappearFxPrefab: Prefab | null = null;
+
+    @property({
+        group: G_MAGNET_BUFF,
+        displayName: 'Buff Duration (s)',
+    })
+    magnetBuffDurationSec = 6;
+
+    @property({ group: G_MAGNET_BUFF, type: AnimationClip, displayName: 'Appear Clip' })
+    magnetAppearClip: AnimationClip | null = null;
+
+    @property({ group: G_MAGNET_BUFF, type: AnimationClip, displayName: 'Loop Clip' })
+    magnetLoopClip: AnimationClip | null = null;
+
+    @property({ group: G_MAGNET_BUFF, type: AnimationClip, displayName: 'Disappear Clip' })
+    magnetDisappearClip: AnimationClip | null = null;
 
     /** I-frames после ground-bounce шлема. */
     public getHelmetGroundInvincibilitySec(): number {

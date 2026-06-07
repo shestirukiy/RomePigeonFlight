@@ -1,0 +1,17 @@
+﻿84 cc.Node Magnet undefined
+91 cc.UITransform  84
+93 cc.Sprite  84
+96 cc.Node Wisdom undefined
+R 6 cc.Sprite on 3 FootA
+R 12 cc.Sprite on 9 FootB
+R 19 cc.Sprite on 16 PigeonFlyWing
+R 24 cc.Sprite on 15 PigeonBody
+R 29 cc.Sprite on 2 Pigeon
+R 38 cc.Sprite on 35 hp_Icon
+R 47 cc.ParticleSystem2D on 44 DamageParticle
+R 61 cc.Sprite on 58 HelmetEff
+R 68 cc.Sprite on 57 FediaAnim
+R 74 cc.Sprite on 71 FrontEff
+R 93 cc.Sprite on 84 Magnet
+R 100 cc.Sprite on 97 WisdomCollider
+R 107 cc.Sprite on 96 Wisdom

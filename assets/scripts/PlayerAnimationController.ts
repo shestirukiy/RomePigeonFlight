@@ -176,7 +176,7 @@ export class PlayerAnimationController extends Component {
     hpHarvestFlySpeedPxPerSec = 1020;
 
     protected _anim: Animation | null = null;
-    private _flapState: AnimationState | null = null;
+    protected _flapState: AnimationState | null = null;
     protected _flight: PlayerFlight | null = null;
 
     protected _electricOverlayRemain = 0;
@@ -192,15 +192,15 @@ export class PlayerAnimationController extends Component {
     /** Есть опора под ногами (бег, стойка или переход). */
     protected _feetOnSurface = false;
 
-    private _flapSpeed = 0;
+    protected _flapSpeed = 0;
 
     /** Оставшееся время фазы затухания после отпускания. */
-    private _tailTimeLeft = 0;
+    protected _tailTimeLeft = 0;
 
     /** С какой скорости клипа начали затухание. */
-    private _speedAtTailStart = 0;
+    protected _speedAtTailStart = 0;
 
-    private _wasHeld = false;
+    protected _wasHeld = false;
 
     /** Сейчас крутится stayClip (игра не идёт). */
     private _waitingStayActive = false;
@@ -223,13 +223,22 @@ export class PlayerAnimationController extends Component {
         return this._hpHarvestRuns.length > 0;
     }
 
+    protected _resolvePlayerFlight(): PlayerFlight | null {
+        let cur: Node | null = this.node;
+        while (cur?.isValid) {
+            const flight = cur.getComponent(PlayerFlight);
+            if (flight) {
+                return flight;
+            }
+            cur = cur.parent;
+        }
+        return null;
+    }
+
     onLoad() {
         const pigeon = this._resolvePigeonRoot() ?? this.node;
         this._anim = this._resolveAnimTarget();
-        this._flight =
-            this.getComponent(PlayerFlight) ??
-            this.node.parent?.getComponent(PlayerFlight) ??
-            null;
+        this._flight = this._resolvePlayerFlight();
 
         const fallNode = this._resolveDeathFallNode();
         if (fallNode) {
@@ -325,6 +334,11 @@ export class PlayerAnimationController extends Component {
     /** Клип при каждом входе в бег (false→true). У Fedia — случайный из вариантов. */
     protected _resolveSurfaceRunClipForTransition(): AnimationClip | null {
         return this.surfaceRunClip;
+    }
+
+    /** Клип маха в полёте; Fedia подменяет на FediaRunFly во время wisdom. */
+    protected _resolveFlapClip(): AnimationClip | null {
+        return this.flapClip;
     }
 
     protected _getActiveSurfaceRunClip(): AnimationClip | null {
@@ -453,10 +467,11 @@ export class PlayerAnimationController extends Component {
     }
 
     private _ensureFlapState(): void {
-        if (!this.flapClip || !this._anim || this._flapState) {
+        const clip = this._resolveFlapClip();
+        if (!clip || !this._anim || this._flapState) {
             return;
         }
-        const name = this.flapClip.name;
+        const name = clip.name;
         this._anim.play(name);
         this._flapState = this._anim.getState(name);
     }
@@ -465,8 +480,8 @@ export class PlayerAnimationController extends Component {
      * После hazard-клипа или схода с платформы — снова клип полёта.
      * @param fromSurfaceEnd после бега: сразу «в воздухе», без ожидания тапа.
      */
-    private _resumeFlapPlayback(fromSurfaceEnd = false): void {
-        if (!this.flapClip || !this._anim) {
+    protected _resumeFlapPlayback(fromSurfaceEnd = false): void {
+        if (!this._resolveFlapClip() || !this._anim) {
             return;
         }
         this._tailTimeLeft = 0;
@@ -888,11 +903,13 @@ export class PlayerAnimationController extends Component {
     }
 
     private _restoreFlapClip(speed: number, sampleTime = 0): void {
-        if (!this.flapClip || !this._anim) {
+        const clip = this._resolveFlapClip();
+        if (!clip || !this._anim) {
             return;
         }
+        this._ensureClipOnAnimator(clip);
         this._anim.stop();
-        const name = this.flapClip.name;
+        const name = clip.name;
         this._anim.play(name);
         this._flapState = this._anim.getState(name);
         if (!this._flapState) {
@@ -979,18 +996,26 @@ export class PlayerAnimationController extends Component {
             this._electricOverlayRemain <= 0
         ) {
             this._resumeSurfaceRunIfNeeded();
-            if (this._flapState) {
+            this._syncSurfaceRunPlaybackSpeed();
+            const runName = this._getActiveSurfaceRunClip()?.name;
+            if (this._flapState && runName && this._flapState.name !== runName) {
                 this._flapState.pause();
             }
             return;
         }
 
-        if (!this.flapClip) {
+        const flapClip = this._resolveFlapClip();
+        if (!flapClip) {
             return;
         }
 
+        if (this._flapState && this._flapState.name !== flapClip.name) {
+            this._restoreFlapClip(this._flapSpeed);
+        }
+
         if (!this._flapState) {
-            const name = this.flapClip.name;
+            const name = flapClip.name;
+            this._ensureClipOnAnimator(flapClip);
             this._anim.play(name);
             this._flapState = this._anim.getState(name);
             if (!this._flapState) {
@@ -1156,7 +1181,7 @@ export class PlayerAnimationController extends Component {
         }
     }
 
-    private _applyFlapSpeed(speed: number) {
+    protected _applyFlapSpeed(speed: number) {
         if (!this._flapState) {
             return;
         }
