@@ -10,6 +10,7 @@ import {
     instantiate,
     IPhysics2DContact,
     Node,
+    Prefab,
     PhysicsSystem2D,
     Rect,
     RigidBody2D,
@@ -24,11 +25,19 @@ import { ElectricCloudHazard } from './ElectricCloudHazard';
 import { MilestoneDistanceLabel } from './MilestoneDistanceLabel';
 import { MilestoneSign } from './MilestoneSign';
 import { PickupBase } from './PickupBase';
+import { SpringFollowParent } from './SpringFollowParent';
 import { TowerWallHazard } from './TowerWallHazard';
 
 const { ccclass, property } = _decorator;
 
 type BuffPhase = 'idle' | 'appear' | 'loop' | 'disappear';
+type EquippedBuffKind = 'magnet' | 'wisdom';
+
+type DisappearFxSlot = {
+    node: Node | null;
+    playing: boolean;
+    done: (() => void) | null;
+};
 
 const G_REFS = { id: 'Refs', name: 'References' };
 const G_MAGNET_CIRCLE = { id: 'MagnetCircle', name: 'Magnet Circle' };
@@ -47,6 +56,10 @@ export class PlayerEquippedBuffs extends Component {
     private static readonly WISDOM_APPEAR_CLIP = 'WisdomAppear';
     private static readonly WISDOM_LOOP_CLIP = 'WisdomIdle';
     private static readonly WISDOM_DISAPPEAR_CLIP = 'WisdomDissaappear';
+    /** На Magnet сейчас те же клипы, что у Wisdom (см. Player.prefab). */
+    private static readonly MAGNET_APPEAR_CLIP = 'WisdomAppear';
+    private static readonly MAGNET_LOOP_CLIP = 'WisdomIdle';
+    private static readonly MAGNET_DISAPPEAR_CLIP = 'WisdomDissaappear';
     private static readonly PLAYER_CONTAINER = 'PlayerContainer';
 
     @property({ group: G_REFS, type: Node, displayName: 'Magnet Root' })
@@ -88,9 +101,11 @@ export class PlayerEquippedBuffs extends Component {
 
     private _wisdomObstacleHits = 0;
     private _wisdomContactsBound = false;
-    private _wisdomDisappearFxNode: Node | null = null;
-    private _wisdomDisappearFxPlaying = false;
-    private _wisdomDisappearFxDone: (() => void) | null = null;
+    private _wisdomProbeAhead = false;
+    private readonly _disappearFx: Record<EquippedBuffKind, DisappearFxSlot> = {
+        magnet: { node: null, playing: false, done: null },
+        wisdom: { node: null, playing: false, done: null },
+    };
 
     onLoad(): void {
         this._resolveRefs();
@@ -118,10 +133,9 @@ export class PlayerEquippedBuffs extends Component {
             );
         }
         if (!this.wisdomCollider?.isValid) {
-            this.wisdomCollider = this._resolveCollider(
-                this.wisdomRoot,
-                PlayerEquippedBuffs.WISDOM_COLLIDER_NODE,
-            );
+            this.wisdomCollider =
+                this._resolveCollider(this.node, PlayerEquippedBuffs.WISDOM_COLLIDER_NODE) ??
+                this._resolveCollider(this.wisdomRoot, PlayerEquippedBuffs.WISDOM_COLLIDER_NODE);
         }
         this._magnetAnim = this.magnetRoot?.getComponent(Animation) ?? null;
         this._magnetCircleAnim = this.magnetCircleCenter?.getComponent(Animation) ?? null;
@@ -130,7 +144,8 @@ export class PlayerEquippedBuffs extends Component {
 
     onDestroy(): void {
         this._clearMagnetCircleAnimCallbacks();
-        this._cancelWisdomDisappearFx();
+        this._cancelBuffDisappearFxPlayback('magnet');
+        this._cancelBuffDisappearFxPlayback('wisdom');
         this._unbindWisdomContacts();
         MagnetPickable.clearEquippedMagnetZone();
         GameManager.game?.setWisdomBuffActive(false);
@@ -151,6 +166,11 @@ export class PlayerEquippedBuffs extends Component {
         if (!this.isPlaying()) {
             return;
         }
+        const replacing = this._magnetPhase !== 'idle';
+        if (replacing && this.magnetRoot?.isValid) {
+            this._updateWorldTransformChain(this.magnetRoot);
+            this._spawnLooseBuffDisappearFx('magnet');
+        }
         this._cancelMagnet();
         const cfg = BonusItemScheduler.instance;
         const duration = Math.max(0.05, cfg?.magnetBuffDurationSec ?? 6);
@@ -164,9 +184,9 @@ export class PlayerEquippedBuffs extends Component {
         this._magnetLoopRemain = duration;
         this._beginBuffSequence(
             this._magnetAnim,
-            cfg?.magnetAppearClip ?? null,
-            cfg?.magnetLoopClip ?? null,
-            cfg?.magnetDisappearClip ?? null,
+            this._resolveBuffClip('magnet', 'appear'),
+            this._resolveBuffClip('magnet', 'loop'),
+            this._resolveBuffClip('magnet', 'disappear'),
             'magnet',
             () => this._setColliderEnabled(this.magnetCollider, true),
             () => this._setColliderEnabled(this.magnetCollider, false),
@@ -176,6 +196,11 @@ export class PlayerEquippedBuffs extends Component {
     public activateWisdom(): void {
         if (!this.isPlaying()) {
             return;
+        }
+        const replacing = this._wisdomPhase !== 'idle';
+        if (replacing && this.wisdomRoot?.isValid) {
+            this._updateWorldTransformChain(this.wisdomRoot);
+            this._spawnLooseBuffDisappearFx('wisdom');
         }
         this._cancelWisdom();
         const cfg = BonusItemScheduler.instance;
@@ -187,15 +212,16 @@ export class PlayerEquippedBuffs extends Component {
         this.wisdomRoot.active = true;
         SoundController.instance?.play(SoundId.WisdomActivate);
         this._wisdomObstacleHits = 0;
+        this._wisdomProbeAhead = false;
         GameManager.game?.notifyWisdomObstacleAhead(false);
         this._setColliderEnabled(this.wisdomCollider, false);
         this._bindWisdomContacts();
         this._wisdomLoopRemain = duration;
         this._beginBuffSequence(
             this._wisdomAnim,
-            this._resolveWisdomClip(cfg?.wisdomAppearClip, PlayerEquippedBuffs.WISDOM_APPEAR_CLIP),
-            this._resolveWisdomClip(cfg?.wisdomLoopClip, PlayerEquippedBuffs.WISDOM_LOOP_CLIP),
-            this._resolveWisdomClip(cfg?.wisdomDisappearClip, PlayerEquippedBuffs.WISDOM_DISAPPEAR_CLIP),
+            this._resolveBuffClip('wisdom', 'appear'),
+            this._resolveBuffClip('wisdom', 'loop'),
+            this._resolveBuffClip('wisdom', 'disappear'),
             'wisdom',
             () => this._setColliderEnabled(this.wisdomCollider, true),
             () => {
@@ -235,30 +261,28 @@ export class PlayerEquippedBuffs extends Component {
         this._wisdomLoopRemain = Math.max(0, this._wisdomLoopRemain - dt);
         this._probeWisdomObstacleOverlap();
         if (this._wisdomLoopRemain <= 0) {
+            this._wisdomLoopRemain = 0;
             this._finishWisdomLoop();
         }
     }
 
     private _finishMagnetLoop(): void {
-        const cfg = BonusItemScheduler.instance;
         SoundController.instance?.play(SoundId.MagnetDeactivate);
         MagnetPickable.clearEquippedMagnetZone();
         this._setColliderEnabled(this.magnetCollider, false);
         this._playMagnetCircleDisappear();
-        this._playDisappear(
-            this._magnetAnim,
-            cfg?.magnetDisappearClip ?? null,
-            'magnet',
-            () => this._hideMagnet(),
-        );
+        this._playBuffDisappearFx('magnet', () => this._hideMagnet());
     }
 
     private _finishWisdomLoop(): void {
+        if (this._wisdomPhase !== 'loop') {
+            return;
+        }
         SoundController.instance?.play(SoundId.WisdomDeactivate);
         this._setColliderEnabled(this.wisdomCollider, false);
         this._unbindWisdomContacts();
         GameManager.game?.notifyWisdomObstacleAhead(false);
-        this._playWisdomDisappear(() => {
+        this._playBuffDisappearFx('wisdom', () => {
             GameManager.game?.setWisdomBuffActive(false);
             this._hideWisdom();
         });
@@ -270,6 +294,7 @@ export class PlayerEquippedBuffs extends Component {
         MagnetPickable.clearEquippedMagnetZone();
         this._setColliderEnabled(this.magnetCollider, false);
         this._hideMagnetCircleImmediate();
+        this._cancelBuffDisappearFxPlayback('magnet');
         this._magnetAnim?.stop();
     }
 
@@ -277,7 +302,8 @@ export class PlayerEquippedBuffs extends Component {
         this._wisdomPhase = 'idle';
         this._wisdomLoopRemain = 0;
         this._wisdomObstacleHits = 0;
-        this._cancelWisdomDisappearFx();
+        this._wisdomProbeAhead = false;
+        this._cancelBuffDisappearFxPlayback('wisdom');
         this._unbindWisdomContacts();
         GameManager.game?.setWisdomBuffActive(false);
         GameManager.game?.notifyWisdomObstacleAhead(false);
@@ -327,29 +353,32 @@ export class PlayerEquippedBuffs extends Component {
         enterLoop();
     }
 
-    private _playWisdomDisappear(onDone: () => void): void {
-        this._wisdomPhase = 'disappear';
-        const cfg = BonusItemScheduler.instance;
-        const clip = this._resolveWisdomClip(
-            cfg?.wisdomDisappearClip,
-            PlayerEquippedBuffs.WISDOM_DISAPPEAR_CLIP,
-        );
-        const wisdom = this.wisdomRoot;
-        if (!clip?.name || !wisdom?.isValid) {
+    /**
+     * Detached disappear-FX (Magnet / Wisdom) — как HelmetBreakEffect:
+     * equipped root скрывается, клон в PlayerContainer на local-позе родителя.
+     */
+    private _playBuffDisappearFx(kind: EquippedBuffKind, onDone: () => void): void {
+        this._setBuffPhase(kind, 'disappear');
+        const root = this._buffRoot(kind);
+        const clip = this._resolveBuffClip(kind, 'disappear');
+        const equippedAnim = this._buffAnim(kind);
+        if (!clip?.name || !root?.isValid) {
             onDone();
             return;
         }
 
-        this._wisdomAnim?.stop();
-        wisdom.active = false;
+        equippedAnim?.stop();
 
-        const fx = this._spawnDetachedWisdomDisappearFx(wisdom);
+        const fx = this._spawnDetachedBuffDisappearFx(root, this._buffDisappearFxPrefab(kind));
         if (!fx?.isValid) {
+            root.active = false;
             onDone();
             return;
         }
 
-        const anim = fx.getComponent(Animation) ?? fx.getComponentInChildren(Animation);
+        root.active = false;
+
+        const anim = fx.getComponentInChildren(Animation);
         if (!anim) {
             fx.destroy();
             onDone();
@@ -357,138 +386,188 @@ export class PlayerEquippedBuffs extends Component {
         }
 
         this._ensureClip(anim, clip);
-        this._wisdomDisappearFxNode = fx;
-        this._wisdomDisappearFxPlaying = true;
-        this._wisdomDisappearFxDone = onDone;
+        const slot = this._disappearFx[kind];
+        slot.node = fx;
+        slot.playing = true;
+        slot.done = onDone;
 
         anim.on(
             Animation.EventType.FINISHED,
-            this._onWisdomDisappearFxAnimFinished,
+            this._buffDisappearAnimFinishedHandlers[kind],
             this,
         );
+        anim.stop();
         anim.play(clip.name);
 
-        let duration = 0.9;
-        const st = anim.getState(clip.name);
-        if (st && st.duration > 0) {
-            duration = Math.max(
-                0.05,
-                st.duration / Math.max(Math.abs(st.speed), 1e-5),
-            );
-        } else if (clip.duration > 0) {
-            duration = Math.max(0.05, clip.duration);
-        }
-        this.unschedule(this._onWisdomDisappearFxTimedFinish);
-        this.scheduleOnce(this._onWisdomDisappearFxTimedFinish, duration + 0.05);
+        const duration = this._clipDurationSec(anim, clip);
+        this.unschedule(this._buffDisappearTimedHandlers[kind]);
+        this.scheduleOnce(this._buffDisappearTimedHandlers[kind], duration + 0.05);
     }
 
-    private _onWisdomDisappearFxAnimFinished = (
-        _type?: string,
-        st?: { name?: string },
-    ): void => {
-        if (!this._wisdomDisappearFxPlaying) {
+    /** Повторный pickup: старый buff «слетает» без ожидания (как replace шлема). */
+    private _spawnLooseBuffDisappearFx(kind: EquippedBuffKind): void {
+        const root = this._buffRoot(kind);
+        const clip = this._resolveBuffClip(kind, 'disappear');
+        const equippedAnim = this._buffAnim(kind);
+        if (!clip?.name || !root?.isValid) {
             return;
         }
-        const clipName = this._resolveWisdomClip(
-            BonusItemScheduler.instance?.wisdomDisappearClip,
-            PlayerEquippedBuffs.WISDOM_DISAPPEAR_CLIP,
-        )?.name;
+
+        equippedAnim?.stop();
+        this._updateWorldTransformChain(root);
+
+        const fx = this._spawnDetachedBuffDisappearFx(root, this._buffDisappearFxPrefab(kind));
+        if (!fx?.isValid) {
+            return;
+        }
+
+        root.active = false;
+        SoundController.instance?.play(this._buffDeactivateSound(kind));
+
+        const anim = fx.getComponentInChildren(Animation);
+        if (!anim) {
+            fx.destroy();
+            return;
+        }
+
+        this._ensureClip(anim, clip);
+        const duration = this._clipDurationSec(anim, clip);
+        const cleanup = (): void => {
+            if (fx?.isValid) {
+                fx.destroy();
+            }
+        };
+
+        anim.once(Animation.EventType.FINISHED, (_t, st) => {
+            if (st?.name && st.name !== clip.name) {
+                return;
+            }
+            cleanup();
+        });
+        anim.stop();
+        anim.play(clip.name);
+        this.scheduleOnce(cleanup, duration + 0.05);
+    }
+
+    private readonly _buffDisappearAnimFinishedHandlers = {
+        magnet: (_type?: string, st?: { name?: string }): void => {
+            this._onBuffDisappearFxAnimFinished('magnet', st);
+        },
+        wisdom: (_type?: string, st?: { name?: string }): void => {
+            this._onBuffDisappearFxAnimFinished('wisdom', st);
+        },
+    };
+
+    private readonly _buffDisappearTimedHandlers = {
+        magnet: (): void => {
+            this._finishBuffDisappearFx('magnet');
+        },
+        wisdom: (): void => {
+            this._finishBuffDisappearFx('wisdom');
+        },
+    };
+
+    private _onBuffDisappearFxAnimFinished(
+        kind: EquippedBuffKind,
+        st?: { name?: string },
+    ): void {
+        const slot = this._disappearFx[kind];
+        if (!slot.playing) {
+            return;
+        }
+        const clipName = this._resolveBuffClip(kind, 'disappear')?.name;
         if (st?.name && clipName && st.name !== clipName) {
             return;
         }
-        this._finishWisdomDisappearFx();
-    };
+        this._finishBuffDisappearFx(kind);
+    }
 
-    private _onWisdomDisappearFxTimedFinish = (): void => {
-        this._finishWisdomDisappearFx();
-    };
-
-    private _finishWisdomDisappearFx(): void {
-        if (!this._wisdomDisappearFxPlaying) {
+    private _finishBuffDisappearFx(kind: EquippedBuffKind): void {
+        const slot = this._disappearFx[kind];
+        if (!slot.playing) {
             return;
         }
-        this._wisdomDisappearFxPlaying = false;
-        this.unschedule(this._onWisdomDisappearFxTimedFinish);
-        const fx = this._wisdomDisappearFxNode;
+        slot.playing = false;
+        this.unschedule(this._buffDisappearTimedHandlers[kind]);
+        const fx = slot.node;
         if (fx?.isValid) {
-            const anim = fx.getComponent(Animation) ?? fx.getComponentInChildren(Animation);
+            const anim = fx.getComponentInChildren(Animation);
             anim?.off(
                 Animation.EventType.FINISHED,
-                this._onWisdomDisappearFxAnimFinished,
+                this._buffDisappearAnimFinishedHandlers[kind],
                 this,
             );
             anim?.stop();
             fx.destroy();
         }
-        this._wisdomDisappearFxNode = null;
-        const done = this._wisdomDisappearFxDone;
-        this._wisdomDisappearFxDone = null;
+        slot.node = null;
+        const done = slot.done;
+        slot.done = null;
         done?.();
     }
 
-    /** Сброс/Play Again: уничтожить FX без onDone. */
-    private _cancelWisdomDisappearFx(): void {
-        if (!this._wisdomDisappearFxPlaying && !this._wisdomDisappearFxNode) {
-            this._wisdomDisappearFxDone = null;
+    /** Сброс/Play Again: уничтожить tracked FX без onDone. */
+    private _cancelBuffDisappearFxPlayback(kind: EquippedBuffKind): void {
+        const slot = this._disappearFx[kind];
+        if (!slot.playing && !slot.node) {
+            slot.done = null;
             return;
         }
-        this._wisdomDisappearFxPlaying = false;
-        this._wisdomDisappearFxDone = null;
-        this.unschedule(this._onWisdomDisappearFxTimedFinish);
-        const fx = this._wisdomDisappearFxNode;
+        slot.playing = false;
+        slot.done = null;
+        this.unschedule(this._buffDisappearTimedHandlers[kind]);
+        const fx = slot.node;
         if (fx?.isValid) {
-            const anim = fx.getComponent(Animation) ?? fx.getComponentInChildren(Animation);
+            const anim = fx.getComponentInChildren(Animation);
             anim?.off(
                 Animation.EventType.FINISHED,
-                this._onWisdomDisappearFxAnimFinished,
+                this._buffDisappearAnimFinishedHandlers[kind],
                 this,
             );
             anim?.stop();
             fx.destroy();
         }
-        this._wisdomDisappearFxNode = null;
+        slot.node = null;
     }
 
-    /** Клон/prefab disappear-FX в PlayerContainer (якорь = Wisdom world pose). */
-    private _spawnDetachedWisdomDisappearFx(wisdom: Node): Node | null {
+    /** Клон/prefab disappear-FX в PlayerContainer (якорь = parent root, local = root). */
+    private _spawnDetachedBuffDisappearFx(root: Node, fxPrefab: Prefab | null): Node | null {
         const container = this._resolvePlayerContainer();
         if (!container?.isValid) {
             return null;
         }
 
-        this._updateWorldTransformChain(wisdom);
+        const animHost = root.parent;
+        this._updateWorldTransformChain(root);
 
-        const anchor = new Node('WisdomDisappearFxHost');
+        const anchor = new Node(`${root.name}DisappearFxHost`);
         anchor.active = true;
-        anchor.layer = wisdom.layer;
+        anchor.layer = root.layer;
         anchor.setParent(container, false);
 
-        const host = wisdom.parent;
-        if (host?.isValid) {
-            anchor.setWorldPosition(host.worldPosition);
-            anchor.setWorldRotation(host.worldRotation);
-            anchor.setWorldScale(host.worldScale);
+        if (animHost?.isValid) {
+            anchor.setWorldPosition(animHost.worldPosition);
+            anchor.setWorldRotation(animHost.worldRotation);
+            anchor.setWorldScale(animHost.worldScale);
         } else {
-            anchor.setWorldPosition(wisdom.worldPosition);
-            anchor.setWorldRotation(wisdom.worldRotation);
-            anchor.setWorldScale(wisdom.worldScale);
+            anchor.setWorldPosition(root.worldPosition);
+            anchor.setWorldRotation(root.worldRotation);
+            anchor.setWorldScale(root.worldScale);
         }
 
-        const cfg = BonusItemScheduler.instance;
-        const prefab = cfg?.wisdomDisappearFxPrefab ?? null;
-        const fx = prefab ? instantiate(prefab) : instantiate(wisdom);
+        const fx = fxPrefab ? instantiate(fxPrefab) : instantiate(root);
         if (!fx?.isValid) {
             anchor.destroy();
             return null;
         }
 
         fx.active = true;
-        fx.layer = wisdom.layer;
+        fx.layer = root.layer;
         fx.setParent(anchor, false);
-        fx.setPosition(wisdom.position);
-        fx.setRotation(wisdom.rotation);
-        fx.setScale(wisdom.scale);
-        this._disableFxColliders(fx);
+        fx.setPosition(root.position);
+        fx.setRotation(root.rotation);
+        fx.setScale(root.scale);
+        this._prepareBuffDisappearFxClone(fx);
 
         const anim = fx.getComponent(Animation);
         if (anim) {
@@ -496,6 +575,101 @@ export class PlayerEquippedBuffs extends Component {
         }
 
         return anchor;
+    }
+
+    /** На клоне не крутить SpringFollowParent и коллайдеры — визуал остаётся включённым. */
+    private _prepareBuffDisappearFxClone(root: Node): void {
+        this._disableFxColliders(root);
+        for (const spring of root.getComponentsInChildren(SpringFollowParent)) {
+            spring.enabled = false;
+        }
+    }
+
+    private _buffRoot(kind: EquippedBuffKind): Node | null {
+        return kind === 'magnet' ? this.magnetRoot : this.wisdomRoot;
+    }
+
+    private _buffAnim(kind: EquippedBuffKind): Animation | null {
+        return kind === 'magnet' ? this._magnetAnim : this._wisdomAnim;
+    }
+
+    private _setBuffPhase(kind: EquippedBuffKind, phase: BuffPhase): void {
+        if (kind === 'magnet') {
+            this._magnetPhase = phase;
+            return;
+        }
+        this._wisdomPhase = phase;
+    }
+
+    private _buffDisappearFxPrefab(kind: EquippedBuffKind): Prefab | null {
+        const cfg = BonusItemScheduler.instance;
+        if (kind === 'magnet') {
+            return cfg?.magnetDisappearFxPrefab ?? null;
+        }
+        return cfg?.wisdomDisappearFxPrefab ?? null;
+    }
+
+    private _buffDeactivateSound(kind: EquippedBuffKind): SoundId {
+        return kind === 'magnet' ? SoundId.MagnetDeactivate : SoundId.WisdomDeactivate;
+    }
+
+    private _resolveBuffClip(
+        kind: EquippedBuffKind,
+        phase: 'appear' | 'loop' | 'disappear',
+    ): AnimationClip | null {
+        const cfg = BonusItemScheduler.instance;
+        const anim = this._buffAnim(kind);
+        if (kind === 'magnet') {
+            const fromScheduler =
+                phase === 'appear'
+                    ? cfg?.magnetAppearClip
+                    : phase === 'loop'
+                      ? cfg?.magnetLoopClip
+                      : cfg?.magnetDisappearClip;
+            const fallback =
+                phase === 'appear'
+                    ? PlayerEquippedBuffs.MAGNET_APPEAR_CLIP
+                    : phase === 'loop'
+                      ? PlayerEquippedBuffs.MAGNET_LOOP_CLIP
+                      : PlayerEquippedBuffs.MAGNET_DISAPPEAR_CLIP;
+            return this._resolveClipFromScheduler(anim, fromScheduler, fallback);
+        }
+
+        const fromScheduler =
+            phase === 'appear'
+                ? cfg?.wisdomAppearClip
+                : phase === 'loop'
+                  ? cfg?.wisdomLoopClip
+                  : cfg?.wisdomDisappearClip;
+        const fallback =
+            phase === 'appear'
+                ? PlayerEquippedBuffs.WISDOM_APPEAR_CLIP
+                : phase === 'loop'
+                  ? PlayerEquippedBuffs.WISDOM_LOOP_CLIP
+                  : PlayerEquippedBuffs.WISDOM_DISAPPEAR_CLIP;
+        return this._resolveClipFromScheduler(anim, fromScheduler, fallback);
+    }
+
+    private _resolveClipFromScheduler(
+        anim: Animation | null,
+        fromScheduler: AnimationClip | null | undefined,
+        fallbackName: string,
+    ): AnimationClip | null {
+        if (fromScheduler?.name) {
+            return fromScheduler;
+        }
+        return this._findAnimClip(anim, fallbackName);
+    }
+
+    private _clipDurationSec(anim: Animation, clip: AnimationClip): number {
+        let duration = 0.9;
+        const st = anim.getState(clip.name);
+        if (st && st.duration > 0) {
+            duration = Math.max(0.05, st.duration / Math.max(Math.abs(st.speed), 1e-5));
+        } else if (clip.duration > 0) {
+            duration = Math.max(0.05, clip.duration);
+        }
+        return duration;
     }
 
     private _resolvePlayerContainer(): Node | null {
@@ -521,16 +695,6 @@ export class PlayerEquippedBuffs extends Component {
         }
     }
 
-    private _resolveWisdomClip(
-        fromScheduler: AnimationClip | null | undefined,
-        fallbackName: string,
-    ): AnimationClip | null {
-        if (fromScheduler?.name) {
-            return fromScheduler;
-        }
-        return this._findAnimClip(this._wisdomAnim, fallbackName);
-    }
-
     private _findAnimClip(anim: Animation | null, clipName: string): AnimationClip | null {
         if (!anim?.isValid) {
             return null;
@@ -549,28 +713,6 @@ export class PlayerEquippedBuffs extends Component {
         }
     }
 
-    private _playDisappear(
-        anim: Animation | null,
-        clip: AnimationClip | null,
-        kind: 'magnet' | 'wisdom',
-        onDone: () => void,
-    ): void {
-        if (kind === 'magnet') {
-            this._magnetPhase = 'disappear';
-        } else {
-            this._wisdomPhase = 'disappear';
-        }
-
-        if (clip?.name && anim) {
-            this._ensureClip(anim, clip);
-            anim.once(Animation.EventType.FINISHED, onDone, this);
-            anim.play(clip.name);
-            return;
-        }
-
-        onDone();
-    }
-
     private _hideMagnet(): void {
         this._cancelMagnet();
         if (this.magnetRoot?.isValid) {
@@ -579,7 +721,9 @@ export class PlayerEquippedBuffs extends Component {
     }
 
     private _hideWisdom(): void {
-        this._cancelWisdom();
+        this._wisdomPhase = 'idle';
+        this._wisdomLoopRemain = 0;
+        this._wisdomAnim?.stop();
         if (this.wisdomRoot?.isValid) {
             this.wisdomRoot.active = false;
         }
@@ -807,7 +951,7 @@ export class PlayerEquippedBuffs extends Component {
             Math.max(1, aabb.yMax - aabb.yMin),
         );
         const hits = system.testAABB(rect);
-        let ahead = this._wisdomObstacleHits > 0;
+        let ahead = false;
         for (const other of hits) {
             if (other === col || !other?.isValid) {
                 continue;
@@ -817,7 +961,13 @@ export class PlayerEquippedBuffs extends Component {
                 break;
             }
         }
-        GameManager.game?.notifyWisdomObstacleAhead(ahead);
+        if (!ahead) {
+            this._wisdomObstacleHits = 0;
+        }
+        if (ahead !== this._wisdomProbeAhead) {
+            this._wisdomProbeAhead = ahead;
+            GameManager.game?.notifyWisdomObstacleAhead(ahead);
+        }
     }
 
     private _ensurePlayerContactListener(): void {

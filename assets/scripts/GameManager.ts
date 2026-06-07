@@ -191,6 +191,8 @@ export class GameManager extends Component {
     private _wisdomObstacleAhead = false;
     private _wisdomSlowFactor = 1;
     private _wisdomSlowTarget = 1;
+    /** Пауза перед _wisdomSlowTarget → 1 после пропажи препятствия (wisdomSlowReleaseDelaySec). */
+    private _wisdomSlowReleaseDelayRemain = 0;
 
     /** Эмиттер Speed Lines (не active ноды — только enabled + stop/reset). */
     private _speedLinesEmitterOn = false;
@@ -283,37 +285,65 @@ export class GameManager extends Component {
         return this._wisdomBuffActive;
     }
 
-    /** FediaRunFly только пока wisdom реально замедляет мир (препятствие впереди). */
+    public get isWisdomObstacleAhead(): boolean {
+        return this._wisdomObstacleAhead;
+    }
+
+    /** FediaRunFly отключён — в Wisdom обычная анимация полёта. */
     public isWisdomRunFlyForced(): boolean {
-        return (
-            this._wisdomBuffActive &&
-            this.isPlaying &&
-            this._wisdomObstacleAhead
-        );
+        return false;
     }
 
     public setWisdomBuffActive(active: boolean): void {
         this._wisdomBuffActive = active;
         if (!active) {
             this._wisdomObstacleAhead = false;
+            this._wisdomSlowReleaseDelayRemain = 0;
             this._wisdomSlowTarget = 1;
             this._wisdomSlowFactor = 1;
         }
     }
 
     public notifyWisdomObstacleAhead(ahead: boolean): void {
+        const wasAhead = this._wisdomObstacleAhead;
         this._wisdomObstacleAhead = ahead;
         if (!this._wisdomBuffActive) {
+            this._wisdomSlowReleaseDelayRemain = 0;
             this._wisdomSlowTarget = 1;
             return;
         }
+
         const pct = Math.min(
             100,
             Math.max(0, this._bonusItems()?.wisdomSlowPercent ?? 50),
         );
-        this._wisdomSlowTarget = ahead
-            ? Math.max(0.05, 1 - pct / 100)
-            : 1;
+        const slowFactor = Math.max(0.05, 1 - pct / 100);
+
+        if (ahead) {
+            this._wisdomSlowReleaseDelayRemain = 0;
+            this._wisdomSlowTarget = slowFactor;
+            return;
+        }
+
+        // Препятствия нет — release delay только при переходе ahead true → false.
+        if (wasAhead) {
+            const delay = Math.max(
+                0,
+                this._bonusItems()?.wisdomSlowReleaseDelaySec ?? 0,
+            );
+            if (delay <= 0) {
+                this._wisdomSlowReleaseDelayRemain = 0;
+                this._wisdomSlowTarget = 1;
+            } else {
+                this._wisdomSlowReleaseDelayRemain = delay;
+                this._wisdomSlowTarget = slowFactor;
+            }
+            return;
+        }
+
+        if (this._wisdomSlowReleaseDelayRemain <= 0) {
+            this._wisdomSlowTarget = 1;
+        }
     }
 
     /** true после Play Again — ждём тап, intro-камеру не показываем. */
@@ -489,10 +519,15 @@ export class GameManager extends Component {
         const base = Math.max(0, this.scrollSpeed);
         return (
             base *
-            this._getMilestoneSpeedMultiplier() *
+            this._getEffectiveMilestoneSpeedMultiplier() *
             this._milestonePassBoostFactor *
-            (this._wisdomBuffActive ? this._wisdomSlowFactor : 1)
+            this.getWisdomScrollSlowFactor()
         );
+    }
+
+    /** Плавный множитель замедления Wisdom (1 = без эффекта). */
+    public getWisdomScrollSlowFactor(): number {
+        return this._wisdomBuffActive ? this._wisdomSlowFactor : 1;
     }
 
     /**
@@ -513,7 +548,7 @@ export class GameManager extends Component {
         if (!this.isPlaying) {
             return 1;
         }
-        return Math.max(1, this._getMilestoneSpeedMultiplier());
+        return Math.max(1, this._getEffectiveMilestoneSpeedMultiplier());
     }
 
     /**
@@ -526,7 +561,7 @@ export class GameManager extends Component {
         }
         const levelGen = this.getComponent(LevelGenerator);
         const parallax = Math.max(0, levelGen?.plane1ParallaxFactor ?? 1);
-        return Math.max(1, this._getMilestoneSpeedMultiplier() * parallax);
+        return Math.max(1, this._getEffectiveMilestoneSpeedMultiplier() * parallax);
     }
 
     /** Pass Boost после столба (hold + плавный settle). */
@@ -548,6 +583,23 @@ export class GameManager extends Component {
             this.milestoneSpeedMultiplier,
             this._milestonesPassedCount,
         );
+    }
+
+    /**
+     * Wisdom: прирост от вех ослабляется (50 % → половина бонуса сверх ×1).
+     * Pass Boost и obstacle slow не трогаем.
+     */
+    private _getEffectiveMilestoneSpeedMultiplier(): number {
+        const raw = this._getMilestoneSpeedMultiplier();
+        if (!this._wisdomBuffActive || raw <= 1) {
+            return raw;
+        }
+        const pct = Math.min(
+            100,
+            Math.max(0, this._bonusItems()?.wisdomMilestoneBonusReductionPercent ?? 50),
+        );
+        const keep = 1 - pct / 100;
+        return 1 + (raw - 1) * keep;
     }
 
     /** Доп. сдвиг чанков вправо за кадр (отдача от стены). */
@@ -1174,10 +1226,26 @@ export class GameManager extends Component {
     private _tickWisdomSlow(dt: number): void {
         if (!this._wisdomBuffActive || !this.isPlaying) {
             if (!this._wisdomBuffActive) {
+                this._wisdomSlowReleaseDelayRemain = 0;
                 this._wisdomSlowFactor = 1;
                 this._wisdomSlowTarget = 1;
             }
             return;
+        }
+
+        if (this._wisdomSlowReleaseDelayRemain > 0) {
+            this._wisdomSlowReleaseDelayRemain = Math.max(
+                0,
+                this._wisdomSlowReleaseDelayRemain - dt,
+            );
+            if (
+                this._wisdomSlowReleaseDelayRemain <= 0 &&
+                !this._wisdomObstacleAhead
+            ) {
+                this._wisdomSlowTarget = 1;
+            }
+        } else if (!this._wisdomObstacleAhead) {
+            this._wisdomSlowTarget = 1;
         }
 
         const easeSec = Math.max(
@@ -1295,6 +1363,7 @@ export class GameManager extends Component {
         this._requireFreshPointerDownForRun = false;
         this._pointerDownDidNotStartRun = false;
         this._suppressTapToStart = false;
+        GameIntroController.instance?.stopAwaitingFlyAudio();
         SoundController.instance?.playRunStartTap();
         this._gameOver = false;
         this._dying = false;
@@ -2097,6 +2166,8 @@ export class GameManager extends Component {
         if (!this._canGrantHeartSlot(slotIndex)) {
             return false;
         }
+
+        SoundController.instance?.play(SoundId.HeartCollect);
 
         this._hpHarvestReservedSlots.add(slotIndex);
         this._hideHeartSlotUntilHarvest(slotIndex);

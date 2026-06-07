@@ -223,11 +223,17 @@ export class PlayerFlight extends Component {
             this._held = false;
             return;
         }
-        if (this._electricLiftBlockRemain > 0) {
-            this._held = false;
+        this._held = this._isPointerDown();
+    }
+
+    /** Зажатый указатель без нового TOUCH_START / MOUSE_DOWN (после урона, stun и т.д.). */
+    private _reconcileHeldFromPointer(): void {
+        if (GameSession.game?.isPlaying !== true) {
             return;
         }
-        this._held = this._isPointerDown();
+        if (this._isPointerDown()) {
+            this._held = true;
+        }
     }
 
     private _isPointerDown(): boolean {
@@ -469,12 +475,14 @@ export class PlayerFlight extends Component {
 
         body.gravityScale = this._savedGravityScale * phys.gravity;
 
-        if (this._electricLiftBlockRemain > 0) {
+        const wasElectricBlocked = this._electricLiftBlockRemain > 0;
+        if (wasElectricBlocked) {
             this._electricLiftBlockRemain = Math.max(
                 0,
                 this._electricLiftBlockRemain - dt,
             );
         }
+        this._reconcileHeldFromPointer();
 
         const canLift = this._electricLiftBlockRemain <= 0;
         if (canLift && this._held) {
@@ -570,7 +578,7 @@ export class PlayerFlight extends Component {
     }
 
     /**
-     * Смягчённый множитель под видимый скролл Plane 1 (вехи × parallax), без Pass Boost.
+     * Смягчённый множитель под видимый скролл Plane 1 (вехи × parallax), без Pass Boost и Wisdom slow.
      */
     private _worldSpeedFlightFactor(): number {
         if (!this.scaleFlightWithWorldSpeed) {
@@ -580,7 +588,8 @@ export class PlayerFlight extends Component {
         if (!gm?.isPlaying || gm.milestonesPassedCount <= 0) {
             return 1;
         }
-        const world = Math.max(1, gm.getFlightScrollSpeedFactor());
+        const worldBase = Math.max(1, gm.getFlightScrollSpeedFactor());
+        const world = worldBase;
         const match = Math.min(1, Math.max(0, this.flightWorldSpeedMatch));
         return 1 + (world - 1) * match;
     }
@@ -686,7 +695,9 @@ export class PlayerFlight extends Component {
     }
 
     private _onTouchEnd(_e: EventTouch) {
-        this._held = false;
+        if (!this._isPointerDown()) {
+            this._held = false;
+        }
     }
 
     private _onMouseDown(e: EventMouse) {
@@ -711,7 +722,7 @@ export class PlayerFlight extends Component {
     }
 
     private _onMouseUp(e: EventMouse) {
-        if (e.getButton() === 0) {
+        if (e.getButton() === 0 && !this._isPointerDown()) {
             this._held = false;
         }
     }

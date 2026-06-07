@@ -40,7 +40,6 @@ export class LifePickup extends PickupBase {
             return;
         }
         this._collected = true;
-        this.playCollectSound();
         if (gm.grantExtraLifeWithHarvest()) {
             SceneNodeHub.instance?.showLifeRestored();
         }

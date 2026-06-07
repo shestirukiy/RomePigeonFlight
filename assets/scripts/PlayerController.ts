@@ -115,23 +115,31 @@ export class PlayerController extends Component {
             helmetProtects: false,
         });
         SoundController.instance?.play(SoundId.ElectricHit);
-        const t = this.electricDefaultLiftLockDuration;
+
+        const liftLock = Math.max(0, this.electricDefaultLiftLockDuration);
+        /** Клип FediaFlashDamage ≈ 0.7 s — показываем даже при lift lock = 0 в инспекторе. */
+        const animSec = liftLock > 0 ? liftLock : 0.7;
+
         if (lethal) {
-            if (t > 0) {
-                this._flight?.setElectricLiftBlockedFor(t);
-                this._forEachAnim((a) => a.notifyElectricDamage(t));
-                gm.scheduleDeathAfterHazardAnimation(t);
+            if (liftLock > 0) {
+                this._flight?.setElectricLiftBlockedFor(liftLock);
+            }
+            if (animSec > 0) {
+                this._forEachAnim((a) => a.notifyElectricDamage(animSec));
+                gm.scheduleDeathAfterHazardAnimation(animSec);
             } else {
                 gm.beginDeathSequence();
             }
             return;
         }
-        if (t <= 0) {
-            return;
+
+        if (liftLock > 0) {
+            this._flight?.setElectricLiftBlockedFor(liftLock);
+            this._flight?.allowHorizontalDriftFor(liftLock);
         }
-        this._flight?.setElectricLiftBlockedFor(t);
-        this._flight?.allowHorizontalDriftFor(t);
-        this._forEachAnim((a) => a.notifyElectricDamage(t));
+        if (animSec > 0) {
+            this._forEachAnim((a) => a.notifyElectricDamage(animSec));
+        }
     }
 
     /**

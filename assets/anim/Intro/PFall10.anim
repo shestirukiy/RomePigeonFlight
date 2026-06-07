@@ -28,7 +28,18 @@
       }
     ],
     "_exoticAnimation": null,
-    "_events": [],
+    "_events": [
+      {
+        "frame": 2.76,
+        "func": "",
+        "params": []
+      },
+      {
+        "frame": 2.76,
+        "func": "StartfLy",
+        "params": []
+      }
+    ],
     "_embeddedPlayers": [],
     "_additiveSettings": {
       "__id__": 36

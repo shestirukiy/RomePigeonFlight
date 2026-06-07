@@ -41,7 +41,7 @@ export class FediaAnimationController extends PlayerAnimationController {
     private _startFlyPlaybackSign = 1;
     /** Первый взлёт после тапа «старт» — FediaStartFly вместо сразу FediaFly. */
     private _runStartTakeoffPending = false;
-    /** Wisdom slow: FediaStartFly → FediaRunFly / обратно (как бег ↔ полёт). */
+    /** Wisdom: FediaRunFly в полёте без StartFly; скорость от скорости мира. */
     private _startFlyForWisdomRunFly = false;
     private _wisdomRunFlyAnimActive = false;
     private _lastWisdomRunFlyForced = false;
@@ -101,7 +101,7 @@ export class FediaAnimationController extends PlayerAnimationController {
     }
 
     protected override _blocksRoutineFlightAnimUpdate(): boolean {
-        return this._startFlyTransitionActive || this._wisdomRunFlyAnimActive;
+        return this._startFlyTransitionActive;
     }
 
     protected override _tryPlaySurfaceRunTransition(active: boolean): boolean {
@@ -112,16 +112,6 @@ export class FediaAnimationController extends PlayerAnimationController {
             this._electricOverlayRemain > 0
         ) {
             return false;
-        }
-        if (this._startFlyForWisdomRunFly) {
-            return true;
-        }
-        if (this._wisdomRunFlyAnimActive && !active) {
-            return true;
-        }
-        if (this._wisdomRunFlyAnimActive && active) {
-            this._wisdomRunFlyAnimActive = false;
-            this._lastWisdomRunFlyForced = false;
         }
         if (!active) {
             const wasGrounded =
@@ -309,10 +299,10 @@ export class FediaAnimationController extends PlayerAnimationController {
     }
 
     protected override _resolveFlapClip(): AnimationClip | null {
-        return this._wisdomRunFlyClip() ?? this.flapClip;
+        return this.flapClip;
     }
 
-    /** FediaRunFly в полёте после StartFly-перехода; на земле — обычный бег. */
+    /** FediaRunFly в полёте; на земле — FediaRun. */
     private _wisdomRunFlyClip(): AnimationClip | null {
         if (
             !this._wisdomRunFlyAnimActive ||
@@ -324,7 +314,7 @@ export class FediaAnimationController extends PlayerAnimationController {
         return this.surfaceRunClipFly;
     }
 
-    /** FediaFly → FediaRunFly через StartFly (как посадка); обратно — как взлёт. */
+    /** FediaFly ↔ FediaRunFly без StartFly; скорость — от скорости мира. */
     private _syncWisdomRunFlyTransition(): void {
         const gm = GameManager.game;
         if (
@@ -340,19 +330,11 @@ export class FediaAnimationController extends PlayerAnimationController {
 
         if (!gm.isWisdomBuffActive) {
             this._lastWisdomRunFlyForced = false;
-            if (
-                this._wisdomRunFlyAnimActive &&
-                !this._startFlyTransitionActive &&
-                !this._startFlyForWisdomRunFly
-            ) {
+            if (this._wisdomRunFlyAnimActive) {
                 this._tryPlayWisdomRunFlyTransition(false);
-            } else if (!this._startFlyTransitionActive) {
+            } else {
                 this._wisdomRunFlyAnimActive = false;
             }
-            return;
-        }
-
-        if (this._startFlyTransitionActive) {
             return;
         }
 
@@ -364,40 +346,54 @@ export class FediaAnimationController extends PlayerAnimationController {
         this._tryPlayWisdomRunFlyTransition(forced);
     }
 
+    /** Мгновенная посадка на платформу во время Wisdom — FediaRun без StartFly. */
+    private _tryPlayWisdomSurfaceRunInstant(): boolean {
+        this._wisdomRunFlyAnimActive = false;
+        this._startFlyForWisdomRunFly = false;
+        if (this._startFlyTransitionActive) {
+            this.unschedule(this._onStartFlyTransitionEnd);
+            this._startFlyTransitionActive = false;
+            this._startFlyRewinding = false;
+        }
+        this._flapState = null;
+        this._tailTimeLeft = 0;
+        this._wasHeld = false;
+        this._stopClipIfPlaying(this.startFlyClip);
+        this._stopClipIfPlaying(this.surfaceRunClipFly);
+        this._stopClipIfPlaying(this.flapClip);
+        this._feetOnSurface = true;
+        this._applyRunningOnSurface(true);
+        return true;
+    }
+
     private _tryPlayWisdomRunFlyTransition(enterRunFly: boolean): boolean {
         if (this._surfaceRunActive) {
             return false;
         }
 
-        if (!this.startFlyClip?.name || !this._anim) {
-            this._wisdomRunFlyAnimActive = enterRunFly;
-            this._lastWisdomRunFlyForced = enterRunFly;
-            this._resumeWisdomOrFlapPlayback(true);
-            return true;
-        }
-
         if (this._startFlyTransitionActive) {
-            if (
-                this._startFlyForWisdomRunFly &&
-                enterRunFly === this._startFlyTransitionTarget &&
-                !this._startFlyRewinding
-            ) {
-                return true;
-            }
-            if (this._startFlyForWisdomRunFly || !this._startFlyRewinding) {
-                this._beginStartFlyRewind();
-            }
-            return true;
+            this.unschedule(this._onStartFlyTransitionEnd);
+            this._startFlyTransitionActive = false;
+            this._startFlyRewinding = false;
+            this._startFlyForWisdomRunFly = false;
         }
 
-        this._startFlyTransitionActive = true;
-        this._startFlyForWisdomRunFly = true;
-        this._startFlyTransitionTarget = enterRunFly;
-        this._startFlyRewinding = false;
+        this._lastWisdomRunFlyForced = enterRunFly;
+        this._startFlyForWisdomRunFly = false;
         this._flapState = null;
-        this._wisdomRunFlyAnimActive = false;
-        /* enterRunFly: StartFly назад (как полёт→бег); exit: StartFly вперёд (как бег→полёт). */
-        this._playStartFlyTransition(enterRunFly);
+        this._stopClipIfPlaying(this.startFlyClip);
+
+        if (enterRunFly) {
+            this._wisdomRunFlyAnimActive = true;
+            this._tailTimeLeft = 0;
+            this._wasHeld = false;
+            this._playWisdomRunFlyLoop(false);
+        } else {
+            this._wisdomRunFlyAnimActive = false;
+            this._stopClipIfPlaying(this.surfaceRunClipFly);
+            this._tailTimeLeft = 0;
+            this._resumeFlapPlayback(true);
+        }
         return true;
     }
 
@@ -804,11 +800,29 @@ export class FediaAnimationController extends PlayerAnimationController {
     update(dt: number): void {
         this._tickStartFlyTransition(dt);
         this._tryRunStartTakeoffTransition();
-        this._syncWisdomRunFlyTransition();
+        this._clearWisdomRunFlyAnimIfActive();
         this._syncFeetOnSurfaceStay();
         super.update(dt);
-        this._syncWisdomRunFlyClip();
-        this._syncWisdomRunFlyPlayback();
+    }
+
+    /** Wisdom больше не переключает клип — сброс, если остался FediaRunFly. */
+    private _clearWisdomRunFlyAnimIfActive(): void {
+        if (!this._wisdomRunFlyAnimActive && !this._startFlyForWisdomRunFly) {
+            return;
+        }
+        this._wisdomRunFlyAnimActive = false;
+        this._startFlyForWisdomRunFly = false;
+        this._lastWisdomRunFlyForced = false;
+        if (
+            this._surfaceRunActive ||
+            this._startFlyTransitionActive ||
+            this._deathSequenceActive ||
+            GameManager.game?.isPlaying !== true
+        ) {
+            return;
+        }
+        this._stopClipIfPlaying(this.surfaceRunClipFly);
+        this._resumeFlapPlayback(true);
     }
 
     public override playWaitingStay(): void {

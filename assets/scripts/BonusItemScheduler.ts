@@ -32,18 +32,14 @@ const G_MAGNET_BUFF = {
     name: 'Magnet buff',
 };
 
-type TypeState = {
-    nextAtMeters: number;
-    pending: boolean;
-    pendingSinceMeters: number;
-};
-
 /**
  * Все настройки собираемых бонусов на уровне:
  * — частота появления в чанках (группа Spawn);
  * — семечки → +HP, шлем (break, отскок, i-frames);
  * magnet / wisdom — частота здесь, эффект пока в GameManager.
  * Компонент уже на ноде LevelGenerator (не добавляйте второй).
+ *
+ * Spawn: один общий поток бонусов (не 4 независимых таймера). *Per1000m — веса типов.
  */
 @ccclass('BonusItemScheduler')
 export class BonusItemScheduler extends Component {
@@ -56,37 +52,66 @@ export class BonusItemScheduler extends Component {
     @property({
         group: G_BONUS,
         displayName: 'Life Per 1000 m',
-        tooltip: 'Среднее число жизней на 1000 м (0 — выкл.).',
+        tooltip: 'Вес жизни в общем потоке бонусов (0 — выкл.).',
     })
     lifePer1000m = 0.3;
 
     @property({
         group: G_BONUS,
         displayName: 'Helmet Per 1000 m',
-        tooltip: '0 — выкл., пока нет HelmetPickup.',
+        tooltip: 'Вес шлема в общем потоке (0 — выкл.).',
     })
     helmetPer1000m = 0;
 
     @property({
         group: G_BONUS,
         displayName: 'Magnet Per 1000 m',
-        tooltip: '0 — выкл. magnet_item (SeedMagnetPickup) в endless-чанках.',
+        tooltip: 'Вес magnet_item в общем потоке (0 — выкл.).',
     })
     magnetPer1000m = 0;
 
     @property({
         group: G_BONUS,
         displayName: 'Wisdom Per 1000 m',
-        tooltip: '0 — выкл. wisdom_item в endless-чанках.',
+        tooltip: 'Вес wisdom_item в общем потоке (0 — выкл.).',
     })
     wisdomPer1000m = 0;
 
     @property({
         group: G_BONUS,
         displayName: 'Min Interval Meters',
-        tooltip: 'Минимальный зазор между срабатываниями одного типа.',
+        tooltip:
+            'Устаревший пол (не используется в общем расписании). Оставлен для совместимости префабов.',
     })
     minIntervalMeters = 200;
+
+    @property({
+        group: G_BONUS,
+        displayName: 'Min Gap Any Bonus (m)',
+        tooltip:
+            'Минимум между двумя выданными бонусами (после активации в чанке). 0 — только по *Per1000m. Не замедляет первый бонус.',
+    })
+    minGapAnyBonusMeters = 80;
+
+    @property({
+        group: G_BONUS,
+        displayName: 'Pending Reroll (m)',
+        tooltip:
+            'Если pending висит столько метров без подходящего слота в чанке — перекинуть на другой тип.',
+    })
+    pendingRerollMeters = 120;
+
+    @property({
+        group: G_BONUS,
+        displayName: 'Gap Jitter',
+        tooltip:
+            'Разброс шага вокруг среднего: 0 = строго по mean, 0.25 ≈ ±25% (равномерно, не экспонента).',
+        min: 0,
+        max: 0.5,
+        step: 0.05,
+        slide: true,
+    })
+    gapJitter = 0.25;
 
     @property({
         group: G_BONUS,
@@ -198,6 +223,22 @@ export class BonusItemScheduler extends Component {
     })
     wisdomSlowEaseSec = 0.35;
 
+    @property({
+        group: G_WISDOM,
+        displayName: 'Slow Release Delay (s)',
+        tooltip:
+            'После того как препятствие пропало из WisdomCollider — пауза перед выходом из замедления (затем разгон по Slow Ease). 0 — сразу.',
+    })
+    wisdomSlowReleaseDelaySec = 0.25;
+
+    @property({
+        group: G_WISDOM,
+        displayName: 'Milestone Bonus Reduction %',
+        tooltip:
+            'На сколько % снижается бонус скорости мира от пройденных вех, пока активен Wisdom (50 → половина прироста сверх базовой скорости).',
+    })
+    wisdomMilestoneBonusReductionPercent = 50;
+
     @property({ group: G_WISDOM, type: AnimationClip, displayName: 'Appear Clip' })
     wisdomAppearClip: AnimationClip | null = null;
 
@@ -231,6 +272,15 @@ export class BonusItemScheduler extends Component {
     @property({ group: G_MAGNET_BUFF, type: AnimationClip, displayName: 'Disappear Clip' })
     magnetDisappearClip: AnimationClip | null = null;
 
+    @property({
+        group: G_MAGNET_BUFF,
+        type: Prefab,
+        displayName: 'Disappear FX Prefab',
+        tooltip:
+            'Отдельный VFX для исчезновения Magnet. Пусто — клон ноды Magnet на Player.',
+    })
+    magnetDisappearFxPrefab: Prefab | null = null;
+
     /** I-frames после ground-bounce шлема. */
     public getHelmetGroundInvincibilitySec(): number {
         const inv = this.helmetGroundInvincibilitySec;
@@ -240,10 +290,17 @@ export class BonusItemScheduler extends Component {
         return Math.max(0.05, this.helmetGroundGraceSec);
     }
 
-    private readonly _states = new Map<BonusItemType, TypeState>();
     private _enabledTypes: BonusItemType[] = [];
     private _lastTickMeters = 0;
     private _forcedChunkPrefab: Prefab | null = null;
+
+    /** Следующая дистанция для постановки одного pending-бонуса в общую очередь. */
+    private _nextBonusAtMeters = Number.POSITIVE_INFINITY;
+    /** Когда последний раз реально активировали бонус в чанке. */
+    private _lastFulfilledAtMeters = 0;
+    /** Не больше одного pending — тип, ожидающий подходящий чанк. */
+    private _pendingType: BonusItemType | null = null;
+    private _pendingSinceMeters = 0;
 
     onLoad(): void {
         BonusItemScheduler._inst = this;
@@ -256,23 +313,19 @@ export class BonusItemScheduler extends Component {
     }
 
     public resetForRun(): void {
-        this._states.clear();
         this._enabledTypes = this._buildEnabledTypes();
         this._lastTickMeters = 0;
+        this._lastFulfilledAtMeters = 0;
         this._forcedChunkPrefab = null;
-
-        for (const type of this._enabledTypes) {
-            this._states.set(type, {
-                nextAtMeters: this._randomNextAt(0, type),
-                pending: false,
-                pendingSinceMeters: 0,
-            });
-        }
+        this._pendingType = null;
+        this._pendingSinceMeters = 0;
+        this._nextBonusAtMeters = this._randomNextGlobalAt(0);
 
         if (this.debugLog) {
             console.log(
                 '[BonusItemScheduler] reset',
                 this._enabledTypes.map((t) => BonusItemType[t]),
+                `next@${this._nextBonusAtMeters.toFixed(0)}m`,
             );
         }
     }
@@ -285,21 +338,49 @@ export class BonusItemScheduler extends Component {
         const meters = Math.max(0, flightDistanceMeters);
         this._lastTickMeters = meters;
 
-        for (const type of this._enabledTypes) {
-            const state = this._states.get(type);
-            if (!state || state.pending) {
-                continue;
+        if (this._pendingType != null) {
+            const wait = meters - this._pendingSinceMeters;
+            const reroll = Math.max(20, this.pendingRerollMeters);
+            if (wait >= reroll) {
+                const next = this._pickWeightedType();
+                if (next != null && next !== this._pendingType) {
+                    this._pendingType = next;
+                    this._pendingSinceMeters = meters;
+                    if (this.debugLog) {
+                        console.log(
+                            `[BonusItemScheduler] reroll pending → ${BonusItemType[next]} at ${meters.toFixed(0)} m`,
+                        );
+                    }
+                }
             }
-            if (meters + 1e-4 < state.nextAtMeters) {
-                continue;
-            }
-            state.pending = true;
-            state.pendingSinceMeters = meters;
-            if (this.debugLog) {
-                console.log(
-                    `[BonusItemScheduler] pending ${BonusItemType[type]} at ${meters.toFixed(0)} m`,
-                );
-            }
+            this._updateForcedChunk(meters);
+            return;
+        }
+
+        const minGap = Math.max(0, this.minGapAnyBonusMeters);
+        if (
+            this._lastFulfilledAtMeters > 0 &&
+            meters + 1e-4 < this._lastFulfilledAtMeters + minGap
+        ) {
+            this._updateForcedChunk(meters);
+            return;
+        }
+        if (meters + 1e-4 < this._nextBonusAtMeters) {
+            this._updateForcedChunk(meters);
+            return;
+        }
+
+        const type = this._pickWeightedType();
+        if (type == null) {
+            return;
+        }
+
+        this._pendingType = type;
+        this._pendingSinceMeters = meters;
+        if (this.debugLog) {
+            console.log(
+                `[BonusItemScheduler] pending ${BonusItemType[type]} at ${meters.toFixed(0)} m (next schedule was ${this._nextBonusAtMeters.toFixed(0)} m)`,
+            );
         }
 
         this._updateForcedChunk(meters);
@@ -321,7 +402,8 @@ export class BonusItemScheduler extends Component {
         if (isFixedLayout && this.excludeFixedChunks) {
             return;
         }
-        if (this._enabledTypes.length === 0 || !this._hasAnyPending()) {
+        const pendingType = this._pendingType;
+        if (pendingType == null || this._enabledTypes.length === 0) {
             return;
         }
 
@@ -330,62 +412,70 @@ export class BonusItemScheduler extends Component {
             return;
         }
 
-        for (const type of this._enabledTypes) {
-            const state = this._states.get(type);
-            if (!state?.pending) {
-                continue;
-            }
-
-            const matching = pickups.filter((p) => p.itemType === type);
-            if (matching.length === 0) {
-                continue;
-            }
-
-            const pick =
-                matching[Math.floor(Math.random() * matching.length)];
-            pick.activate();
-            state.pending = false;
-            state.nextAtMeters = this._randomNextAt(this._lastTickMeters, type);
-
-            if (this.debugLog) {
-                console.log(
-                    `[BonusItemScheduler] activated ${BonusItemType[type]} "${pick.node.name}" in "${chunkRoot.name}"`,
+        const matching = pickups.filter((p) => p.itemType === pendingType);
+        if (matching.length === 0) {
+            const rerollAt = Math.max(20, this.pendingRerollMeters);
+            if (this._lastTickMeters - this._pendingSinceMeters >= rerollAt) {
+                const candidates = pickups.filter((p) =>
+                    this._enabledTypes.includes(p.itemType),
                 );
+                if (candidates.length > 0) {
+                    const pick =
+                        candidates[
+                            Math.floor(Math.random() * candidates.length)
+                        ];
+                    pick.activate();
+                    this._lastFulfilledAtMeters = this._lastTickMeters;
+                    this._pendingType = null;
+                    this._pendingSinceMeters = 0;
+                    this._nextBonusAtMeters = this._randomNextGlobalAt(
+                        this._lastFulfilledAtMeters,
+                    );
+                    if (this.debugLog) {
+                        console.log(
+                            `[BonusItemScheduler] reroll fulfill ${BonusItemType[pick.itemType]} "${pick.node.name}" in "${chunkRoot.name}"`,
+                        );
+                    }
+                    this._updateForcedChunk(this._lastTickMeters);
+                }
             }
+            return;
+        }
+
+        const pick =
+            matching[Math.floor(Math.random() * matching.length)];
+        pick.activate();
+
+        this._lastFulfilledAtMeters = this._lastTickMeters;
+        this._pendingType = null;
+        this._pendingSinceMeters = 0;
+        this._nextBonusAtMeters = this._randomNextGlobalAt(this._lastFulfilledAtMeters);
+
+        if (this.debugLog) {
+            console.log(
+                `[BonusItemScheduler] activated ${BonusItemType[pendingType]} "${pick.node.name}" in "${chunkRoot.name}" → next@${this._nextBonusAtMeters.toFixed(0)}m`,
+            );
         }
 
         this._updateForcedChunk(this._lastTickMeters);
-    }
-
-    private _hasAnyPending(): boolean {
-        for (const type of this._enabledTypes) {
-            if (this._states.get(type)?.pending) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private _updateForcedChunk(meters: number): void {
         if (this._forcedChunkPrefab || !this.fallbackBonusChunk) {
             return;
         }
-
-        for (const type of this._enabledTypes) {
-            const state = this._states.get(type);
-            if (!state?.pending) {
-                continue;
-            }
-            if (meters - state.pendingSinceMeters < this.maxWaitMeters) {
-                continue;
-            }
-            this._forcedChunkPrefab = this.fallbackBonusChunk;
-            if (this.debugLog) {
-                warn(
-                    `[BonusItemScheduler] fallback chunk for pending ${BonusItemType[type]} after ${this.maxWaitMeters} m`,
-                );
-            }
+        if (this._pendingType == null) {
             return;
+        }
+        if (meters - this._pendingSinceMeters < this.maxWaitMeters) {
+            return;
+        }
+
+        this._forcedChunkPrefab = this.fallbackBonusChunk;
+        if (this.debugLog) {
+            warn(
+                `[BonusItemScheduler] fallback chunk for pending ${BonusItemType[this._pendingType]} after ${this.maxWaitMeters} m`,
+            );
         }
     }
 
@@ -421,14 +511,42 @@ export class BonusItemScheduler extends Component {
         }
     }
 
-    private _randomNextAt(fromMeters: number, type: BonusItemType): number {
-        const rate = this._rateFor(type);
-        if (rate <= 0) {
+    private _totalSpawnRate(): number {
+        let total = 0;
+        for (const type of this._enabledTypes) {
+            total += this._rateFor(type);
+        }
+        return total;
+    }
+
+    private _pickWeightedType(): BonusItemType | null {
+        if (this._enabledTypes.length === 0) {
+            return null;
+        }
+        const total = this._totalSpawnRate();
+        if (total <= 0) {
+            return this._enabledTypes[0] ?? null;
+        }
+        let roll = Math.random() * total;
+        for (const type of this._enabledTypes) {
+            roll -= this._rateFor(type);
+            if (roll <= 0) {
+                return type;
+            }
+        }
+        return this._enabledTypes[this._enabledTypes.length - 1] ?? null;
+    }
+
+    /** Следующая точка общего расписания: mean = 1000/totalRate, jitter равномерный. */
+    private _randomNextGlobalAt(fromMeters: number): number {
+        const totalRate = this._totalSpawnRate();
+        if (totalRate <= 0) {
             return Number.POSITIVE_INFINITY;
         }
-        const meanGap = 1000 / rate;
-        const u = Math.max(1e-6, Math.random());
-        const gap = Math.max(this.minIntervalMeters, -Math.log(u) * meanGap);
+        const meanGap = 1000 / totalRate;
+        const jitter = Math.min(0.5, Math.max(0, this.gapJitter));
+        const factor = 1 - jitter + Math.random() * (2 * jitter);
+        const gap = Math.max(1, meanGap * factor);
         return fromMeters + gap;
     }
 }

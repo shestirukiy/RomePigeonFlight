@@ -1,11 +1,16 @@
-import { _decorator, Component, Node, Vec3 } from 'cc';
+import { _decorator, Component, director, Director, Node, Vec3, game } from 'cc';
 import { GameManager } from './GameManager';
+import { PLAYER_FLIGHT_CCLASS } from './GameSession';
 
 const { ccclass, property } = _decorator;
 
 const G_TARGET = { id: 'Target', name: 'Target' };
 const G_SPRING = { id: 'Spring', name: 'Spring' };
 const G_LIMITS = { id: 'Limits', name: 'Limits' };
+
+type PlayerFlightPitch = {
+    pitchVisual?: Node | null;
+};
 
 /**
  * Дочерняя нода перестаёт жёстко ехать с родителем: тянется к «номинальной» точке
@@ -21,7 +26,7 @@ export class SpringFollowParent extends Component {
         type: Node,
         displayName: 'Follow Anchor',
         tooltip:
-            'За кем тянуться (обычно родитель). Пусто — node.parent. Можно указать другой узел Player.',
+            'За кем тянуться (обычно родитель). Пусто — node.parent. Если указан корень Player, автоматически берётся Fedia/Pigeon с pitch.',
     })
     followAnchor: Node | null = null;
 
@@ -70,16 +75,17 @@ export class SpringFollowParent extends Component {
 
     @property({
         group: G_LIMITS,
-        displayName: 'Snap When Idle',
+        displayName: 'Snap When Still',
         tooltip:
-            'Если отставание и скорость почти нулевые — прилипнуть к цели (убирает микродрожь).',
+            'Когда хвост почти догнал цель — встать ровно, без дрожания на месте.',
     })
     snapWhenIdle = true;
 
     @property({
         group: G_LIMITS,
-        displayName: 'Idle Epsilon (px)',
-        tooltip: 'Порог snapWhenIdle по смещению и скорости.',
+        displayName: 'Still Snap Distance (px)',
+        tooltip:
+            '«Почти догнал» = ближе этого расстояния (в пикселях). Меньше — жёстче, больше — мягче.',
         min: 0.01,
         visible(this: SpringFollowParent) {
             return this.snapWhenIdle;
@@ -96,33 +102,40 @@ export class SpringFollowParent extends Component {
 
     private readonly _restLocal = new Vec3();
     private readonly _targetWorld = new Vec3();
+    private readonly _targetWorldPrev = new Vec3();
+    /** Собственная world-поза хвоста; не читаем node каждый кадр — иначе parent «съедает» отставание. */
     private readonly _worldPos = new Vec3();
     private readonly _delta = new Vec3();
     private readonly _velocity = new Vec3();
 
     private _captured = false;
+    private _hasTargetPrev = false;
 
     onEnable() {
+        director.on(Director.EVENT_BEFORE_DRAW, this._onBeforeDraw, this);
         if (this.recaptureOnEnable) {
             this.captureRestPose();
         } else if (!this._captured) {
             this.captureRestPose();
         }
         this._velocity.set(0, 0, 0);
+        this._hasTargetPrev = false;
     }
 
     onDisable() {
+        director.off(Director.EVENT_BEFORE_DRAW, this._onBeforeDraw, this);
         this.snapToTarget();
     }
 
-    /** Запомнить текущую local-позу относительно anchor как покой. */
+    /** Запомнить текущую world-позу в local-space anchor как покой. */
     public captureRestPose(): void {
         const anchor = this._resolveAnchor();
         if (!anchor?.isValid) {
             this._captured = false;
             return;
         }
-        this._restLocal.set(this.node.position);
+        this.node.getWorldPosition(this._worldPos);
+        anchor.inverseTransformPoint(this._restLocal, this._worldPos);
         this._captured = true;
     }
 
@@ -133,11 +146,13 @@ export class SpringFollowParent extends Component {
             return;
         }
         Vec3.transformMat4(this._targetWorld, this._restLocal, anchor.worldMatrix);
+        this._worldPos.set(this._targetWorld);
         this.node.setWorldPosition(this._targetWorld);
         this._velocity.set(0, 0, 0);
+        this._hasTargetPrev = false;
     }
 
-    lateUpdate(dt: number) {
+    private _onBeforeDraw(): void {
         if (!this._captured) {
             this.captureRestPose();
         }
@@ -155,9 +170,17 @@ export class SpringFollowParent extends Component {
             return;
         }
 
-        const step = Math.min(Math.max(dt, 0), 0.05);
+        const dt = Math.min(Math.max(game.deltaTime, 0), 0.05);
         Vec3.transformMat4(this._targetWorld, this._restLocal, anchor.worldMatrix);
-        this.node.getWorldPosition(this._worldPos);
+
+        let targetMove = 0;
+        if (this._hasTargetPrev) {
+            targetMove = Vec3.distance(this._targetWorld, this._targetWorldPrev);
+        } else {
+            this._worldPos.set(this._targetWorld);
+            this._hasTargetPrev = true;
+        }
+        this._targetWorldPrev.set(this._targetWorld);
 
         Vec3.subtract(this._delta, this._targetWorld, this._worldPos);
         if (this.maxStretch > 0) {
@@ -170,11 +193,11 @@ export class SpringFollowParent extends Component {
         }
 
         this._velocity.x +=
-            (this.stiffness * this._delta.x - this.damping * this._velocity.x) * step;
+            (this.stiffness * this._delta.x - this.damping * this._velocity.x) * dt;
         this._velocity.y +=
-            (this.stiffness * this._delta.y - this.damping * this._velocity.y) * step;
+            (this.stiffness * this._delta.y - this.damping * this._velocity.y) * dt;
         this._velocity.z +=
-            (this.stiffness * this._delta.z - this.damping * this._velocity.z) * step;
+            (this.stiffness * this._delta.z - this.damping * this._velocity.z) * dt;
 
         if (this.maxSpeed > 0) {
             const speed = this._velocity.length();
@@ -183,13 +206,15 @@ export class SpringFollowParent extends Component {
             }
         }
 
-        this._worldPos.x += this._velocity.x * step;
-        this._worldPos.y += this._velocity.y * step;
-        this._worldPos.z += this._velocity.z * step;
+        this._worldPos.x += this._velocity.x * dt;
+        this._worldPos.y += this._velocity.y * dt;
+        this._worldPos.z += this._velocity.z * dt;
 
         if (this.snapWhenIdle) {
             const eps = this.idleEpsilon;
+            const targetStill = targetMove <= eps;
             if (
+                targetStill &&
                 this._delta.lengthSqr() <= eps * eps &&
                 this._velocity.lengthSqr() <= eps * eps
             ) {
@@ -202,9 +227,49 @@ export class SpringFollowParent extends Component {
     }
 
     private _resolveAnchor(): Node | null {
-        if (this.followAnchor?.isValid) {
-            return this.followAnchor;
+        const playerRoot = this._findPlayerRoot();
+        const explicit = this.followAnchor?.isValid ? this.followAnchor : null;
+
+        if (explicit) {
+            if (playerRoot && explicit === playerRoot) {
+                return this._resolvePitchPivot(playerRoot) ?? explicit;
+            }
+            return explicit;
+        }
+
+        if (playerRoot) {
+            return this._resolvePitchPivot(playerRoot) ?? this.node.parent;
         }
         return this.node.parent;
+    }
+
+    private _findPlayerRoot(): Node | null {
+        let n: Node | null = this.node;
+        while (n) {
+            if (n.getComponent(PLAYER_FLIGHT_CCLASS as never)) {
+                return n;
+            }
+            n = n.parent;
+        }
+        return null;
+    }
+
+    /** Узел с pitch (Fedia/Pigeon), а не корень Player — он не крутится при полёте. */
+    private _resolvePitchPivot(playerRoot: Node): Node | null {
+        const fedia = playerRoot.getChildByName('Fedia');
+        if (fedia?.isValid && fedia.activeInHierarchy) {
+            return fedia;
+        }
+        const flight = playerRoot.getComponent(
+            PLAYER_FLIGHT_CCLASS as never,
+        ) as PlayerFlightPitch | null;
+        if (flight?.pitchVisual?.isValid && flight.pitchVisual.activeInHierarchy) {
+            return flight.pitchVisual;
+        }
+        const pigeon = playerRoot.getChildByName('Pigeon');
+        if (pigeon?.isValid) {
+            return pigeon;
+        }
+        return null;
     }
 }

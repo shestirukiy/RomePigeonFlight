@@ -6878,12 +6878,30 @@
       "__uuid__": "6fb34e55-1f48-4c18-8c25-a4d8c49b1bc7",
       "__expectedType__": "cc.AudioClip"
     },
-    "helmetEquip": null,
-    "wisdomActivate": null,
-    "wisdomDeactivate": null,
-    "magnetActivate": null,
-    "magnetDeactivate": null,
-    "heartCollect": null,
+    "helmetEquip": {
+      "__uuid__": "f71ecb6b-2a5b-46f2-b68f-82733c8010c9",
+      "__expectedType__": "cc.AudioClip"
+    },
+    "wisdomActivate": {
+      "__uuid__": "dea4e26d-c372-452c-a0db-1f2036001852",
+      "__expectedType__": "cc.AudioClip"
+    },
+    "wisdomDeactivate": {
+      "__uuid__": "41add602-ed2f-4a58-b058-b954a7f6c058",
+      "__expectedType__": "cc.AudioClip"
+    },
+    "magnetActivate": {
+      "__uuid__": "731dd915-2a41-43ff-ba67-ec7aacf5f729",
+      "__expectedType__": "cc.AudioClip"
+    },
+    "magnetDeactivate": {
+      "__uuid__": "d79bf62b-c3bb-4d7d-938f-31201b570262",
+      "__expectedType__": "cc.AudioClip"
+    },
+    "heartCollect": {
+      "__uuid__": "4573187f-3d4d-4456-89d6-d4cc4d7c3433",
+      "__expectedType__": "cc.AudioClip"
+    },
     "instantKill": null,
     "gameOver": {
       "__uuid__": "a5ee895e-c9c7-45b9-a247-ca065dc00602",
@@ -10570,7 +10588,7 @@
       "__uuid__": "54fd029a-ccec-4392-a64b-dab91aa3ae8b",
       "__expectedType__": "cc.Prefab"
     },
-    "weight": 0
+    "weight": 2
   },
   {
     "__type__": "WeightedChunk",
@@ -10578,7 +10596,7 @@
       "__uuid__": "bacfe63a-2898-4b00-ab75-be967ca44aea",
       "__expectedType__": "cc.Prefab"
     },
-    "weight": 1
+    "weight": 10
   },
   {
     "__type__": "WeightedChunk",
@@ -10586,7 +10604,7 @@
       "__uuid__": "2b19a339-7ffc-4ef2-827f-2846f4a88f10",
       "__expectedType__": "cc.Prefab"
     },
-    "weight": 0
+    "weight": 10
   },
   {
     "__type__": "WeightedChunk",
@@ -10594,7 +10612,7 @@
       "__uuid__": "aba828a0-a019-4724-989b-c6813e0dbee4",
       "__expectedType__": "cc.Prefab"
     },
-    "weight": 0
+    "weight": 2
   },
   {
     "__type__": "WeightedChunk",
@@ -10602,7 +10620,7 @@
       "__uuid__": "50ff6d4b-b129-47e4-838d-5aa4b24f66c9",
       "__expectedType__": "cc.Prefab"
     },
-    "weight": 0
+    "weight": 10
   },
   {
     "__type__": "WeightedChunk",
@@ -10610,7 +10628,7 @@
       "__uuid__": "d2cd8a68-6a81-4659-b60f-84f6879da170",
       "__expectedType__": "cc.Prefab"
     },
-    "weight": 0
+    "weight": 2
   },
   {
     "__type__": "WeightedChunk",
@@ -10618,7 +10636,7 @@
       "__uuid__": "520a5c9b-2c34-4483-8d2d-ed1e08c842fb",
       "__expectedType__": "cc.Prefab"
     },
-    "weight": 1
+    "weight": 10
   },
   {
     "__type__": "WeightedChunk",
@@ -10626,7 +10644,7 @@
       "__uuid__": "b6ac5e2b-00b8-4369-b90e-c36b234e23a0",
       "__expectedType__": "cc.Prefab"
     },
-    "weight": 0
+    "weight": 10
   },
   {
     "__type__": "WeightedChunk",
@@ -10634,7 +10652,7 @@
       "__uuid__": "45f02418-e3a3-48ba-84c9-238db89fcb04",
       "__expectedType__": "cc.Prefab"
     },
-    "weight": 0
+    "weight": 2
   },
   {
     "__type__": "WeightedChunk",
@@ -10642,7 +10660,7 @@
       "__uuid__": "76bdb3ac-3861-439d-997d-5cdb36d66a11",
       "__expectedType__": "cc.Prefab"
     },
-    "weight": 0
+    "weight": 10
   },
   {
     "__type__": "WeightedChunk",
@@ -10650,12 +10668,15 @@
       "__uuid__": "a700d533-4135-4009-aab6-9b5bcbb7f080",
       "__expectedType__": "cc.Prefab"
     },
-    "weight": 0
+    "weight": 10
   },
   {
     "__type__": "WeightedChunk",
-    "prefab": null,
-    "weight": 0
+    "prefab": {
+      "__uuid__": "f2a3b418-8e4f-6a9b-c1d2-3e4f5a6b7c8d",
+      "__expectedType__": "cc.Prefab"
+    },
+    "weight": 1
   },
   {
     "__type__": "WeightedChunk",
@@ -10708,7 +10729,7 @@
     "milestoneGapBase": 100,
     "milestoneGapGrowth": 50,
     "milestoneGapExponent": 1.2,
-    "milestoneSpeedMultiplier": 1.1,
+    "milestoneSpeedMultiplier": 1.2,
     "milestoneRoundStep": 50,
     "milestonePassBoostEnabled": true,
     "milestonePassBoostMultiplier": 2,
@@ -10822,11 +10843,14 @@
     },
     "_enabled": true,
     "__prefab": null,
-    "lifePer1000m": 25,
-    "helmetPer1000m": 25,
-    "magnetPer1000m": 100,
-    "wisdomPer1000m": 400,
+    "lifePer1000m": 20,
+    "helmetPer1000m": 50,
+    "magnetPer1000m": 50,
+    "wisdomPer1000m": 50,
     "minIntervalMeters": 20,
+    "minGapAnyBonusMeters": 0,
+    "pendingRerollMeters": 120,
+    "gapJitter": 0.25,
     "maxWaitMeters": 80,
     "fallbackBonusChunk": {
       "__uuid__": "bacfe63a-2898-4b00-ab75-be967ca44aea",
@@ -10844,9 +10868,11 @@
     "helmetGroundInvincibilitySec": 2,
     "helmetGroundBounceFactor": 0.1,
     "helmetGroundLiftLockSec": 0.35,
-    "wisdomBuffDurationSec": 40,
+    "wisdomBuffDurationSec": 30,
     "wisdomSlowPercent": 50,
-    "wisdomSlowEaseSec": 0.2,
+    "wisdomSlowEaseSec": 0.3,
+    "wisdomSlowReleaseDelaySec": 0.3,
+    "wisdomMilestoneBonusReductionPercent": 50,
     "wisdomAppearClip": {
       "__uuid__": "b1bfcfc9-07ac-401e-b896-e0e5c38a2d63",
       "__expectedType__": "cc.AnimationClip"
@@ -10860,10 +10886,20 @@
       "__expectedType__": "cc.AnimationClip"
     },
     "wisdomDisappearFxPrefab": null,
-    "magnetBuffDurationSec": 15,
-    "magnetAppearClip": null,
-    "magnetLoopClip": null,
-    "magnetDisappearClip": null,
+    "magnetBuffDurationSec": 30,
+    "magnetAppearClip": {
+      "__uuid__": "e83fef8b-9b1b-4156-b05f-c420624ca64f",
+      "__expectedType__": "cc.AnimationClip"
+    },
+    "magnetLoopClip": {
+      "__uuid__": "8eb97296-be8b-4b5c-9c0b-866ed1afe261",
+      "__expectedType__": "cc.AnimationClip"
+    },
+    "magnetDisappearClip": {
+      "__uuid__": "3037938f-cafb-4ecf-aadd-802c02ddd59f",
+      "__expectedType__": "cc.AnimationClip"
+    },
+    "magnetDisappearFxPrefab": null,
     "_id": "92LiSL1ItC74dpganFMndO"
   },
   {
