@@ -40,6 +40,7 @@ import { SoundId } from './SoundLibrary';
 import { AnimatedPrefabSpawner } from './AnimatedPrefabSpawner';
 import { BonusItemScheduler } from './BonusItemScheduler';
 import { PlayerEquippedBuffs } from './PlayerEquippedBuffs';
+import { HpHeartLayout } from './HpHeartLayout';
 
 const { ccclass, property, executionOrder } = _decorator;
 
@@ -937,11 +938,12 @@ export class GameManager extends Component {
 
     @property({
         group: G_HP,
-        displayName: 'Heart spacing X',
+        type: HpHeartLayout,
+        displayName: 'HP Heart Layout',
         tooltip:
-            'Доп. отступ между сердечками по X. Шаг = ширина UITransform якоря + это значение.',
+            'Многострочная раскладка HP (шаг и перенос рядов). Пусто — ищется на родителе hpHeartAnchor.',
     })
-    heartSpacingX = 4;
+    hpHeartLayout: HpHeartLayout | null = null;
 
     @property({
         group: G_HP,
@@ -989,6 +991,7 @@ export class GameManager extends Component {
         GameSession.bind(this);
         this._setSpeedLinesEmitter(false);
         this._refreshScoreLabel();
+        this._bindHpHeartLayout();
         this.resetHp();
         if (this.hpHeartAnchor?.isValid && !this._resolveHpFallClip()) {
             console.warn(
@@ -2375,15 +2378,24 @@ export class GameManager extends Component {
             return false;
         }
 
-        const last = this._heartNodes[this._heartNodes.length - 1] ?? anchor;
-        const parent = last.parent ?? anchor.parent;
+        return this._heartSlotLocalToWorld(index, out);
+    }
+
+    private _heartSlotLocalToWorld(index: number, out: Vec3): boolean {
+        const anchor = this.hpHeartAnchor;
+        if (!anchor?.isValid) {
+            return false;
+        }
+        const parent = anchor.parent;
         if (!parent?.isValid) {
             return false;
         }
 
-        const lastRest = this._heartRestPos.get(last) ?? last.position;
-        const local = lastRest.clone();
-        local.x += this._heartStepX();
+        const layout = this._resolveHpHeartLayout();
+        const local = layout
+            ? layout.computeSlotLocalPosition(index)
+            : this._legacyHeartSlotLocal(index);
+
         const ui = parent.getComponent(UITransform);
         if (ui) {
             ui.convertToWorldSpaceAR(local, out);
@@ -2393,6 +2405,20 @@ export class GameManager extends Component {
         parent.updateWorldTransform();
         Vec3.transformMat4(out, local, parent.worldMatrix);
         return true;
+    }
+
+    /** Однострочная раскладка, если HpHeartLayout не назначен. */
+    private _legacyHeartSlotLocal(index: number): Vec3 {
+        const anchor = this.hpHeartAnchor!;
+        const step = this._heartStepX();
+        if (index <= 0) {
+            return anchor.position.clone();
+        }
+        const last =
+            this._heartNodes[Math.min(index - 1, this._heartNodes.length - 1)] ??
+            anchor;
+        const lastRest = this._heartRestPos.get(last) ?? last.position;
+        return new Vec3(lastRest.x + step, lastRest.y, lastRest.z);
     }
 
     /**
@@ -2433,12 +2459,12 @@ export class GameManager extends Component {
             return false;
         }
 
-        const last = this._heartNodes[this._heartNodes.length - 1] ?? anchor;
-        const p = last.position;
-        const step = this._heartStepX();
         const heart = instantiate(anchor);
         heart.parent = parent;
-        heart.setPosition(p.x + step, p.y, p.z);
+        const slotPos = this._resolveHpHeartLayout()?.computeSlotLocalPosition(
+            slotIndex,
+        ) ?? this._legacyHeartSlotLocal(slotIndex);
+        heart.setPosition(slotPos);
         heart.active = true;
         this._registerHeartNode(heart);
         this._spawnedHearts.push(heart);
@@ -2468,8 +2494,6 @@ export class GameManager extends Component {
             return;
         }
 
-        const base = anchor.position.clone();
-        const step = this._heartStepX();
         anchor.active = true;
         this._registerHeartNode(anchor);
         this._heartNodes.push(anchor);
@@ -2477,13 +2501,13 @@ export class GameManager extends Component {
         for (let i = 1; i < startHp; i++) {
             const heart = instantiate(anchor);
             heart.parent = parent;
-            heart.setPosition(base.x + step * i, base.y, base.z);
             heart.active = true;
             this._registerHeartNode(heart);
             this._spawnedHearts.push(heart);
             this._heartNodes.push(heart);
         }
 
+        this._relayoutHpHearts();
         this._currentHp = startHp;
         this._damageInvincibleRemain = 0;
     }
@@ -3529,10 +3553,63 @@ export class GameManager extends Component {
         );
     }
 
+    private _resolveHpHeartLayout(): HpHeartLayout | null {
+        if (this.hpHeartLayout?.isValid) {
+            return this.hpHeartLayout;
+        }
+        const anchor = this.hpHeartAnchor;
+        if (!anchor?.isValid) {
+            return null;
+        }
+        return (
+            anchor.parent?.getComponent(HpHeartLayout) ??
+            anchor.getComponent(HpHeartLayout) ??
+            null
+        );
+    }
+
+    private static readonly LEGACY_HEART_SPACING_X = 4;
+
+    private _bindHpHeartLayout(): void {
+        const layout = this._resolveHpHeartLayout();
+        if (!layout) {
+            return;
+        }
+        if (!layout.anchor?.isValid && this.hpHeartAnchor?.isValid) {
+            layout.anchor = this.hpHeartAnchor;
+        }
+        layout.setRelayoutHandler(() => this._relayoutHpHearts());
+    }
+
+    /** Пересчёт rest-позиций всех сердечек (resize / смена heartsPerRow). */
+    public relayoutHpHearts(): void {
+        this._relayoutHpHearts();
+    }
+
+    private _relayoutHpHearts(): void {
+        const layout = this._resolveHpHeartLayout();
+        if (!layout?.isValid) {
+            return;
+        }
+        for (let i = 0; i < this._heartNodes.length; i++) {
+            const heart = this._heartNodes[i];
+            if (!heart?.isValid) {
+                continue;
+            }
+            const pos = layout.computeSlotLocalPosition(i);
+            heart.setPosition(pos);
+            this._heartRestPos.set(heart, pos.clone());
+        }
+    }
+
     private _heartStepX(): number {
+        const layout = this._resolveHpHeartLayout();
+        if (layout) {
+            return layout.getHeartStepX();
+        }
         const ui = this.hpHeartAnchor?.getComponent(UITransform);
         const w = ui?.contentSize.width ?? 64;
-        return w + this.heartSpacingX;
+        return w + GameManager.LEGACY_HEART_SPACING_X;
     }
 
     private _refreshScoreLabel(): void {
