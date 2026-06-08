@@ -10729,7 +10729,7 @@
     "milestoneGapBase": 100,
     "milestoneGapGrowth": 50,
     "milestoneGapExponent": 1.2,
-    "milestoneSpeedMultiplier": 1.2,
+    "milestoneSpeedMultiplier": 1.15,
     "milestoneRoundStep": 50,
     "milestonePassBoostEnabled": true,
     "milestonePassBoostMultiplier": 2,
@@ -10870,7 +10870,7 @@
     "helmetGroundLiftLockSec": 0.35,
     "wisdomBuffDurationSec": 30,
     "wisdomSlowPercent": 50,
-    "wisdomSlowEaseSec": 0.3,
+    "wisdomSlowEaseSec": 0.5,
     "wisdomSlowReleaseDelaySec": 0.3,
     "wisdomMilestoneBonusReductionPercent": 50,
     "wisdomAppearClip": {

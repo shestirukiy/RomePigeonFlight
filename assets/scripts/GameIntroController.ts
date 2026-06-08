@@ -6,6 +6,7 @@ import {
     Button,
     Canvas,
     Component,
+    game,
     Label,
     Node,
     tween,
@@ -199,7 +200,7 @@ export class GameIntroController extends Component {
     private _postTextAnimStarted = false;
     private _buttonsReadyForStart = false;
     private _panTween: Tween<Node> | null = null;
-    private _introBoardFadeTween: Tween<AudioSource> | null = null;
+    private _introBoardFadeRemainSec = 0;
     private _introBoardRestVolume = 1;
     private _crowdLoopActive = false;
     private readonly _gameplayRest = new Vec3();
@@ -485,6 +486,7 @@ export class GameIntroController extends Component {
         if (this._postTextAnimStarted) {
             return;
         }
+        this._stopIntroBoardAudio(false);
         this._postTextAnimStarted = true;
         if (this.skipButton?.isValid) {
             this.skipButton.interactable = false;
@@ -700,17 +702,54 @@ export class GameIntroController extends Component {
     }
 
     private _cancelIntroBoardFadeTween(): void {
-        const audio = this.introBoardAudio;
-        if (this._introBoardFadeTween) {
-            this._introBoardFadeTween.stop();
-            this._introBoardFadeTween = null;
-        } else if (audio?.isValid) {
+        this._introBoardFadeRemainSec = 0;
+        this.unschedule(this._tickIntroBoardFadeOut);
+        const audio = this._resolveIntroBoardAudio();
+        if (audio?.isValid) {
             Tween.stopAllByTarget(audio);
         }
     }
 
+    private _resolveIntroBoardAudio(): AudioSource | null {
+        if (this.introBoardAudio?.isValid) {
+            return this.introBoardAudio;
+        }
+        const anim = this.introBoardAnimation;
+        if (anim?.isValid) {
+            const src = anim.node.getComponent(AudioSource);
+            if (src) {
+                this.introBoardAudio = src;
+                return src;
+            }
+        }
+        return null;
+    }
+
+    private readonly _tickIntroBoardFadeOut = (): void => {
+        const audio = this._resolveIntroBoardAudio();
+        if (!audio?.isValid) {
+            this._cancelIntroBoardFadeTween();
+            return;
+        }
+
+        const fadeSec = Math.max(0.01, this.introBoardAudioFadeSec);
+        const dt = Math.max(1e-6, game.deltaTime);
+        this._introBoardFadeRemainSec = Math.max(
+            0,
+            this._introBoardFadeRemainSec - dt,
+        );
+        const k = this._introBoardFadeRemainSec / fadeSec;
+        audio.volume = this._introBoardRestVolume * k;
+
+        if (this._introBoardFadeRemainSec <= 0) {
+            this._cancelIntroBoardFadeTween();
+            audio.stop();
+            audio.volume = this._introBoardRestVolume;
+        }
+    };
+
     private _stopIntroBoardAudio(instant: boolean): void {
-        const audio = this.introBoardAudio;
+        const audio = this._resolveIntroBoardAudio();
         if (!audio?.isValid) {
             this._cancelIntroBoardFadeTween();
             return;
@@ -718,35 +757,23 @@ export class GameIntroController extends Component {
 
         this._cancelIntroBoardFadeTween();
 
-        if (!audio.playing) {
-            audio.volume = this._introBoardRestVolume;
-            return;
-        }
-
-        const fadeSec = Math.max(0, this.introBoardAudioFadeSec);
-        if (instant || fadeSec <= 0) {
+        const fadeSec = instant ? 0 : Math.max(0, this.introBoardAudioFadeSec);
+        if (fadeSec <= 0) {
             audio.stop();
             audio.volume = this._introBoardRestVolume;
             return;
         }
 
-        this._introBoardRestVolume = audio.volume;
-        this._introBoardFadeTween = tween(audio)
-            .to(fadeSec, { volume: 0 }, { easing: 'sineOut' })
-            .call(() => {
-                this._introBoardFadeTween = null;
-                if (!audio.isValid) {
-                    return;
-                }
-                audio.stop();
-                audio.volume = this._introBoardRestVolume;
-            })
-            .start();
+        this._introBoardRestVolume =
+            audio.volume > 0 ? audio.volume : this._introBoardRestVolume;
+        this._introBoardFadeRemainSec = fadeSec;
+        audio.volume = this._introBoardRestVolume;
+        this.schedule(this._tickIntroBoardFadeOut, 0);
     }
 
     /** Старт озвучки typewriter (AudioSource на IntroBoard). */
     private _startIntroBoardAudio(): void {
-        const audio = this.introBoardAudio;
+        const audio = this._resolveIntroBoardAudio();
         if (!audio?.isValid || !audio.clip) {
             return;
         }
