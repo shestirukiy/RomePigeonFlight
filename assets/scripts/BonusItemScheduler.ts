@@ -39,7 +39,8 @@ const G_MAGNET_BUFF = {
  * magnet / wisdom — частота здесь, эффект пока в GameManager.
  * Компонент уже на ноде LevelGenerator (не добавляйте второй).
  *
- * Spawn: один общий поток бонусов (не 4 независимых таймера). *Per1000m — веса типов.
+ * Spawn: один общий поток бонусов (не 4 независимых таймера). *Per1000m — веса типов;
+ * *Min Appear (m) — с какой дистанции тип участвует в расписании.
  */
 @ccclass('BonusItemScheduler')
 export class BonusItemScheduler extends Component {
@@ -58,10 +59,24 @@ export class BonusItemScheduler extends Component {
 
     @property({
         group: G_BONUS,
+        displayName: 'Life Min Appear (m)',
+        tooltip: 'Жизнь не попадает в расписание, пока дистанция забега меньше этого значения.',
+    })
+    lifeMinAppearMeters = 0;
+
+    @property({
+        group: G_BONUS,
         displayName: 'Helmet Per 1000 m',
         tooltip: 'Вес шлема в общем потоке (0 — выкл.).',
     })
     helmetPer1000m = 0;
+
+    @property({
+        group: G_BONUS,
+        displayName: 'Helmet Min Appear (m)',
+        tooltip: 'Шлем не попадает в расписание, пока дистанция забега меньше этого значения.',
+    })
+    helmetMinAppearMeters = 0;
 
     @property({
         group: G_BONUS,
@@ -72,10 +87,24 @@ export class BonusItemScheduler extends Component {
 
     @property({
         group: G_BONUS,
+        displayName: 'Magnet Min Appear (m)',
+        tooltip: 'Magnet не попадает в расписание, пока дистанция забега меньше этого значения.',
+    })
+    magnetMinAppearMeters = 0;
+
+    @property({
+        group: G_BONUS,
         displayName: 'Wisdom Per 1000 m',
         tooltip: 'Вес wisdom_item в общем потоке (0 — выкл.).',
     })
     wisdomPer1000m = 0;
+
+    @property({
+        group: G_BONUS,
+        displayName: 'Wisdom Min Appear (m)',
+        tooltip: 'Wisdom не попадает в расписание, пока дистанция забега меньше этого значения.',
+    })
+    wisdomMinAppearMeters = 0;
 
     @property({
         group: G_BONUS,
@@ -233,9 +262,20 @@ export class BonusItemScheduler extends Component {
 
     @property({
         group: G_WISDOM,
+        displayName: 'Reduce Milestone Speed Bonus',
+        tooltip:
+            'Пока активен Wisdom — ослаблять прирост скорости от пройденных вех (Milestone Bonus Reduction %).',
+    })
+    wisdomReduceMilestoneSpeedBonus = true;
+
+    @property({
+        group: G_WISDOM,
         displayName: 'Milestone Bonus Reduction %',
         tooltip:
             'На сколько % снижается бонус скорости мира от пройденных вех, пока активен Wisdom (50 → половина прироста сверх базовой скорости).',
+        visible(this: BonusItemScheduler) {
+            return this.wisdomReduceMilestoneSpeedBonus;
+        },
     })
     wisdomMilestoneBonusReductionPercent = 50;
 
@@ -319,7 +359,7 @@ export class BonusItemScheduler extends Component {
         this._forcedChunkPrefab = null;
         this._pendingType = null;
         this._pendingSinceMeters = 0;
-        this._nextBonusAtMeters = this._randomNextGlobalAt(0);
+        this._nextBonusAtMeters = this._computeInitialNextBonusAt();
 
         if (this.debugLog) {
             console.log(
@@ -370,8 +410,10 @@ export class BonusItemScheduler extends Component {
             return;
         }
 
-        const type = this._pickWeightedType();
+        const type = this._pickWeightedType(meters);
         if (type == null) {
+            this._nextBonusAtMeters = this._nextMinAppearUnlock(meters);
+            this._updateForcedChunk(meters);
             return;
         }
 
@@ -416,8 +458,9 @@ export class BonusItemScheduler extends Component {
         if (matching.length === 0) {
             const rerollAt = Math.max(20, this.pendingRerollMeters);
             if (this._lastTickMeters - this._pendingSinceMeters >= rerollAt) {
-                const candidates = pickups.filter((p) =>
-                    this._enabledTypes.includes(p.itemType),
+                const candidates = pickups.filter(
+                    (p) =>
+                        this._isTypeAvailableAt(p.itemType, this._lastTickMeters),
                 );
                 if (candidates.length > 0) {
                     const pick =
@@ -479,6 +522,53 @@ export class BonusItemScheduler extends Component {
         }
     }
 
+    private _minAppearMetersFor(type: BonusItemType): number {
+        switch (type) {
+            case BonusItemType.Life:
+                return Math.max(0, this.lifeMinAppearMeters);
+            case BonusItemType.Helmet:
+                return Math.max(0, this.helmetMinAppearMeters);
+            case BonusItemType.Magnet:
+                return Math.max(0, this.magnetMinAppearMeters);
+            case BonusItemType.Wisdom:
+                return Math.max(0, this.wisdomMinAppearMeters);
+            default:
+                return 0;
+        }
+    }
+
+    private _isTypeEnabled(type: BonusItemType): boolean {
+        return this._enabledTypes.includes(type);
+    }
+
+    private _isTypeAvailableAt(type: BonusItemType, meters: number): boolean {
+        return (
+            this._isTypeEnabled(type) &&
+            meters + 1e-4 >= this._minAppearMetersFor(type)
+        );
+    }
+
+    private _typesAvailableAt(meters: number): BonusItemType[] {
+        return this._enabledTypes.filter((type) =>
+            this._isTypeAvailableAt(type, meters),
+        );
+    }
+
+    /** Ближайшая дистанция, когда откроется хотя бы один ещё недоступный тип. */
+    private _nextMinAppearUnlock(fromMeters: number): number {
+        let next = Number.POSITIVE_INFINITY;
+        for (const type of this._enabledTypes) {
+            const min = this._minAppearMetersFor(type);
+            if (min > fromMeters + 1e-4) {
+                next = Math.min(next, min);
+            }
+        }
+        if (!Number.isFinite(next)) {
+            return fromMeters + Math.max(20, this.minGapAnyBonusMeters || 50);
+        }
+        return next;
+    }
+
     private _buildEnabledTypes(): BonusItemType[] {
         const out: BonusItemType[] = [];
         if (this.lifePer1000m > 0) {
@@ -511,42 +601,50 @@ export class BonusItemScheduler extends Component {
         }
     }
 
-    private _totalSpawnRate(): number {
+    private _totalSpawnRate(meters = this._lastTickMeters): number {
         let total = 0;
-        for (const type of this._enabledTypes) {
+        for (const type of this._typesAvailableAt(meters)) {
             total += this._rateFor(type);
         }
         return total;
     }
 
-    private _pickWeightedType(): BonusItemType | null {
-        if (this._enabledTypes.length === 0) {
+    private _pickWeightedType(meters = this._lastTickMeters): BonusItemType | null {
+        const pool = this._typesAvailableAt(meters);
+        if (pool.length === 0) {
             return null;
         }
-        const total = this._totalSpawnRate();
+        const total = this._totalSpawnRate(meters);
         if (total <= 0) {
-            return this._enabledTypes[0] ?? null;
+            return pool[0] ?? null;
         }
         let roll = Math.random() * total;
-        for (const type of this._enabledTypes) {
+        for (const type of pool) {
             roll -= this._rateFor(type);
             if (roll <= 0) {
                 return type;
             }
         }
-        return this._enabledTypes[this._enabledTypes.length - 1] ?? null;
+        return pool[pool.length - 1] ?? null;
     }
 
     /** Следующая точка общего расписания: mean = 1000/totalRate, jitter равномерный. */
     private _randomNextGlobalAt(fromMeters: number): number {
-        const totalRate = this._totalSpawnRate();
+        const totalRate = this._totalSpawnRate(fromMeters);
         if (totalRate <= 0) {
-            return Number.POSITIVE_INFINITY;
+            return this._nextMinAppearUnlock(fromMeters);
         }
         const meanGap = 1000 / totalRate;
         const jitter = Math.min(0.5, Math.max(0, this.gapJitter));
         const factor = 1 - jitter + Math.random() * (2 * jitter);
         const gap = Math.max(1, meanGap * factor);
         return fromMeters + gap;
+    }
+
+    private _computeInitialNextBonusAt(): number {
+        if (this._typesAvailableAt(0).length === 0) {
+            return this._nextMinAppearUnlock(0);
+        }
+        return this._randomNextGlobalAt(0);
     }
 }

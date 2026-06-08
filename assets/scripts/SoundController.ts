@@ -254,6 +254,47 @@ export class SoundController extends Component {
         src.playOneShot(clip, vol);
     }
 
+    /**
+     * Клип на отдельном AudioSource до ENDED — не режется SFX-пулом (playOneShot).
+     * Для длинных/важных one-shot (touch trigger, реплики).
+     */
+    public playClipToCompletion(
+        clip: AudioClip | null,
+        categoryVolume = 1,
+        extraScale = 1,
+    ): void {
+        if (!this.sfxEnabled || !clip) {
+            return;
+        }
+        const vol = Math.max(0, this.sfxVolume * categoryVolume * extraScale);
+        const child = new Node('SFX_Complete');
+        child.parent = this.node;
+        const src = child.addComponent(AudioSource);
+        src.playOnAwake = false;
+        src.clip = clip;
+        src.loop = false;
+        src.volume = vol;
+        src.play();
+
+        let cleaned = false;
+        const cleanup = (): void => {
+            if (cleaned) {
+                return;
+            }
+            cleaned = true;
+            this.unschedule(fallbackCleanup);
+            if (child.isValid) {
+                child.destroy();
+            }
+        };
+        const fallbackCleanup = (): void => cleanup();
+        child.once(AudioSource.EventType.ENDED, cleanup, this);
+        const dur = clip.getDuration();
+        if (dur > 0) {
+            this.scheduleOnce(fallbackCleanup, dur + 0.15);
+        }
+    }
+
     public playSeedCollect(): void {
         this.play(SoundId.SeedCollect);
     }

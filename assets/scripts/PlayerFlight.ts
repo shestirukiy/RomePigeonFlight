@@ -2,9 +2,11 @@ import {
     _decorator,
     Component,
     Node,
+    EventKeyboard,
     EventMouse,
     EventTouch,
     Input,
+    KeyCode,
     RigidBody2D,
     ERigidBody2DType,
     BoxCollider2D,
@@ -16,6 +18,7 @@ import {
     Director,
     game,
     input,
+    sys,
 } from 'cc';
 import { GameSession, PLAYER_CONTROLLER_CCLASS } from './GameSession';
 import { SoundController } from './SoundController';
@@ -186,6 +189,8 @@ export class PlayerFlight extends Component {
 
     private _body: RigidBody2D | null = null;
     private _held = false;
+    /** ПК: удержание пробела (как ЛКМ). */
+    private _spaceHeld = false;
     /** Y/Z при рестарте; X дорожки фиксирован (RUNWAY_LOCAL_X). */
     private readonly _spawnLocalPos = new Vec3();
 
@@ -212,6 +217,7 @@ export class PlayerFlight extends Component {
     /** Сброс удержания (смерть, game over). */
     public releaseInput(): void {
         this._held = false;
+        this._spaceHeld = false;
     }
 
     /**
@@ -223,17 +229,21 @@ export class PlayerFlight extends Component {
             this._held = false;
             return;
         }
-        this._held = this._isPointerDown();
+        this._held = this._isLiftInputDown();
     }
 
-    /** Зажатый указатель без нового TOUCH_START / MOUSE_DOWN (после урона, stun и т.д.). */
+    /** Зажатый ввод без нового события (после урона, stun и т.д.). */
     private _reconcileHeldFromPointer(): void {
         if (GameSession.game?.isPlaying !== true) {
             return;
         }
-        if (this._isPointerDown()) {
+        if (this._isLiftInputDown()) {
             this._held = true;
         }
+    }
+
+    private _isLiftInputDown(): boolean {
+        return this._isPointerDown() || this._isSpaceHeld();
     }
 
     private _isPointerDown(): boolean {
@@ -241,6 +251,10 @@ export class PlayerFlight extends Component {
             return true;
         }
         return input.getMouseButtonState?.(EventMouse.BUTTON_LEFT) === 1;
+    }
+
+    private _isSpaceHeld(): boolean {
+        return !sys.isMobile && this._spaceHeld;
     }
 
     /**
@@ -439,6 +453,8 @@ export class PlayerFlight extends Component {
         input.on(Input.EventType.TOUCH_CANCEL, this._onTouchEnd, this);
         input.on(Input.EventType.MOUSE_DOWN, this._onMouseDown, this);
         input.on(Input.EventType.MOUSE_UP, this._onMouseUp, this);
+        input.on(Input.EventType.KEY_DOWN, this._onKeyDown, this);
+        input.on(Input.EventType.KEY_UP, this._onKeyUp, this);
 
         director.on(Director.EVENT_BEFORE_DRAW, this._onBeforeDrawPitch, this);
     }
@@ -452,6 +468,8 @@ export class PlayerFlight extends Component {
         input.off(Input.EventType.TOUCH_CANCEL, this._onTouchEnd, this);
         input.off(Input.EventType.MOUSE_DOWN, this._onMouseDown, this);
         input.off(Input.EventType.MOUSE_UP, this._onMouseUp, this);
+        input.off(Input.EventType.KEY_DOWN, this._onKeyDown, this);
+        input.off(Input.EventType.KEY_UP, this._onKeyUp, this);
     }
 
     update(dt: number) {
@@ -677,6 +695,7 @@ export class PlayerFlight extends Component {
     public resetToSpawn(): void {
         this._cancelPendingHelmetBounce();
         this._held = false;
+        this._spaceHeld = false;
         this._electricLiftBlockRemain = 0;
         this._allowHorizontalDriftRemain = 0;
         this._wasForwardScrollStopped = true;
@@ -695,7 +714,7 @@ export class PlayerFlight extends Component {
     }
 
     private _onTouchEnd(_e: EventTouch) {
-        if (!this._isPointerDown()) {
+        if (!this._isLiftInputDown()) {
             this._held = false;
         }
     }
@@ -722,7 +741,27 @@ export class PlayerFlight extends Component {
     }
 
     private _onMouseUp(e: EventMouse) {
-        if (e.getButton() === 0 && !this._isPointerDown()) {
+        if (e.getButton() === 0 && !this._isLiftInputDown()) {
+            this._held = false;
+        }
+    }
+
+    private _onKeyDown(e: EventKeyboard): void {
+        if (sys.isMobile || e.keyCode !== KeyCode.SPACE) {
+            return;
+        }
+        if (!this._spaceHeld) {
+            this._spaceHeld = true;
+        }
+        this._onLiftInputDown();
+    }
+
+    private _onKeyUp(e: EventKeyboard): void {
+        if (sys.isMobile || e.keyCode !== KeyCode.SPACE) {
+            return;
+        }
+        this._spaceHeld = false;
+        if (!this._isLiftInputDown()) {
             this._held = false;
         }
     }

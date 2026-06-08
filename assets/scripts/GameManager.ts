@@ -531,6 +531,26 @@ export class GameManager extends Component {
     }
 
     /**
+     * 0 = без замедления, 1 = максимум Wisdom slow (wisdomSlowPercent).
+     * Следует за плавным _wisdomSlowFactor — для VFX (WiseCircle).
+     */
+    public getWisdomSlowIntensity(): number {
+        if (!this._wisdomBuffActive) {
+            return 0;
+        }
+        const pct = Math.min(
+            100,
+            Math.max(0, this._bonusItems()?.wisdomSlowPercent ?? 50),
+        );
+        const maxDelta = pct / 100;
+        if (maxDelta <= 1e-6) {
+            return 0;
+        }
+        const slow = 1 - this._wisdomSlowFactor;
+        return Math.max(0, Math.min(1, slow / maxDelta));
+    }
+
+    /**
      * Множитель скорости мира относительно базового scrollSpeed (вехи × pass boost).
      */
     public getWorldScrollSpeedFactor(): number {
@@ -591,12 +611,17 @@ export class GameManager extends Component {
      */
     private _getEffectiveMilestoneSpeedMultiplier(): number {
         const raw = this._getMilestoneSpeedMultiplier();
-        if (!this._wisdomBuffActive || raw <= 1) {
+        const cfg = this._bonusItems();
+        if (
+            !this._wisdomBuffActive ||
+            raw <= 1 ||
+            cfg?.wisdomReduceMilestoneSpeedBonus !== true
+        ) {
             return raw;
         }
         const pct = Math.min(
             100,
-            Math.max(0, this._bonusItems()?.wisdomMilestoneBonusReductionPercent ?? 50),
+            Math.max(0, cfg.wisdomMilestoneBonusReductionPercent ?? 50),
         );
         const keep = 1 - pct / 100;
         return 1 + (raw - 1) * keep;

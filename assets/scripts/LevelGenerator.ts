@@ -1,8 +1,10 @@
 import {
     _decorator,
     Component,
+    ERigidBody2DType,
     Node,
     Prefab,
+    RigidBody2D,
     instantiate,
     UITransform,
 } from 'cc';
@@ -176,7 +178,7 @@ export class LevelGenerator extends Component {
         type: [WeightedChunk],
         displayName: 'Endless Weighted Chunks',
         tooltip:
-            'Бесконечная часть: случайный выбор по весам. Пусто — этот шаг пропускается, берётся Plane 1 Segment Prefab.',
+            'Бесконечная часть: случайный выбор по весам. Min Appear (m) — с какой дистанции чанк участвует в выборе.',
     })
     plane1EndlessChunks: WeightedChunk[] = [];
 
@@ -203,7 +205,7 @@ export class LevelGenerator extends Component {
         displayName: 'Bonus Weighted Chunks',
         tooltip:
             'Награда после вехи (семечки, фигуры SeedPattern и т.д.). ' +
-            'Не добавляйте в Endless Weighted — только сюда.',
+            'Случайный выбор по weight, как у Endless. Не добавляйте в Endless Weighted — только сюда.',
     })
     plane1BonusChunks: WeightedChunk[] = [];
 
@@ -217,9 +219,6 @@ export class LevelGenerator extends Component {
     /** Следующий ресайкл/спавн плана 1 — бонус после только что поставленной вехи. */
     private _bonusChunkPending = false;
 
-    /** По очереди перебираем бонусные чанки (0 → 1 → 2 → 3 → 0 …). */
-    private _bonusChunkRotateIndex = 0;
-
     /** false — родители слоёв чанков скрыты (например, на KTA). */
     private _chunkLayersActive = true;
 
@@ -229,6 +228,7 @@ export class LevelGenerator extends Component {
         this._bonusScheduler =
             this.getComponent(BonusItemScheduler) ??
             this.addComponent(BonusItemScheduler);
+        this._validateMilestoneSignPrefabAssignment();
     }
 
     start() {
@@ -294,7 +294,6 @@ export class LevelGenerator extends Component {
     public clearMilestoneQueue(): void {
         this._milestoneQueue.length = 0;
         this._bonusChunkPending = false;
-        this._bonusChunkRotateIndex = 0;
     }
 
     /**
@@ -511,6 +510,38 @@ export class LevelGenerator extends Component {
         return false;
     }
 
+    /**
+     * milestoneSignPrefab = MilestoneSign (без Chunk_Sign) ломает скролл и порядок бонуса.
+     */
+    private _validateMilestoneSignPrefabAssignment(): void {
+        const prefab = this.milestoneSignPrefab;
+        if (!prefab?.name) {
+            return;
+        }
+        const name = prefab.name;
+        const looksLikeBareSign =
+            /^MilestoneSign/i.test(name) && !/Chunk/i.test(name);
+        if (!looksLikeBareSign) {
+            return;
+        }
+        console.error(
+            '[LevelGenerator] milestoneSignPrefab должен быть Chunk_Sign, а не MilestoneSign. ' +
+                'Столб останется на экране, бонусный чанк уедет далеко. См. MILESTONE_SETUP.md.',
+        );
+    }
+
+    /** Static RigidBody2D на скроллящемся чанке «прибивает» узел в мире — Kinematic следует за родителем. */
+    private _configureScrollChunkPhysics(root: Node): void {
+        const bodies = root.getComponentsInChildren(RigidBody2D);
+        for (const rb of bodies) {
+            if (!rb?.isValid) {
+                continue;
+            }
+            rb.type = ERigidBody2DType.Kinematic;
+            rb.enabledContactListener = true;
+        }
+    }
+
     private _samePlane1Prefab(a: Prefab | null, b: Prefab | null): boolean {
         if (!a || !b) {
             return false;
@@ -617,27 +648,37 @@ export class LevelGenerator extends Component {
     }
 
     private pickWeightedPlane1Endless(): Prefab | null {
-        return this._pickWeightedPrefab(this.plane1EndlessChunks);
+        return this._pickWeightedPrefab(
+            this.plane1EndlessChunks,
+            this._currentFlightMeters(),
+        );
     }
 
-    /** Бонус после вехи: по кругу все валидные элементы Bonus Weighted Chunks. */
+    /** Бонус после вехи: случайный выбор по weight из Bonus Weighted Chunks. */
     private pickPlane1BonusChunk(): Prefab | null {
-        const valid = this.plane1BonusChunks.filter(
-            (e) => e && e.prefab && e.weight > 0,
+        const prefab = this._pickWeightedPrefab(
+            this.plane1BonusChunks,
+            this._currentFlightMeters(),
         );
-        if (valid.length === 0) {
+        if (!prefab) {
             console.warn(
                 '[LevelGenerator] Bonus Weighted Chunks: нет префабов с weight > 0.',
             );
-            return null;
         }
-        const idx = this._bonusChunkRotateIndex % valid.length;
-        this._bonusChunkRotateIndex++;
-        return valid[idx].prefab;
+        return prefab;
     }
 
-    private _pickWeightedPrefab(pool: WeightedChunk[]): Prefab | null {
-        const valid = pool.filter((e) => e && e.prefab && e.weight > 0);
+    private _pickWeightedPrefab(
+        pool: WeightedChunk[],
+        meters = this._currentFlightMeters(),
+    ): Prefab | null {
+        const valid = pool.filter(
+            (e) =>
+                e &&
+                e.prefab &&
+                e.weight > 0 &&
+                meters + 1e-4 >= Math.max(0, e.minAppearMeters ?? 0),
+        );
         if (valid.length === 0) {
             return null;
         }
@@ -650,6 +691,15 @@ export class LevelGenerator extends Component {
             }
         }
         return valid[valid.length - 1].prefab;
+    }
+
+    private _currentFlightMeters(): number {
+        const game = this._game();
+        const ppm = game?.pixelsPerMeter ?? 0;
+        if (!game || ppm <= 0) {
+            return 0;
+        }
+        return Math.max(0, game.flightDistancePx / ppm);
     }
 
     private getPlane1MinChunkWidth(): number {
@@ -703,6 +753,7 @@ export class LevelGenerator extends Component {
             }
 
             const seg = instantiate(prefab);
+            this._configureScrollChunkPhysics(seg);
             this._setupPlane1Segment(seg, milestoneMeters);
             this._onPlane1ChunkReady(seg, prefab);
             seg.parent = parent;
@@ -755,6 +806,7 @@ export class LevelGenerator extends Component {
         segment.destroy();
 
         const newSeg = instantiate(prefab);
+        this._configureScrollChunkPhysics(newSeg);
         this._setupPlane1Segment(newSeg, milestoneMeters);
         this._onPlane1ChunkReady(newSeg, prefab);
         parent!.addChild(newSeg);

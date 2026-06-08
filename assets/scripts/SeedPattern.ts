@@ -278,10 +278,11 @@ export class SeedPattern extends Component {
                 if (!sf) {
                     continue;
                 }
-                const grid = SeedPattern._getOrBuildAlphaGrid(
+                let grid = SeedPattern._getOrBuildAlphaGrid(
                     sf,
                     this.fillRectWhenAlphaUnreadable,
                 );
+                grid = this._resolveMaskAlphaGrid(sf, grid);
                 this._maskGrids.set(sprite, grid);
                 if (!grid.readable) {
                     this._scheduleAlphaReloadFromImage(sf);
@@ -558,19 +559,11 @@ export class SeedPattern extends Component {
         const screenH = h * hs;
 
         let visibleArea = screenW * screenH;
-        if (grid.readable) {
-            const thr = Math.floor(this.alphaThreshold * 255);
-            let cells = 0;
-            for (let i = 0; i < grid.alpha.length; i++) {
-                if (grid.alpha[i] >= thr) {
-                    cells++;
-                }
-            }
-            if (cells > 0) {
-                const cellArea =
-                    (screenW / grid.width) * (screenH / grid.height);
-                visibleArea = cells * cellArea;
-            }
+        const visibleCells = this._countVisibleGridCells(grid);
+        if (visibleCells > 0) {
+            const cellArea =
+                (screenW / grid.width) * (screenH / grid.height);
+            visibleArea = visibleCells * cellArea;
         }
 
         const density = Math.max(0.1, this.fillDensity);
@@ -613,7 +606,8 @@ export class SeedPattern extends Component {
 
         for (let py = 0; py <= h && placed < budget; py += stepY) {
             for (let px = 0; px <= w && placed < budget; px += stepX) {
-                const a = this._alphaFromGrid(grid, px, py) * tint;
+                const a =
+                    this._alphaFromGrid(grid, px, py, w, h) * tint;
                 if (a < threshold) {
                     continue;
                 }
@@ -654,13 +648,89 @@ export class SeedPattern extends Component {
         return placed;
     }
 
-    private _alphaFromGrid(grid: MaskAlphaGrid, px: number, py: number): number {
+    private _alphaFromGrid(
+        grid: MaskAlphaGrid,
+        px: number,
+        py: number,
+        maskW: number,
+        maskH: number,
+    ): number {
         if (!grid.readable) {
             return grid.alpha[0] === 255 ? 1 : 0;
         }
-        const ix = Math.min(grid.width - 1, Math.max(0, Math.floor(px)));
-        const iy = Math.min(grid.height - 1, Math.max(0, Math.floor(py)));
+        const ix = this._maskCoordToGridIndex(px, maskW, grid.width);
+        // py=0 — низ маски в UI; row 0 grid — верх текстуры (readPixels flipY).
+        const iy = this._maskCoordToGridIndex(maskH - py, maskH, grid.height);
         return grid.alpha[iy * grid.width + ix] / 255;
+    }
+
+    /** Локальная координата маски (0…maskSize) → индекс пикселя силуэта. */
+    private _maskCoordToGridIndex(
+        local: number,
+        maskSize: number,
+        gridSize: number,
+    ): number {
+        if (gridSize <= 1 || maskSize <= 0) {
+            return 0;
+        }
+        if (Math.abs(maskSize - gridSize) < 0.5) {
+            return Math.min(gridSize - 1, Math.max(0, Math.floor(local)));
+        }
+        const t = local / maskSize;
+        return Math.min(
+            gridSize - 1,
+            Math.max(0, Math.floor(t * gridSize)),
+        );
+    }
+
+    private _countVisibleGridCells(grid: MaskAlphaGrid): number {
+        if (!grid.readable) {
+            return grid.alpha[0] === 255 ? grid.width * grid.height : 0;
+        }
+        const thr = Math.floor(this.alphaThreshold * 255);
+        let cells = 0;
+        for (let i = 0; i < grid.alpha.length; i++) {
+            if (grid.alpha[i] >= thr) {
+                cells++;
+            }
+        }
+        return cells;
+    }
+
+    /** Если альфа прочиталась пустой (чёрный силуэт без канала) — fallback на прямоугольник. */
+    private _resolveMaskAlphaGrid(
+        sf: SpriteFrame,
+        grid: MaskAlphaGrid,
+    ): MaskAlphaGrid {
+        if (this._gridHasAnyInk(grid)) {
+            return grid;
+        }
+        if (!this.fillRectWhenAlphaUnreadable) {
+            if (grid.readable) {
+                this._scheduleAlphaReloadFromImage(sf);
+            }
+            return grid;
+        }
+        const w = Math.max(1, Math.floor(sf.rect.width));
+        const h = Math.max(1, Math.floor(sf.rect.height));
+        return {
+            width: w,
+            height: h,
+            alpha: new Uint8Array(w * h).fill(255),
+            readable: false,
+        };
+    }
+
+    private _gridHasAnyInk(grid: MaskAlphaGrid): boolean {
+        if (!grid.readable) {
+            return grid.alpha[0] === 255;
+        }
+        for (let i = 0; i < grid.alpha.length; i++) {
+            if (grid.alpha[i] > 8) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public clear(): void {

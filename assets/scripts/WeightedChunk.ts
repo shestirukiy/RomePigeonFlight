@@ -17,4 +17,11 @@ export class WeightedChunk {
         tooltip: 'Чем больше вес, тем чаще этот чанк среди бесконечной части.',
     })
     weight = 1;
+
+    @property({
+        displayName: 'Min Appear (m)',
+        tooltip:
+            'Endless: чанк попадает в случайный выбор только после этой дистанции забега. 0 — сразу.',
+    })
+    minAppearMeters = 0;
 }

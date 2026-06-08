@@ -2,9 +2,12 @@ import {
     _decorator,
     Animation,
     AnimationClip,
+    AudioClip,
+    AudioSource,
     BoxCollider2D,
     CircleCollider2D,
     Collider2D,
+    Color,
     Component,
     Contact2DType,
     instantiate,
@@ -14,6 +17,7 @@ import {
     PhysicsSystem2D,
     Rect,
     RigidBody2D,
+    Sprite,
     Vec3,
 } from 'cc';
 import { BonusItemScheduler } from './BonusItemScheduler';
@@ -41,6 +45,7 @@ type DisappearFxSlot = {
 
 const G_REFS = { id: 'Refs', name: 'References' };
 const G_MAGNET_CIRCLE = { id: 'MagnetCircle', name: 'Magnet Circle' };
+const G_WISE_CIRCLE = { id: 'WiseCircle', name: 'Wise Circle' };
 const G_TUNE = { id: 'Tune', name: 'Tuning' };
 
 /**
@@ -51,6 +56,9 @@ export class PlayerEquippedBuffs extends Component {
     private static readonly MAGNET_NODE = 'Magnet';
     private static readonly MAGNET_CIRCLE_CENTER = 'MagnetCircleCenter';
     private static readonly WISDOM_NODE = 'Wisdom';
+    private static readonly WISE_CIRCLE = 'WiseCircle';
+    /** Дубликат иконки Wisdom в префабе — второй SpringFollowParent. */
+    private static readonly WISDOM_VISUAL_DUP = 'Wisdom-001';
     private static readonly MAGNET_COLLIDER_NODE = 'MagnetCollider';
     private static readonly WISDOM_COLLIDER_NODE = 'WisdomCollider';
     private static readonly WISDOM_APPEAR_CLIP = 'WisdomAppear';
@@ -77,6 +85,39 @@ export class PlayerEquippedBuffs extends Component {
     @property({ group: G_REFS, type: Collider2D, displayName: 'Wisdom Collider' })
     wisdomCollider: Collider2D | null = null;
 
+    @property({ group: G_WISE_CIRCLE, type: Node, displayName: 'Wise Circle' })
+    wiseCircle: Node | null = null;
+
+    @property({
+        group: G_WISE_CIRCLE,
+        displayName: 'Max Opacity',
+        slide: true,
+        min: 0,
+        max: 255,
+        step: 1,
+        tooltip: 'Прозрачность круга при максимальном Wisdom slow (wisdomSlowPercent).',
+    })
+    wiseCircleMaxOpacity = 255;
+
+    @property({
+        group: G_WISE_CIRCLE,
+        type: AudioClip,
+        displayName: 'Loop Sound',
+        tooltip: 'Зацикленный SFX; громкость плавно следует за Wisdom slow (как WiseCircle).',
+    })
+    wiseCircleLoopSound: AudioClip | null = null;
+
+    @property({
+        group: G_WISE_CIRCLE,
+        displayName: 'Loop Max Volume',
+        slide: true,
+        min: 0,
+        max: 2,
+        step: 0.05,
+        tooltip: 'Громкость loop при максимальном Wisdom slow (× SFX Volume).',
+    })
+    wiseCircleLoopMaxVolume = 1;
+
     @property({ group: G_MAGNET_CIRCLE, type: AnimationClip, displayName: 'Appear Clip' })
     magnetCircleAppearClip: AnimationClip | null = null;
 
@@ -92,6 +133,11 @@ export class PlayerEquippedBuffs extends Component {
     private _magnetAnim: Animation | null = null;
     private _magnetCircleAnim: Animation | null = null;
     private _wisdomAnim: Animation | null = null;
+    private _wiseCircleSprite: Sprite | null = null;
+    private _wiseCircleAlpha = -1;
+    private _wiseCircleLoopSource: AudioSource | null = null;
+    private _wiseCircleLoopClipPlaying: AudioClip | null = null;
+    private _wiseCircleLoopVolApplied = -1;
     private _magnetCircleDisappearDone: (() => void) | null = null;
 
     private _magnetPhase: BuffPhase = 'idle';
@@ -106,10 +152,16 @@ export class PlayerEquippedBuffs extends Component {
         magnet: { node: null, playing: false, done: null },
         wisdom: { node: null, playing: false, done: null },
     };
+    /** Replace-pickup FX (не в _disappearFx) — нужен явный cleanup при повторном сборе. */
+    private readonly _looseDisappearFxHost: Record<EquippedBuffKind, Node | null> = {
+        magnet: null,
+        wisdom: null,
+    };
 
     onLoad(): void {
         this._resolveRefs();
         this._hideMagnetCircleImmediate();
+        this._resetWiseCircleVisual();
         this._hideBuffRoots();
     }
 
@@ -126,6 +178,11 @@ export class PlayerEquippedBuffs extends Component {
         if (!this.wisdomRoot?.isValid) {
             this.wisdomRoot = this.node.getChildByName(PlayerEquippedBuffs.WISDOM_NODE);
         }
+        if (!this.wiseCircle?.isValid) {
+            this.wiseCircle =
+                this.wisdomRoot?.getChildByName(PlayerEquippedBuffs.WISE_CIRCLE) ??
+                this.node.getChildByName(PlayerEquippedBuffs.WISE_CIRCLE);
+        }
         if (!this.magnetCollider?.isValid) {
             this.magnetCollider = this._resolveCollider(
                 this.magnetCircleCenter ?? this.magnetRoot,
@@ -140,13 +197,20 @@ export class PlayerEquippedBuffs extends Component {
         this._magnetAnim = this.magnetRoot?.getComponent(Animation) ?? null;
         this._magnetCircleAnim = this.magnetCircleCenter?.getComponent(Animation) ?? null;
         this._wisdomAnim = this.wisdomRoot?.getComponent(Animation) ?? null;
+        if (!this._wiseCircleSprite?.isValid) {
+            this._wiseCircleSprite = this.wiseCircle?.getComponent(Sprite) ?? null;
+        }
+        this._normalizeWisdomEquippedVisual();
     }
 
     onDestroy(): void {
         this._clearMagnetCircleAnimCallbacks();
         this._cancelBuffDisappearFxPlayback('magnet');
         this._cancelBuffDisappearFxPlayback('wisdom');
+        this._clearLooseBuffDisappearFx('magnet');
+        this._clearLooseBuffDisappearFx('wisdom');
         this._unbindWisdomContacts();
+        this._stopWiseCircleLoopSound();
         MagnetPickable.clearEquippedMagnetZone();
         GameManager.game?.setWisdomBuffActive(false);
     }
@@ -154,9 +218,12 @@ export class PlayerEquippedBuffs extends Component {
     update(dt: number): void {
         this._tickMagnet(dt);
         this._tickWisdom(dt);
+        this._syncWiseCircleVisual();
     }
 
     public resetForNewRun(): void {
+        this._clearLooseBuffDisappearFx('magnet');
+        this._clearLooseBuffDisappearFx('wisdom');
         this._cancelMagnet();
         this._cancelWisdom();
         this._hideBuffRoots();
@@ -167,17 +234,18 @@ export class PlayerEquippedBuffs extends Component {
             return;
         }
         const replacing = this._magnetPhase !== 'idle';
+        this._cancelMagnet();
         if (replacing && this.magnetRoot?.isValid) {
             this._updateWorldTransformChain(this.magnetRoot);
             this._spawnLooseBuffDisappearFx('magnet');
         }
-        this._cancelMagnet();
         const cfg = BonusItemScheduler.instance;
         const duration = Math.max(0.05, cfg?.magnetBuffDurationSec ?? 6);
         if (!this.magnetRoot?.isValid) {
             return;
         }
         this.magnetRoot.active = true;
+        this._snapBuffSprings(this.magnetRoot);
         SoundController.instance?.play(SoundId.MagnetActivate);
         this._setColliderEnabled(this.magnetCollider, false);
         this._showMagnetCircle();
@@ -198,11 +266,13 @@ export class PlayerEquippedBuffs extends Component {
             return;
         }
         const replacing = this._wisdomPhase !== 'idle';
-        if (replacing && this.wisdomRoot?.isValid) {
-            this._updateWorldTransformChain(this.wisdomRoot);
-            this._spawnLooseBuffDisappearFx('wisdom');
-        }
         this._cancelWisdom();
+        if (replacing) {
+            this._clearLooseBuffDisappearFx('wisdom');
+            if (this.wisdomRoot?.isValid) {
+                this._snapBuffSprings(this.wisdomRoot);
+            }
+        }
         const cfg = BonusItemScheduler.instance;
         const duration = Math.max(0.05, cfg?.wisdomBuffDurationSec ?? 8);
         if (!this.wisdomRoot?.isValid) {
@@ -210,6 +280,8 @@ export class PlayerEquippedBuffs extends Component {
         }
         GameManager.game?.setWisdomBuffActive(true);
         this.wisdomRoot.active = true;
+        this._normalizeWisdomEquippedVisual();
+        this._snapBuffSprings(this.wisdomRoot);
         SoundController.instance?.play(SoundId.WisdomActivate);
         this._wisdomObstacleHits = 0;
         this._wisdomProbeAhead = false;
@@ -309,6 +381,7 @@ export class PlayerEquippedBuffs extends Component {
         GameManager.game?.notifyWisdomObstacleAhead(false);
         this._setColliderEnabled(this.wisdomCollider, false);
         this._wisdomAnim?.stop();
+        this._resetWiseCircleVisual();
     }
 
     private _beginBuffSequence(
@@ -406,6 +479,8 @@ export class PlayerEquippedBuffs extends Component {
 
     /** Повторный pickup: старый buff «слетает» без ожидания (как replace шлема). */
     private _spawnLooseBuffDisappearFx(kind: EquippedBuffKind): void {
+        this._clearLooseBuffDisappearFx(kind);
+
         const root = this._buffRoot(kind);
         const clip = this._resolveBuffClip(kind, 'disappear');
         const equippedAnim = this._buffAnim(kind);
@@ -421,18 +496,22 @@ export class PlayerEquippedBuffs extends Component {
             return;
         }
 
+        this._looseDisappearFxHost[kind] = fx;
         root.active = false;
         SoundController.instance?.play(this._buffDeactivateSound(kind));
 
         const anim = fx.getComponentInChildren(Animation);
         if (!anim) {
-            fx.destroy();
+            this._clearLooseBuffDisappearFx(kind);
             return;
         }
 
         this._ensureClip(anim, clip);
         const duration = this._clipDurationSec(anim, clip);
         const cleanup = (): void => {
+            if (this._looseDisappearFxHost[kind] === fx) {
+                this._looseDisappearFxHost[kind] = null;
+            }
             if (fx?.isValid) {
                 fx.destroy();
             }
@@ -447,6 +526,25 @@ export class PlayerEquippedBuffs extends Component {
         anim.stop();
         anim.play(clip.name);
         this.scheduleOnce(cleanup, duration + 0.05);
+    }
+
+    private _clearLooseBuffDisappearFx(kind: EquippedBuffKind): void {
+        const host = this._looseDisappearFxHost[kind];
+        this._looseDisappearFxHost[kind] = null;
+        if (host?.isValid) {
+            host.destroy();
+        }
+    }
+
+    private _snapBuffSprings(root: Node | null): void {
+        if (!root?.isValid) {
+            return;
+        }
+        for (const spring of root.getComponentsInChildren(SpringFollowParent)) {
+            if (spring.enabled) {
+                spring.snapToTarget();
+            }
+        }
     }
 
     private readonly _buffDisappearAnimFinishedHandlers = {
@@ -581,7 +679,24 @@ export class PlayerEquippedBuffs extends Component {
     private _prepareBuffDisappearFxClone(root: Node): void {
         this._disableFxColliders(root);
         for (const spring of root.getComponentsInChildren(SpringFollowParent)) {
-            spring.enabled = false;
+            spring.destroy();
+        }
+        this._hideDuplicateWisdomVisual(root);
+    }
+
+    /** Один equipped Wisdom: скрыть лишний дочерний клон с отдельным SpringFollowParent. */
+    private _normalizeWisdomEquippedVisual(): void {
+        const root = this.wisdomRoot;
+        if (!root?.isValid) {
+            return;
+        }
+        this._hideDuplicateWisdomVisual(root);
+    }
+
+    private _hideDuplicateWisdomVisual(root: Node): void {
+        const dup = root.getChildByName(PlayerEquippedBuffs.WISDOM_VISUAL_DUP);
+        if (dup?.isValid && dup.active) {
+            dup.active = false;
         }
     }
 
@@ -724,9 +839,118 @@ export class PlayerEquippedBuffs extends Component {
         this._wisdomPhase = 'idle';
         this._wisdomLoopRemain = 0;
         this._wisdomAnim?.stop();
+        this._resetWiseCircleVisual();
         if (this.wisdomRoot?.isValid) {
             this.wisdomRoot.active = false;
         }
+    }
+
+    private _resetWiseCircleVisual(): void {
+        this._wiseCircleAlpha = -1;
+        this._applyWiseCircleAlpha(0);
+        this._stopWiseCircleLoopSound();
+    }
+
+    /** WiseCircle + loop SFX: яркость/громкость = степень Wisdom slow. */
+    private _syncWiseCircleVisual(): void {
+        const gm = GameManager.game;
+        const wisdomVisible =
+            this.wisdomRoot?.isValid &&
+            this.wisdomRoot.active &&
+            gm?.isWisdomBuffActive === true;
+        const intensity = wisdomVisible ? gm.getWisdomSlowIntensity() : 0;
+        const alpha = Math.round(
+            Math.max(0, Math.min(255, intensity * this.wiseCircleMaxOpacity)),
+        );
+        this._applyWiseCircleAlpha(alpha);
+        this._syncWiseCircleLoopSound(intensity, wisdomVisible);
+    }
+
+    private _syncWiseCircleLoopSound(
+        intensity: number,
+        wisdomActive: boolean,
+    ): void {
+        const clip = this.wiseCircleLoopSound;
+        if (!wisdomActive || !clip) {
+            this._stopWiseCircleLoopSound();
+            return;
+        }
+
+        const sfx = SoundController.instance;
+        if (!sfx?.sfxEnabled) {
+            this._stopWiseCircleLoopSound();
+            return;
+        }
+
+        const src = this._ensureWiseCircleLoopSource();
+        if (!src) {
+            return;
+        }
+
+        if (this._wiseCircleLoopClipPlaying !== clip) {
+            src.stop();
+            src.clip = clip;
+            src.loop = true;
+            this._wiseCircleLoopClipPlaying = clip;
+            this._wiseCircleLoopVolApplied = -1;
+        }
+
+        if (!src.playing) {
+            src.play();
+        }
+
+        const vol = Math.max(
+            0,
+            intensity * this.wiseCircleLoopMaxVolume * sfx.sfxVolume,
+        );
+        if (Math.abs(vol - this._wiseCircleLoopVolApplied) > 1e-4) {
+            src.volume = vol;
+            this._wiseCircleLoopVolApplied = vol;
+        }
+    }
+
+    private _ensureWiseCircleLoopSource(): AudioSource | null {
+        if (this._wiseCircleLoopSource?.isValid) {
+            return this._wiseCircleLoopSource;
+        }
+        const nodeName = 'WiseCircleLoopAudio';
+        let audioNode = this.node.getChildByName(nodeName);
+        if (!audioNode) {
+            audioNode = new Node(nodeName);
+            audioNode.parent = this.node;
+        }
+        const src =
+            audioNode.getComponent(AudioSource) ??
+            audioNode.addComponent(AudioSource);
+        src.playOnAwake = false;
+        this._wiseCircleLoopSource = src;
+        return src;
+    }
+
+    private _stopWiseCircleLoopSound(): void {
+        this._wiseCircleLoopVolApplied = -1;
+        this._wiseCircleLoopClipPlaying = null;
+        const src = this._wiseCircleLoopSource;
+        if (src?.isValid) {
+            src.stop();
+        }
+    }
+
+    private _applyWiseCircleAlpha(alpha: number): void {
+        if (this._wiseCircleAlpha === alpha) {
+            return;
+        }
+        const sprite = this._wiseCircleSprite;
+        if (!sprite?.isValid) {
+            this._resolveRefs();
+        }
+        const sp = this._wiseCircleSprite;
+        if (!sp?.isValid) {
+            return;
+        }
+        this._wiseCircleAlpha = alpha;
+        const c = sp.color;
+        sp.color = new Color(c.r, c.g, c.b, alpha);
     }
 
     private _hideBuffRoots(): void {
@@ -737,6 +961,7 @@ export class PlayerEquippedBuffs extends Component {
         if (this.wisdomRoot?.isValid) {
             this.wisdomRoot.active = false;
         }
+        this._resetWiseCircleVisual();
     }
 
     private _showMagnetCircle(): void {
