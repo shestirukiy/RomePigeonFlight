@@ -140,7 +140,8 @@ export class SeedPattern extends Component {
     private _fillTimerPending = false;
     private _fillRetryCount = 0;
     private _pendingFill = false;
-    private _asyncAlphaReloadPending = false;
+    private static readonly _maxAlphaLoadRetries = 16;
+    private static readonly _livePatterns = new Set<SeedPattern>();
     private static readonly _vLocal = new Vec3();
     private static readonly _vWorld = new Vec3();
     private static readonly _matInv = new Mat4();
@@ -165,12 +166,14 @@ export class SeedPattern extends Component {
      * start() срабатывает при каждом запуске preview/игры.
      */
     start() {
+        SeedPattern._livePatterns.add(this);
         if (this.fillOnEnable) {
             this._queueFill();
         }
     }
 
     onEnable() {
+        SeedPattern._livePatterns.add(this);
         if (!this.fillOnEnable || !game.isRunning) {
             return;
         }
@@ -191,12 +194,14 @@ export class SeedPattern extends Component {
     }
 
     onDisable() {
+        SeedPattern._livePatterns.delete(this);
         this._cancelFillTimer();
         this.clear();
         this._restoreMasks();
     }
 
     onDestroy() {
+        SeedPattern._livePatterns.delete(this);
         this._cancelFillTimer();
         this.clear();
         this._restoreMasks();
@@ -278,15 +283,19 @@ export class SeedPattern extends Component {
                 if (!sf) {
                     continue;
                 }
-                let grid = SeedPattern._getOrBuildAlphaGrid(
-                    sf,
-                    this.fillRectWhenAlphaUnreadable,
-                );
-                grid = this._resolveMaskAlphaGrid(sf, grid);
-                this._maskGrids.set(sprite, grid);
-                if (!grid.readable) {
+                let grid = SeedPattern._getOrBuildAlphaGrid(sf, false);
+                if (!SeedPattern._gridHasAnyInk(grid)) {
                     this._scheduleAlphaReloadFromImage(sf);
+                    if (
+                        this.fillRectWhenAlphaUnreadable &&
+                        this._fillRetryCount >= SeedPattern._maxAlphaLoadRetries
+                    ) {
+                        grid = this._makeRectFallbackGrid(sf);
+                    } else {
+                        continue;
+                    }
                 }
+                this._maskGrids.set(sprite, grid);
                 const maskUi = sprite.node.getComponent(UITransform);
                 if (!maskUi) {
                     continue;
@@ -326,11 +335,11 @@ export class SeedPattern extends Component {
         }
 
         if (placed === 0) {
-            if (this._fillRetryCount < 4) {
+            if (this._fillRetryCount < SeedPattern._maxAlphaLoadRetries) {
                 this._fillRetryCount++;
                 this.scheduleOnce(() => {
                     this._pendingFill = true;
-                }, 0.05);
+                }, 0.08);
                 return;
             }
             console.warn(
@@ -471,9 +480,6 @@ export class SeedPattern extends Component {
 
     /** В preview/GPU без CPU-пикселей — догружаем PNG по nativeUrl и перезаливаем силуэт. */
     private _scheduleAlphaReloadFromImage(sf: SpriteFrame): void {
-        if (this._asyncAlphaReloadPending) {
-            return;
-        }
         const image = (sf.texture as Texture2D | null)?.image as
             | ImageAsset
             | undefined;
@@ -487,34 +493,62 @@ export class SeedPattern extends Component {
             return;
         }
 
-        this._asyncAlphaReloadPending = true;
         const tw = image?.width ?? Math.floor(sf.rect.width);
         const th = image?.height ?? Math.floor(sf.rect.height);
+        const sfUuid = sf.uuid;
 
         let load = SeedPattern._nativeUrlLoadPromises.get(url);
         if (!load) {
-            load = SeedPattern._loadPixelsFromUrl(url, tw, th);
+            load = SeedPattern._loadPixelsFromUrl(url, tw, th).then((pixels) => {
+                if (pixels) {
+                    SeedPattern._publishAlphaGrid(
+                        sfUuid,
+                        SeedPattern._buildAlphaGridFromRgba(
+                            sf,
+                            pixels,
+                            tw,
+                            th,
+                            false,
+                        ),
+                    );
+                }
+                return pixels;
+            });
             SeedPattern._nativeUrlLoadPromises.set(url, load);
         }
 
         load.then((pixels) => {
-            this._asyncAlphaReloadPending = false;
-            if (!pixels || !this.isValid || !this.node?.isValid) {
+            if (!pixels) {
                 return;
             }
-            const cacheKey = `${sf.uuid}|${this.fillRectWhenAlphaUnreadable ? 1 : 0}`;
-            SeedPattern._gridCache.set(
-                cacheKey,
-                SeedPattern._buildAlphaGridFromRgba(
-                    sf,
-                    pixels,
-                    tw,
-                    th,
-                    false,
-                ),
-            );
-            this._pendingFill = true;
+            for (const pattern of SeedPattern._livePatterns) {
+                if (pattern.isValid && pattern.node?.isValid) {
+                    pattern._pendingFill = true;
+                }
+            }
         });
+    }
+
+    private static _publishAlphaGrid(
+        sfUuid: string,
+        grid: MaskAlphaGrid,
+    ): void {
+        if (!SeedPattern._gridHasAnyInk(grid)) {
+            return;
+        }
+        SeedPattern._gridCache.set(`${sfUuid}|0`, grid);
+        SeedPattern._gridCache.set(`${sfUuid}|1`, grid);
+    }
+
+    private _makeRectFallbackGrid(sf: SpriteFrame): MaskAlphaGrid {
+        const w = Math.max(1, Math.floor(sf.rect.width));
+        const h = Math.max(1, Math.floor(sf.rect.height));
+        return {
+            width: w,
+            height: h,
+            alpha: new Uint8Array(w * h).fill(255),
+            readable: false,
+        };
     }
 
     /** Локаль маски → локаль контейнера Seeds через worldMatrix (надёжнее UITransform.convert*). */
@@ -697,31 +731,7 @@ export class SeedPattern extends Component {
         return cells;
     }
 
-    /** Если альфа прочиталась пустой (чёрный силуэт без канала) — fallback на прямоугольник. */
-    private _resolveMaskAlphaGrid(
-        sf: SpriteFrame,
-        grid: MaskAlphaGrid,
-    ): MaskAlphaGrid {
-        if (this._gridHasAnyInk(grid)) {
-            return grid;
-        }
-        if (!this.fillRectWhenAlphaUnreadable) {
-            if (grid.readable) {
-                this._scheduleAlphaReloadFromImage(sf);
-            }
-            return grid;
-        }
-        const w = Math.max(1, Math.floor(sf.rect.width));
-        const h = Math.max(1, Math.floor(sf.rect.height));
-        return {
-            width: w,
-            height: h,
-            alpha: new Uint8Array(w * h).fill(255),
-            readable: false,
-        };
-    }
-
-    private _gridHasAnyInk(grid: MaskAlphaGrid): boolean {
+    private static _gridHasAnyInk(grid: MaskAlphaGrid): boolean {
         if (!grid.readable) {
             return grid.alpha[0] === 255;
         }
@@ -850,7 +860,7 @@ export class SeedPattern extends Component {
             sf,
             rectFallback && !SeedPattern._spriteFrameLooksLikeCircle(sf),
         );
-        if (built.readable || rectFallback) {
+        if (SeedPattern._gridHasAnyInk(built)) {
             SeedPattern._gridCache.set(key, built);
         }
         return built;
@@ -869,16 +879,7 @@ export class SeedPattern extends Component {
         const w = Math.max(1, Math.floor(rect.width));
         const h = Math.max(1, Math.floor(rect.height));
 
-        const fromRect = SeedPattern._readSpriteFrameRectPixels(sf);
-        if (fromRect) {
-            return SeedPattern._alphaGridFromBuffer(
-                fromRect.data,
-                fromRect.width,
-                fromRect.height,
-                fromRect.flipY,
-            );
-        }
-
+        // CPU/ImageAsset — надёжно сразу после instantiate (генератор чанков).
         const fromPixels = SeedPattern._readFullTexturePixels(sf);
         if (fromPixels) {
             return SeedPattern._buildAlphaGridFromRgba(
@@ -887,6 +888,16 @@ export class SeedPattern extends Component {
                 fromPixels.width,
                 fromPixels.height,
                 fromPixels.originBottomLeft,
+            );
+        }
+
+        const fromRect = SeedPattern._readSpriteFrameRectPixels(sf);
+        if (fromRect) {
+            return SeedPattern._alphaGridFromBuffer(
+                fromRect.data,
+                fromRect.width,
+                fromRect.height,
+                fromRect.flipY,
             );
         }
 
